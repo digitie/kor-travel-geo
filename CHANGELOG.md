@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Changed
+- **Dagster 복구·공통 운영 UI 채택(ADR-068).** 조회 장애를 UNKNOWN으로 격리하고 worker
+  소유권·관측 lease를 원자적으로 확인한다. 복구 이력 100건 순회, DB/RPC 상한, step
+  동시성 1, backup_verify에 한정된 인프라 재시도를 적용한다. common 로그인·메뉴·
+  50행 Dagster 목록/상세를 사용하며 오류 시 마지막 정상 snapshot을 보존한다.
+  React 19·Node 22로 이관한다. API DTO 변경 없음.
 - **공유 Dagster plane 선행 작업(T-324).** Dagster 이미지가 `constraints-dagster.txt`로 dagster 1.13.24 계열과
   주요 라이브러리를 exact 설치하고 base image를 digest로 고정한다. `/v1/ops/dagster/summary`·`/runs/{run_id}`는
   geo code location의 repository·run만 보여 준다(다른 location의 run id는 `not_found`). `scheduled_backup`·

@@ -51,7 +51,7 @@ def _settings() -> Settings:
         ("STARTED", OrchestratorRunState.RUNNING),
         ("QUEUED", OrchestratorRunState.RUNNING),
         ("CANCELING", OrchestratorRunState.RUNNING),
-        ("SOME_NEW_STATUS", OrchestratorRunState.RUNNING),
+        ("SOME_NEW_STATUS", OrchestratorRunState.UNKNOWN),
     ],
 )
 async def test_fetch_run_state_maps_status(

@@ -34,6 +34,10 @@ class LoadJobAdoptionError(RuntimeError):
     """Raised when a Dagster run must not execute the requested ``load_jobs`` row."""
 
 
+class LoadJobLeaseLostError(LoadJobAdoptionError):
+    """회수·취소되거나 다른 run으로 넘어간 행에 worker가 다시 기록할 수 없다."""
+
+
 class LoadJobExecutor:
     """Single-row ``load_jobs`` writers shared by the api queue and the Dagster op.
 
@@ -47,9 +51,28 @@ class LoadJobExecutor:
         engine: AsyncEngine,
         *,
         lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
+        orchestrator_run_id: str | None = None,
     ) -> None:
         self.engine = engine
         self._lease_ttl_seconds = lease_ttl_seconds
+        self._orchestrator_run_id = orchestrator_run_id
+
+    def _owner_predicate(self) -> str:
+        if self._orchestrator_run_id is None:
+            return ""
+        return (
+            " AND state = 'running' AND executor = 'dagster'"
+            " AND orchestrator_run_id = :owner_run_id"
+        )
+
+    def _owner_params(self) -> dict[str, str]:
+        if self._orchestrator_run_id is None:
+            return {}
+        return {"owner_run_id": self._orchestrator_run_id}
+
+    def _require_owner(self, result: Any, job_id: str) -> None:
+        if self._orchestrator_run_id is not None and result.rowcount != 1:
+            raise LoadJobLeaseLostError(f"load job {job_id} 실행 소유권이 만료되었습니다.")
 
     def lease_expiry(self, ttl_seconds: float | None = None) -> datetime:
         """Absolute expiry for a freshly set / renewed lease (default TTL when ``None``)."""
@@ -58,20 +81,13 @@ class LoadJobExecutor:
         return compute_lease_expiry(now=datetime.now(UTC), ttl_seconds=ttl)
 
     @asynccontextmanager
-    async def _begin_uncapped(self) -> AsyncIterator[AsyncConnection]:
-        """A write transaction with ``statement_timeout`` disabled.
-
-        Every writer below is a trivial single-row ``load_jobs`` UPDATE, but the executor is
-        bound to the API engine whose ``pg_statement_timeout_ms`` (default 5s) is tuned for
-        fast request queries. During a long-running leaf — a multi-GB ``pg_restore`` saturates
-        the cluster's I/O — even a trivial heartbeat UPDATE's commit fsync can outlive 5s and
-        be cancelled (``QueryCanceled``), which would fail the whole job even though the leaf
-        is fine (T-290g live e2e: a restore died at 66% on the progress heartbeat). Disable the
-        timeout for these liveness/state writes, mirroring the loaders' long transactions; the
-        row is only ever written by its own job, so there is no contended lock to hang on."""
+    async def _begin_bounded(self) -> AsyncIterator[AsyncConnection]:
+        """상태·heartbeat 기록도 잠금 5초와 SQL 60초를 넘기지 않는 짧은 transaction."""
 
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET LOCAL statement_timeout = 0"))
+            # 진행·취소·회수 경쟁에도 무한 잠금 대기를 만들지 않는다.
+            await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            await conn.execute(text("SET LOCAL statement_timeout = '60s'"))
             yield conn
 
     async def adopt_dagster(
@@ -88,7 +104,7 @@ class LoadJobExecutor:
         Returns the new lease expiry."""
 
         expires_at = self.lease_expiry(ttl_seconds)
-        async with self._begin_uncapped() as conn:
+        async with self._begin_bounded() as conn:
             result = await conn.execute(
                 text(
                     """
@@ -119,17 +135,21 @@ UPDATE load_jobs
             )
             if result.scalar_one_or_none() is None:
                 row = (
-                    await conn.execute(
-                        text(
-                            """
+                    (
+                        await conn.execute(
+                            text(
+                                """
 SELECT state, executor, orchestrator_run_id
   FROM load_jobs
  WHERE job_id = :job_id
 """
-                        ),
-                        {"job_id": job_id},
+                            ),
+                            {"job_id": job_id},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
                 if row is None:
                     msg = f"cannot adopt missing load job: {job_id}"
                 else:
@@ -147,18 +167,19 @@ SELECT state, executor, orchestrator_run_id
         the new lease expiry. Called periodically by the op as it makes progress."""
 
         expires_at = self.lease_expiry(ttl_seconds)
-        async with self._begin_uncapped() as conn:
-            await conn.execute(
+        async with self._begin_bounded() as conn:
+            result = await conn.execute(
                 text(
-                    """
+                    f"""
 UPDATE load_jobs
    SET lease_expires_at = :expires_at,
        heartbeat_at = now()
- WHERE job_id = :job_id
+ WHERE job_id = :job_id{self._owner_predicate()}
 """
                 ),
-                {"job_id": job_id, "expires_at": expires_at},
+                {"job_id": job_id, "expires_at": expires_at, **self._owner_params()},
             )
+            self._require_owner(result, job_id)
         return expires_at
 
     async def set_progress(
@@ -176,7 +197,7 @@ UPDATE load_jobs
         if message is not None:
             prefix = datetime.now(UTC).isoformat(timespec="seconds")
             label = f" [{stage}]" if stage else ""
-            async with self.engine.connect() as conn:
+            async with self._begin_bounded() as conn:
                 existing = await conn.scalar(
                     text("SELECT log_tail FROM load_jobs WHERE job_id = :job_id"),
                     {"job_id": job_id},
@@ -185,7 +206,7 @@ UPDATE load_jobs
             log_tail.append(f"{prefix}{label} {message}")
             log_tail = log_tail[-LOG_TAIL_CAP:]
 
-        params: dict[str, Any] = {"job_id": job_id}
+        params: dict[str, Any] = {"job_id": job_id, **self._owner_params()}
         assignments = ["heartbeat_at = now()"]
         if progress is not None:
             params["progress"] = max(0.0, min(1.0, progress))
@@ -196,50 +217,89 @@ UPDATE load_jobs
         if log_tail is not None:
             params["log_tail"] = log_tail
             assignments.append("log_tail = :log_tail")
-        stmt = text(f"UPDATE load_jobs SET {', '.join(assignments)} WHERE job_id = :job_id")
+        stmt = text(
+            f"UPDATE load_jobs SET {', '.join(assignments)} WHERE job_id = :job_id"
+            f"{self._owner_predicate()}"
+        )
         if log_tail is not None:
             stmt = stmt.bindparams(bindparam("log_tail", type_=JSONB))
-        async with self._begin_uncapped() as conn:
-            await conn.execute(stmt, params)
+        async with self._begin_bounded() as conn:
+            result = await conn.execute(stmt, params)
+            self._require_owner(result, job_id)
 
     async def mark_done(self, job_id: str) -> None:
-        """Converge a row to ``done`` (progress 1.0). A row already ``cancelled`` is left
-        as-is so a late completion never overrides an operator cancel."""
+        """현재 소유한 running 행만 완료한다. 늦은 worker는 terminal 상태를 되돌리지 않는다."""
 
-        async with self._begin_uncapped() as conn:
-            await conn.execute(
+        async with self._begin_bounded() as conn:
+            result = await conn.execute(
                 text(
-                    """
+                    f"""
 UPDATE load_jobs
    SET state = 'done',
        progress = 1.0,
        current_stage = 'done',
        finished_at = now(),
        heartbeat_at = now()
- WHERE job_id = :job_id AND state <> 'cancelled'
+ WHERE job_id = :job_id AND state = 'running'{self._owner_predicate()}
 """
                 ),
-                {"job_id": job_id},
+                {"job_id": job_id, **self._owner_params()},
             )
+            self._require_owner(result, job_id)
 
     async def mark_failed(self, job_id: str, message: str) -> None:
         """Converge a row to ``failed`` with ``error_message``."""
 
-        async with self._begin_uncapped() as conn:
+        async with self._begin_bounded() as conn:
             await conn.execute(
                 text(
-                    """
+                    f"""
 UPDATE load_jobs
    SET state = 'failed',
        current_stage = 'failed',
        error_message = :message,
        finished_at = now(),
        heartbeat_at = now()
- WHERE job_id = :job_id
+ WHERE job_id = :job_id AND state IN ('queued', 'running'){self._owner_predicate()}
 """
                 ),
-                {"job_id": job_id, "message": message},
+                {"job_id": job_id, "message": message, **self._owner_params()},
             )
+
+    async def reconcile_transition(
+        self,
+        job_id: str,
+        *,
+        state: str,
+        orchestrator_run_id: str | None,
+        lease_expires_at: datetime | None,
+        reason: str,
+    ) -> bool:
+        """조회한 소유권·lease가 그대로일 때만 running 행을 terminal로 바꾼다."""
+        if state not in {"done", "failed", "cancelled"}:
+            raise ValueError("회수 대상 상태는 terminal이어야 합니다.")
+        async with self._begin_bounded() as conn:
+            result = await conn.execute(
+                text("""
+UPDATE load_jobs
+   SET state = :state, current_stage = :state,
+       error_message = CASE WHEN :state = 'failed' THEN :reason ELSE error_message END,
+       progress = CASE WHEN :state = 'done' THEN 1.0 ELSE progress END,
+       finished_at = now(), heartbeat_at = now()
+ WHERE job_id = :job_id AND state = 'running' AND executor = 'dagster'
+   AND orchestrator_run_id IS NOT DISTINCT FROM :observed_run_id
+   AND lease_expires_at IS NOT DISTINCT FROM :observed_lease
+ RETURNING job_id
+"""),
+                {
+                    "job_id": job_id,
+                    "state": state,
+                    "reason": reason,
+                    "observed_run_id": orchestrator_run_id,
+                    "observed_lease": lease_expires_at,
+                },
+            )
+            return result.first() is not None
 
     async def mark_launch_failed(self, job_id: str, message: str) -> bool:
         """Fail a row whose Dagster launch errored — only while it is still ``queued``.
@@ -249,7 +309,7 @@ UPDATE load_jobs
         ``failed`` would make the reconciler terminate a run doing real work. Returns ``True``
         when the row was failed, ``False`` when the run already owns it (T-318)."""
 
-        async with self._begin_uncapped() as conn:
+        async with self._begin_bounded() as conn:
             result = await conn.execute(
                 text(
                     """
@@ -270,19 +330,19 @@ RETURNING job_id
     async def mark_cancelled(self, job_id: str) -> None:
         """Converge a row to ``cancelled``."""
 
-        async with self._begin_uncapped() as conn:
+        async with self._begin_bounded() as conn:
             await conn.execute(
                 text(
-                    """
+                    f"""
 UPDATE load_jobs
    SET state = 'cancelled',
        current_stage = 'cancelled',
        finished_at = now(),
        heartbeat_at = now()
- WHERE job_id = :job_id
+ WHERE job_id = :job_id AND state IN ('queued', 'running'){self._owner_predicate()}
 """
                 ),
-                {"job_id": job_id},
+                {"job_id": job_id, **self._owner_params()},
             )
 
     async def read_cancel_requested(self, job_id: str) -> bool:
@@ -291,7 +351,16 @@ UPDATE load_jobs
         The Dagster op polls this to bridge an app-side cancel onto its local
         ``cancel_event`` (``load_jobs`` stays the cancel source of truth, ADR-066 §5)."""
 
-        async with self.engine.connect() as conn:
+        async with self._begin_bounded() as conn:
+            if self._orchestrator_run_id is not None:
+                active = await conn.scalar(
+                    text(
+                        "SELECT job_id FROM load_jobs WHERE job_id = :job_id"
+                        f"{self._owner_predicate()}"
+                    ),
+                    {"job_id": job_id, **self._owner_params()},
+                )
+                return active is None
             state = await conn.scalar(
                 text("SELECT state FROM load_jobs WHERE job_id = :job_id"),
                 {"job_id": job_id},

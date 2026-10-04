@@ -18,10 +18,11 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.loaders.batch_dag import run_mv_refresh
 
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 
 if TYPE_CHECKING:
@@ -92,7 +93,7 @@ async def run_mv_refresh_op(context: OpExecutionContext) -> dict[str, object]:
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="mv_refresh",
     tags=MV_REFRESH_JOB_TAGS,
     description="Refresh the geo serving materialized views, release-gated (T-290k).",

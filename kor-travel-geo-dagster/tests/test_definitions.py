@@ -55,6 +55,7 @@ _DECLARED_INSTIGATOR_STATUS = {
     "backup_retention_janitor_daily": "RUNNING",
     "backup_restore_drill_daily": "STOPPED",
     "run_failure_sensor": "RUNNING",
+    "geo_infrastructure_retry_backup_verify": "RUNNING",
 }
 
 
@@ -73,18 +74,18 @@ def test_every_instigator_declares_its_prod_status_in_code() -> None:
 # explains each). ``None`` means "no tag — the instance default applies". Every job is listed,
 # so a new job fails this test until someone decides which side it belongs on.
 _EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
-    "backup_copy": None,
+    "backup_copy": "21600",
     "backup_restore_drill": "86400",
-    "backup_retention_janitor": None,
-    "backup_verify": None,
-    "consistency_check": None,
-    "db_backup": None,
+    "backup_retention_janitor": "21600",
+    "backup_verify": "21600",
+    "consistency_check": "21600",
+    "db_backup": "21600",
     "db_restore": "86400",
     "full_load_batch": "86400",
     "load_source": "86400",
-    "mv_refresh": None,
-    "scheduled_backup_run_due": None,
-    "source_rebuild_db": None,
+    "mv_refresh": "21600",
+    "scheduled_backup_run_due": "21600",
+    "source_rebuild_db": "21600",
 }
 
 

@@ -18,6 +18,23 @@ class _FakeExecutor:
         self.cancelled: list[str] = []
         self.progress: list[tuple[str, str | None, str | None]] = []
 
+    async def reconcile_transition(
+        self,
+        job_id: str,
+        *,
+        state: str,
+        orchestrator_run_id: str | None,
+        lease_expires_at: datetime | None,
+        reason: str,
+    ) -> bool:
+        if state == "done":
+            self.done.append(job_id)
+        elif state == "failed":
+            self.failed.append((job_id, reason))
+        else:
+            self.cancelled.append(job_id)
+        return True
+
     async def mark_done(self, job_id: str) -> None:
         self.done.append(job_id)
 
@@ -85,7 +102,9 @@ async def _noop_cancel(*, job_id: str, orchestrator_run_id: str | None) -> None:
 async def test_success_run_converges_done() -> None:
     ex = _FakeExecutor()
     rec = _StubReconciler(
-        [_row()], executor=ex, liveness_probe=_probe(OrchestratorRunState.SUCCESS),
+        [_row()],
+        executor=ex,
+        liveness_probe=_probe(OrchestratorRunState.SUCCESS),
         orchestrator_cancel=_noop_cancel,
     )
     results = await rec.reconcile_once()
@@ -97,7 +116,9 @@ async def test_success_run_converges_done() -> None:
 async def test_failed_run_converges_failed() -> None:
     ex = _FakeExecutor()
     rec = _StubReconciler(
-        [_row()], executor=ex, liveness_probe=_probe(OrchestratorRunState.FAILED),
+        [_row()],
+        executor=ex,
+        liveness_probe=_probe(OrchestratorRunState.FAILED),
         orchestrator_cancel=_noop_cancel,
     )
     await rec.reconcile_once()

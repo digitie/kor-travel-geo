@@ -6794,3 +6794,10 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 **변경 파일**: 삭제 — `alembic/`, `alembic.ini`, `debug-ui/`, `pyproject.toml`, `src/`, `tests/`
 
 **메모**: master는 새 사양으로 처음부터 다시 구현한다. 이전 구현은 `v1` 브랜치에서 참조 가능.
+
+## 2026-10-05 common Dagster 복구·UI 채택 후보
+
+- ADR-068: UNKNOWN 격리, run/lease CAS, 유한 keyset 순회, 멱등 verify 인프라 재시도, 공통 로그인·메뉴·운영 UI.
+- WSL/ext4: backend 1782 PASS/101 SKIP, ruff·mypy·lint-imports PASS; Dagster 관련 150 PASS; frontend 231 PASS, lint/type/build/React Doctor PASS.
+- 기존 PostgreSQL의 독립 임시 schema 소유권·lease 경쟁 7 PASS. DB/RustFS 서비스 lifecycle 변경 없음.
+- common 후보 426de4fb의 두 독립 리뷰 PASS와 공개 타입 이관 수정 반영. geo 두 리뷰/live E2E/CI/PR 머지는 진행 중이며 아직 완료로 세지 않는다. RSS 실측은 NOT_RUN.

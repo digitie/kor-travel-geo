@@ -16,12 +16,13 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.infra.backup import run_backup_job
 
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 
 if TYPE_CHECKING:
@@ -86,7 +87,7 @@ async def run_db_backup_op(context: OpExecutionContext) -> dict[str, object]:
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="db_backup",
     tags=DB_BACKUP_JOB_TAGS,
     description="Execute a db_backup as a Dagster run (T-290g). Launched by the geo admin API.",

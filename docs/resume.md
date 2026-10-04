@@ -1120,3 +1120,10 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 4. 사용자 가시 변경이면 `CHANGELOG.md` 갱신
 5. 스키마 변경이면 `scripts/export_openapi.py` 재실행 → 프론트엔드 `gen:types`
 6. 프론트엔드 작업이면 React Doctor 실행 → 경고 수정 → 재실행
+
+## 2026-10-05 common Dagster 복구·UI 채택 후보
+
+- ADR-068: UNKNOWN 격리, run/lease CAS, 유한 keyset 순회, 멱등 verify 인프라 재시도, 공통 로그인·메뉴·운영 UI.
+- WSL/ext4: backend 1782 PASS/101 SKIP, ruff·mypy·lint-imports PASS; Dagster 관련 150 PASS; frontend 231 PASS, lint/type/build/React Doctor PASS.
+- 기존 PostgreSQL의 독립 임시 schema 소유권·lease 경쟁 7 PASS. DB/RustFS 서비스 lifecycle 변경 없음.
+- common 후보 426de4fb의 두 독립 리뷰 PASS와 공개 타입 이관 수정 반영. geo 두 리뷰/live E2E/CI/PR 머지는 진행 중이며 아직 완료로 세지 않는다. RSS 실측은 NOT_RUN.

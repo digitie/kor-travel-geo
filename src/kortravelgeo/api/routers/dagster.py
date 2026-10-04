@@ -9,6 +9,7 @@ Dagster run-failure sensor, T-290h) via a recent-failures list, a per-run
 
 from __future__ import annotations
 
+import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from time import perf_counter
@@ -144,6 +145,29 @@ query KorTravelGeoDagsterSummary(
   runsOrError(
     filter: { tags: [{ key: ".dagster/repository", value: $repositoryLabel }] },
     limit: $limit
+  ) {
+    __typename
+    ... on Runs {
+      results {
+        runId
+        jobName
+        status
+        startTime
+        endTime
+        updateTime
+        tags { key value }
+      }
+    }
+    ... on PythonError {
+      message
+    }
+  }
+  activeRuns: runsOrError(
+    filter: {
+      tags: [{ key: ".dagster/repository", value: $repositoryLabel }],
+      statuses: [NOT_STARTED, QUEUED, STARTING, STARTED, CANCELING]
+    },
+    limit: 1000
   ) {
     __typename
     ... on Runs {
@@ -587,8 +611,7 @@ def _parse_run_detail(
             checked_at=checked_at,
             run=_parse_run_summary(raw_run),
             events=[
-                _parse_run_event(raw_event)
-                for raw_event in _list(event_connection.get("events"))
+                _parse_run_event(raw_event) for raw_event in _list(event_connection.get("events"))
             ],
             event_cursor=_optional_string(event_connection.get("cursor")),
             event_has_more=bool(event_connection.get("hasMore")),
@@ -625,21 +648,24 @@ async def _post_graphql(
     variables: dict[str, object],
     query: str = _DAGSTER_SUMMARY_QUERY,
 ) -> JsonDict:
-    response = await client.post(
-        graphql_url,
-        json={"query": query, "variables": variables},
-    )
-    response.raise_for_status()
-    return _dict(response.json())
+    # 응답을 전부 버퍼링하기 전에 상한을 적용한다. 오류 stack도 무한히 적재하지 않는다.
+    async with client.stream(
+        "POST", graphql_url, json={"query": query, "variables": variables}
+    ) as response:
+        response.raise_for_status()
+        content = bytearray()
+        async for chunk in response.aiter_bytes():
+            if len(content) + len(chunk) > 4 * 1024 * 1024:
+                raise ValueError("Dagster 응답이 4 MiB 상한을 넘었습니다.")
+            content.extend(chunk)
+        return _dict(json.loads(content))
 
 
 def _response_meta(*, started_at: float) -> DagsterResponseMeta:
     return DagsterResponseMeta(duration_ms=round((perf_counter() - started_at) * 1000, 3))
 
 
-def _summary_response(
-    data: DagsterSummaryData, *, started_at: float
-) -> DagsterSummaryResponse:
+def _summary_response(data: DagsterSummaryData, *, started_at: float) -> DagsterSummaryResponse:
     return DagsterSummaryResponse(data=data, meta=_response_meta(started_at=started_at))
 
 
@@ -830,8 +856,16 @@ async def get_dagster_summary(
         now_ts=checked_at.timestamp(),
         grace_seconds=float(settings.dagster_schedule_overdue_grace_seconds),
     )
-    recent_runs, run_counts, run_errors = _parse_runs(_dict(data.get("runsOrError")))
-    errors = [*repository_errors, *run_errors]
+    recent_runs, _, run_errors = _parse_runs(_dict(data.get("runsOrError")))
+    active_runs, _, active_errors = _parse_runs(_dict(data.get("activeRuns")))
+    # 최근 종료 실행에 밀린 오래된 활성 실행도 남기며 중복 집계하지 않는다.
+    recent_runs = list({run.run_id: run for run in [*active_runs, *recent_runs]}.values())
+    run_counts = dict(Counter(run.status for run in recent_runs))
+    errors = [*repository_errors, *run_errors, *active_errors]
+    if len(active_runs) >= 1000:
+        errors.append(
+            "활성 실행 조회가 1000건 상한에 도달했습니다. Dagster에서 전체 실행을 확인하세요."
+        )
 
     return _summary_response(
         DagsterSummaryData(

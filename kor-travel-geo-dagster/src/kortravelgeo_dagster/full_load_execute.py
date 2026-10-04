@@ -21,7 +21,7 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.infra.scratch_db import scratch_database_dsn
 from kortravelgeo.loaders.batch_dag import run_full_load_batch, run_source_loader
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
 from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 from .run_tags import LONG_RUN_TAGS
 
@@ -188,7 +189,7 @@ async def run_source_load_op(context: OpExecutionContext) -> dict[str, object]:
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="full_load_batch",
     tags=FULL_LOAD_BATCH_JOB_TAGS,
     description="Execute a full_load_batch as a Dagster run (T-290j).",
@@ -197,7 +198,7 @@ def full_load_batch_job() -> None:
     run_full_load_batch_op()
 
 
-@job(
+@geo_job(
     name="load_source",
     tags=LOAD_SOURCE_JOB_TAGS,
     description="Execute one source loader as a Dagster run (T-290j).",

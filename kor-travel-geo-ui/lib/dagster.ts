@@ -32,7 +32,13 @@ export const dagsterPaths = {
 export function useDagsterSummaryQuery() {
   return useQuery({
     queryKey: ["dagster", "summary"],
-    queryFn: () => requestJson<DagsterSummaryResponse>(dagsterPaths.summary),
+    queryFn: async ({ signal }) => {
+      const response = await requestJson<DagsterSummaryResponse>(dagsterPaths.summary, { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) });
+      if (response.data.status !== "ok") {
+        throw new Error(`Dagster 상태: ${response.data.status} · ${response.data.errors?.join(" / ") || "조회 결과를 확인하지 못했습니다."}`);
+      }
+      return response;
+    },
     refetchInterval: 30_000
   });
 }
@@ -40,7 +46,7 @@ export function useDagsterSummaryQuery() {
 export function useDagsterRunDetailQuery(runId: string | null) {
   return useQuery({
     queryKey: ["dagster", "run", runId],
-    queryFn: () => requestJson<DagsterRunDetailResponse>(dagsterPaths.runDetail(runId ?? "")),
+    queryFn: ({ signal }) => requestJson<DagsterRunDetailResponse>(dagsterPaths.runDetail(runId ?? ""), { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }),
     enabled: Boolean(runId),
     refetchInterval: 15_000
   });
@@ -49,7 +55,7 @@ export function useDagsterRunDetailQuery(runId: string | null) {
 export function useDagsterRunFailuresQuery() {
   return useQuery({
     queryKey: ["dagster", "run-failures"],
-    queryFn: () => requestJson<DagsterRunFailuresResponse>(dagsterPaths.runFailures),
+    queryFn: ({ signal }) => requestJson<DagsterRunFailuresResponse>(dagsterPaths.runFailures, { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }),
     refetchInterval: 30_000
   });
 }

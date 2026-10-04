@@ -5,6 +5,9 @@
    playwright test-results의 프로즈 속 `shadow-[var(--…)]` 토큰이 클래스 후보로
    스캔되면 Tailwind v4 CSS 파싱이 죽는 문제(로컬 next dev 재현)의 원천 차단. */
 @import "tailwindcss" source(none);
+@import "@kor-travel/tokens/theme.css";
+@import "@kor-travel/ui/dagster.css";
+@source "../node_modules/@kor-travel/ui/dist";
 @source "../app";
 @source "../components";
 @source "../lib";
@@ -3748,3 +3751,25 @@ body {
   outline-offset: 2px;
   transition: none !important;
 }
+
+/* 공용 컴포넌트의 의미 토큰을 geo의 기존 색·형태로 연결한다. */
+:root {
+  --kt-surface-page: var(--surface-page); --kt-surface-card: var(--surface-card);
+  --kt-surface-subtle: var(--surface-subtle); --kt-surface-muted: var(--surface-muted);
+  --kt-text-primary: var(--text-primary); --kt-text-secondary: var(--text-secondary);
+  --kt-text-tertiary: var(--text-tertiary); --kt-text-disabled: var(--text-disabled);
+  --kt-brand: var(--brand); --kt-brand-hover: var(--brand-hover);
+  --kt-brand-tint: var(--brand-tint); --kt-brand-foreground: var(--brand-foreground);
+  --kt-border: var(--line); --kt-control-line: var(--control-line); --kt-focus: var(--focus);
+  --kt-success: var(--ok); --kt-warning: var(--warn); --kt-destructive: var(--danger);
+  --kt-radius-control: var(--radius-control); --kt-radius-panel: var(--radius-panel);
+}
+.rail-nav [data-slot="app-menu"] { display: flex; flex-direction: column; overflow: visible; padding: 0; }
+.rail-nav [data-slot="app-menu"] ul { flex-direction: column; }
+.rail-nav [data-slot="app-menu-group"] { min-width: 0; }
+.rail-nav [data-slot="app-menu-group-label"] { padding: 0; }
+@media (min-width: 1024px) {
+  .app-shell[data-sidebar-collapsed="true"] [data-slot="app-menu-group-label"],
+  .app-shell[data-sidebar-collapsed="true"] [data-slot="app-menu-link"] > span:last-child { display: none; }
+}
+.kt-dagster-operations .dagster-run-detail > section { border: 0; }

@@ -24,13 +24,13 @@ from dagster import (
     RunFailureSensorContext,
     RunRequest,
     ScheduleEvaluationContext,
-    job,
     op,
     run_failure_sensor,
     schedule,
 )
 from kortravelgeo.client import AsyncAddressClient
 
+from .recovery import geo_job, schedule_eligible
 from .resources import op_resource, run_coroutine_blocking
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ async def run_due_scheduled_backup_op(context: OpExecutionContext) -> dict[str, 
     return payload
 
 
-@job(
+@geo_job(
     name="scheduled_backup_run_due",
     tags=SCHEDULED_BACKUP_JOB_TAGS,
     description=(
@@ -111,6 +111,7 @@ def scheduled_backup_run_due_job() -> None:
 
 @schedule(
     name="scheduled_backup",
+    should_execute=schedule_eligible("scheduled_backup_run_due"),
     job=scheduled_backup_run_due_job,
     cron_schedule=SCHEDULED_BACKUP_CRON,
     execution_timezone=SCHEDULED_BACKUP_TIMEZONE,

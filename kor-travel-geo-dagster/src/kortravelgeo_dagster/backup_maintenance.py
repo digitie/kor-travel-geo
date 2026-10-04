@@ -37,7 +37,6 @@ from dagster import (
     ScheduleEvaluationContext,
     SkipReason,
     String,
-    job,
     op,
     schedule,
 )
@@ -45,6 +44,7 @@ from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE
 
 from .db_lifecycle import db_lifecycle_skip_reason, refuse_unsupported_db_lifecycle
+from .recovery import geo_job, schedule_eligible
 from .resources import op_resource
 from .run_tags import LONG_RUN_TAGS
 
@@ -282,7 +282,7 @@ async def _latest_backup_artifact_id(client: "AsyncAddressClient") -> str:
     return backups[0].artifact_id
 
 
-@job(
+@geo_job(
     name="backup_verify",
     tags={**_MAINTENANCE_TAGS, "kor_travel_geo.job_kind": "backup_verify"},
     description="Verify a stored db_backup's integrity (T-290g ③).",
@@ -291,7 +291,7 @@ def backup_verify_job() -> None:
     verify_backup_op()
 
 
-@job(
+@geo_job(
     name="backup_copy",
     tags={**_MAINTENANCE_TAGS, "kor_travel_geo.job_kind": "backup_copy"},
     description="Copy a stored db_backup off-host with a sha256 re-check (T-290g ③).",
@@ -300,7 +300,7 @@ def backup_copy_job() -> None:
     copy_backup_op()
 
 
-@job(
+@geo_job(
     name="backup_restore_drill",
     tags={
         **_MAINTENANCE_TAGS,
@@ -313,7 +313,7 @@ def backup_restore_drill_job() -> None:
     restore_drill_op()
 
 
-@job(
+@geo_job(
     name="backup_retention_janitor",
     tags={**_MAINTENANCE_TAGS, "kor_travel_geo.job_kind": "backup_retention_janitor"},
     description="Expire TTL-passed db_backup archives, keeping pinned + newest keep_min (T-230).",
@@ -344,6 +344,8 @@ def restore_drill_schedule(
     skip = db_lifecycle_skip_reason(client, "restore_drill", context.log)
     if skip is not None:
         return skip
+    if not schedule_eligible("backup_restore_drill")(context):
+        return SkipReason("같은 작업 실행 중 또는 실행 저장소 확인 실패로 발화를 보류합니다.")
     scheduled_at = context.scheduled_execution_time
     return RunRequest(
         run_key=scheduled_at.isoformat() if scheduled_at is not None else None,
@@ -357,6 +359,7 @@ def restore_drill_schedule(
 
 @schedule(
     name="backup_retention_janitor_daily",
+    should_execute=schedule_eligible("backup_retention_janitor"),
     job=backup_retention_janitor_job,
     cron_schedule=RETENTION_JANITOR_CRON,
     execution_timezone=RETENTION_JANITOR_TIMEZONE,

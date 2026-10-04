@@ -25,7 +25,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Protocol
 
 from dagster import Failure
-from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -72,7 +72,9 @@ async def execute_load_job(
     """
 
     ttl = lease_ttl_seconds or 300.0
-    executor = executor or LoadJobExecutor(engine, lease_ttl_seconds=ttl)
+    executor = executor or LoadJobExecutor(
+        engine, lease_ttl_seconds=ttl, orchestrator_run_id=orchestrator_run_id
+    )
     await executor.adopt_dagster(job_id, orchestrator_run_id, ttl_seconds=lease_ttl_seconds)
     cancel_event = asyncio.Event()
 
@@ -88,16 +90,19 @@ async def execute_load_job(
     poll = asyncio.create_task(
         _poll_cancel(executor, job_id, cancel_event, cancel_poll_seconds)
     )
-    heartbeat = asyncio.create_task(_renew_lease_heartbeat(executor, job_id, ttl))
+    heartbeat = asyncio.create_task(_renew_lease_heartbeat(executor, job_id, ttl, cancel_event))
     try:
         await progress(progress=0.01, stage="running", message="job started")
         await leaf(cancel_event, progress)
     except asyncio.CancelledError:
         await executor.mark_cancelled(job_id)
         raise
+    except LoadJobLeaseLostError as exc:
+        cancel_event.set()
+        raise Failure(description=str(exc), allow_retries=False) from exc
     except Exception as exc:
         await executor.mark_failed(job_id, str(exc))
-        raise Failure(description=f"load job {job_id} failed: {exc}") from exc
+        raise Failure(description=f"load job {job_id} failed: {exc}", allow_retries=False) from exc
     else:
         await executor.mark_done(job_id)
     finally:
@@ -132,6 +137,7 @@ async def _renew_lease_heartbeat(
     executor: LoadJobExecutor,
     job_id: str,
     ttl_seconds: float,
+    cancel_event: asyncio.Event | None = None,
 ) -> None:
     """Renew the ``load_jobs`` lease independently of the leaf's progress emission.
 
@@ -145,5 +151,12 @@ async def _renew_lease_heartbeat(
     interval = ttl_seconds / 3.0
     while True:
         await asyncio.sleep(interval)
-        with suppress(Exception):
+        try:
             await executor.renew_lease(job_id, ttl_seconds=ttl_seconds)
+        except LoadJobLeaseLostError:
+            if cancel_event is not None:
+                cancel_event.set()
+            return
+        except Exception:
+            # 일시적인 DB 장애는 worker 사망의 증거가 아니다.
+            continue

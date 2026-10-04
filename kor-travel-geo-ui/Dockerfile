@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 # before `npm ci` runs its lifecycle scripts — the rest of the source only lands later,
 # in the builder stage's `COPY . .`.
 COPY scripts ./scripts
+COPY vendor ./vendor
 RUN npm ci
 
 FROM node:22-alpine AS builder
