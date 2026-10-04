@@ -29,7 +29,7 @@ Dagster 조회 장애를 실행 부재로 해석하면 lease가 만료된 정상
 ## 결과와 이관
 
 React 19 peer와 Node 22 환경으로 소비자 검증을 수행한다. Python common은 확정된
-ab21cc3b7b77e5e6d6cd277ca64840761fc4d7a4로 고정한다. UI/tokens는 vendor tarball과
+73e3ff8b9398e533806d2d1a8435292570169de3로 고정한다. UI/tokens는 vendor tarball과
 lock integrity로 고정하며 출처는 vendor/PROVENANCE.md에 기록한다.
 공통 가이드: [Dagster 채택 가이드](https://github.com/digitie/kor-travel-common/blob/main/docs/runbooks/dagster-adoption.md).
 상한은 적재·렌더링 구조의 개선이며 실제 RSS 감소율은 측정하지 않았다.
