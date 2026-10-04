@@ -1,0 +1,72 @@
+[
+  {
+    "file": "2026-10-05-geo-review-recovery.md",
+    "sha256": "d7fbe731feb5679f24da89da0536f1ed1bf7d0dfc81c5a7cbf5a356381dccbe8",
+    "source_original": "geo-review-recovery.md",
+    "display_sha256": "d7fbe731feb5679f24da89da0536f1ed1bf7d0dfc81c5a7cbf5a356381dccbe8",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-review-ui.md",
+    "sha256": "c978c7384ed5813c9cdfa613e0ce3b99eca20ac7686837f436f674317954afee",
+    "source_original": "geo-review-ui.md",
+    "display_sha256": "10cecd4504f4f61b5b4c2117a038f802ce6463265fdc3a7994a0f242260cb32f",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-postfix-recovery.md",
+    "sha256": "c36daf337b4d20c0af26adc1fdfa8d386d2aebbedd93387044fa8303cf687724",
+    "source_original": "geo-final-postfix-recovery.md",
+    "display_sha256": "c36daf337b4d20c0af26adc1fdfa8d386d2aebbedd93387044fa8303cf687724",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-postfix-ui.md",
+    "sha256": "47c75b953af8445a2b6f38fe91989e92b79935a900ad8c99e4760b228b6e68d1",
+    "source_original": "geo-final-postfix-ui.md",
+    "display_sha256": "c848b618835ff1c15811871a3f7f24eed5a45bc59494067c98f611ff48166ba0",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-publication-ui.md",
+    "sha256": "85c88ea9906132cea0909b68974439d141dcc03041c94ff64cf82ccd09731078",
+    "source_original": "geo-final-publication-ui.md",
+    "display_sha256": "5f1bc49d64ea65369b4f1249ca4fd3a9d92d9967d4187ae0807feaea3b656f0d",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-independent-recovery.md",
+    "sha256": "2b210ccdeebeb9d29fc3512abffd5832139cb42e92cda6d7f48d8fbbc5f1795b",
+    "source_original": "geo-final-independent-recovery.md",
+    "display_sha256": "2b210ccdeebeb9d29fc3512abffd5832139cb42e92cda6d7f48d8fbbc5f1795b",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-merge-postfix-ui.md",
+    "sha256": "04d3c0742b523cb7ce53c5894da3b08e554fccbd6f34cb295f3279d2fc9061c9",
+    "source_original": "geo-merge-postfix-ui.md",
+    "display_sha256": "eb2e1728f1231abf51ac51d2cc1b255bff430c611ab83ff83a50649da4a1843c",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-merge-postfix-recovery.md",
+    "sha256": "9d31e4ab040a0b695589456cdf762daadf70bff3244a268eebb3157284d5551f",
+    "source_original": "geo-merge-postfix-recovery.md",
+    "display_sha256": "9d31e4ab040a0b695589456cdf762daadf70bff3244a268eebb3157284d5551f",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-evidence-ui.md",
+    "sha256": "23e94291115e819ff6f02c721be98b869f745a33bcd5db088b9e174d0c6566e2",
+    "source_original": "geo-final-evidence-ui.md",
+    "display_sha256": "c2a9dc68a884b71aee8c1fa1cfdb05d0aa33f96b9e791d85d0ab39b34a6abada",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  },
+  {
+    "file": "2026-10-05-geo-final-evidence-recovery.md",
+    "sha256": "a714ce92e771eb9ea60be4506b6abe0e079ff73e9f2274dad8360df3d75b706a",
+    "source_original": "geo-final-evidence-recovery.md",
+    "display_sha256": "a714ce92e771eb9ea60be4506b6abe0e079ff73e9f2274dad8360df3d75b706a",
+    "canonical_archive": "2026-10-05-review-originals.json"
+  }
+]

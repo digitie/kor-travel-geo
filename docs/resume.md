@@ -1127,3 +1127,7 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 - WSL/ext4: backend 1782 PASS/101 SKIP, ruff·mypy·lint-imports PASS; Dagster 관련 150 PASS; frontend 231 PASS, lint/type/build/React Doctor PASS.
 - 기존 PostgreSQL의 독립 임시 schema 소유권·lease 경쟁 7 PASS. DB/RustFS 서비스 lifecycle 변경 없음.
 - common 후보 426de4fb의 두 독립 리뷰 PASS와 공개 타입 이관 수정 반영. geo 두 리뷰/live E2E/CI/PR 머지는 진행 중이며 아직 완료로 세지 않는다. RSS 실측은 NOT_RUN.
+
+## 2026-10-05 공통 Dagster 복구·UI 최종 검증
+
+[최종 리뷰·실행 증거](reviews/2026-10-05-common-dagster.md): 제품4c59efe·공통73e3ff8, 두 독립 최종 PASS·열린0. 전체1787 PASS/111 SKIP·focused153·UI231·PostgreSQL17·Linux Chromium/Firefox각13항목 PASS. 초기 코드에서 재현한 checkpoint·provider·게시 경계 결함을 수정했다. PR570의 문서 포함 최종 checks PASS 후 common26 다음에 merge한다. 기존 사용자 checkout/원천 데이터는 보존하며 운영 배포·worker kill·RSS는 후속이다.
