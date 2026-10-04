@@ -3773,3 +3773,6 @@ body {
   .app-shell[data-sidebar-collapsed="true"] [data-slot="app-menu-link"] > span:last-child { display: none; }
 }
 .kt-dagster-operations .dagster-run-detail > section { border: 0; }
+.dagster-op-log { max-height: 24rem; overflow: auto; }
+.dagster-op-log-table { min-width: 48rem; }
+.dagster-op-log-table th:last-child, .dagster-op-log-table td:last-child { min-width: 20rem; }

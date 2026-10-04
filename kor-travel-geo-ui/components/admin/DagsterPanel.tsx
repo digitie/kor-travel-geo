@@ -458,8 +458,9 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
               {backup ? <Badge tone="info">backup op</Badge> : null}
               <Badge tone="neutral">{group.events.length} event</Badge>
             </summary>
-            <div className="overflow-x-auto border-t border-border">
-              <table className="w-full text-left text-xs">
+            <div className="dagster-op-log border-t border-border" role="region"
+              aria-label={`${group.stepId ?? "run-level"} 이벤트 로그`} tabIndex={0}>
+              <table className="dagster-op-log-table w-full text-left text-xs">
                 <thead>
                   <tr className="text-muted-foreground">
                     <th className="px-3 py-1 font-medium">time</th>
