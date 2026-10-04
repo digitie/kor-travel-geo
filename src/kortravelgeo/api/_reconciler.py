@@ -100,21 +100,28 @@ class DagsterJobReconciler:
                 lease_valid=lease_valid,
             )
             remaining = deadline - monotonic()
-            if remaining <= 0:
-                break
-            try:
-                applied = await asyncio.wait_for(
-                    self._apply(
-                        job_id,
-                        action,
-                        orchestrator_run_id=row.get("orchestrator_run_id"),
-                        lease_expires_at=row.get("lease_expires_at"),
-                    ),
-                    timeout=remaining,
-                )
-            except Exception:
-                logger.warning("실행 상태 회수 실패: 다음 순회에서 다시 확인합니다.", exc_info=True)
-                break
+            applied = True
+            if action.outcome not in {ReconcileOutcome.KEEP_RUNNING, ReconcileOutcome.NOOP}:
+                if remaining <= 0:
+                    action = ReconcileAction(
+                        ReconcileOutcome.NOOP, "순회 예산 소진; 다음 회차 재확인"
+                    )
+                else:
+                    try:
+                        applied = await asyncio.wait_for(
+                            self._apply(
+                                job_id,
+                                action,
+                                orchestrator_run_id=row.get("orchestrator_run_id"),
+                                lease_expires_at=row.get("lease_expires_at"),
+                            ),
+                            timeout=remaining,
+                        )
+                    except Exception:
+                        logger.warning("실행 상태 회수 실패: 다음 회차 재확인", exc_info=True)
+                        action = ReconcileAction(
+                            ReconcileOutcome.NOOP, "변경 실패; 다음 회차 재확인"
+                        )
             if not applied:
                 action = ReconcileAction(
                     ReconcileOutcome.NOOP,
@@ -123,6 +130,9 @@ class DagsterJobReconciler:
             results.append((job_id, action))
             if row.get("created_at") is not None:
                 self._cursors[self._scan_terminal] = (row["created_at"], job_id)
+            # 시간 상한에 걸린 행도 checkpoint하여 뒤의 실행을 영구적으로 굶기지 않는다.
+            if remaining <= 0:
+                break
         if len(results) == len(rows) and len(rows) < 100:
             self._cursors[self._scan_terminal] = None
         return results

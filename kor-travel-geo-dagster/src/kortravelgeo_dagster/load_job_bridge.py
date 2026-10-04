@@ -20,12 +20,15 @@ modules).
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Protocol
 
 from dagster import Failure
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -87,9 +90,7 @@ async def execute_load_job(
         await executor.set_progress(job_id, progress=progress, stage=stage, message=message)
         await executor.renew_lease(job_id, ttl_seconds=lease_ttl_seconds)
 
-    poll = asyncio.create_task(
-        _poll_cancel(executor, job_id, cancel_event, cancel_poll_seconds)
-    )
+    poll = asyncio.create_task(_poll_cancel(executor, job_id, cancel_event, cancel_poll_seconds))
     heartbeat = asyncio.create_task(_renew_lease_heartbeat(executor, job_id, ttl, cancel_event))
     try:
         await progress(progress=0.01, stage="running", message="job started")
@@ -127,9 +128,16 @@ async def _poll_cancel(
     """
 
     while not cancel_event.is_set():
-        if await executor.read_cancel_requested(job_id):
+        try:
+            if await executor.read_cancel_requested(job_id):
+                cancel_event.set()
+                return
+        except LoadJobLeaseLostError:
             cancel_event.set()
             return
+        except Exception:
+            # 일시적인 read 장애로 감시 task가 종료되거나 완료 결과를 뒤집지 않는다.
+            logger.warning("작업 %s 취소 상태 조회 실패; 다음 polling에서 재확인", job_id)
         await asyncio.sleep(interval)
 
 
