@@ -73,9 +73,10 @@ def test_mv_next_index_rename_targets_are_derived_from_live_indexes() -> None:
     assert "pg_index" in source
     assert "mv_geocode_target_next" in source
     assert "mv_geocode_text_search_next" in source
-    assert postload._mv_target_index_name(
-        "idx_mv_next_geocode_target_next_pk"
-    ) == "idx_mv_geocode_target_pk"
+    assert (
+        postload._mv_target_index_name("idx_mv_next_geocode_target_next_pk")
+        == "idx_mv_geocode_target_pk"
+    )
     assert postload._mv_target_index_name("idx_mv_next_geom5179") == "idx_mv_geom5179"
     assert (
         postload._mv_target_index_name("idx_mv_next_text_search_rn_trgm")
@@ -90,3 +91,34 @@ def test_text_search_shadow_sql_uses_next_target_and_indexes() -> None:
     assert "CREATE MATERIALIZED VIEW mv_geocode_text_search_next AS" in sql
     assert "FROM mv_geocode_target_next" in sql
     assert "idx_mv_next_text_search_pk" in sql
+
+
+async def test_refresh_mv_forwards_owner_guard_to_radius_parts(monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    guard = AsyncMock()
+    conn = SimpleNamespace(execute=AsyncMock(), scalar=AsyncMock(return_value="existing"))
+
+    @asynccontextmanager
+    async def begin():
+        yield conn
+
+    engine = SimpleNamespace(begin=begin)
+    for name in (
+        "normalize_mv_index_names",
+        "rebuild_mv_next",
+        "rebuild_text_search_mv_next",
+        "shadow_swap_mv",
+    ):
+        monkeypatch.setattr(postload, name, AsyncMock())
+    radius = AsyncMock()
+    monkeypatch.setattr(postload, "refresh_region_radius_parts", radius)
+    monkeypatch.setattr(
+        postload, "GeoCacheRepository", lambda _: SimpleNamespace(clear=AsyncMock())
+    )
+    for strategy in ("swap", "concurrent"):
+        radius.reset_mock()
+        await postload.refresh_mv(engine, strategy=strategy, publication_guard=guard)
+        radius.assert_awaited_once_with(engine, publication_guard=guard)

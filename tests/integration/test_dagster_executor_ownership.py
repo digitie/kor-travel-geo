@@ -268,3 +268,43 @@ FROM generate_series(1,201) n
     assert [job_id for job_id, _ in active_again] == ["job"]
     assert len(old_first) == len(old_next) == 100
     assert {job_id for job_id, _ in old_first}.isdisjoint(job_id for job_id, _ in old_next)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_radius_parts_commit_checks_owner_after_rebuild(
+    ownership_engine: AsyncEngine, monkeypatch, cancelled: bool
+) -> None:
+    import asyncio
+
+    from kortravelgeo.infra.publication import load_job_publication_guard
+    from kortravelgeo.loaders import postload
+
+    async with ownership_engine.begin() as conn:
+        await conn.execute(text("CREATE TABLE region_radius_parts (value text)"))
+        await conn.execute(text("INSERT INTO region_radius_parts VALUES ('old')"))
+    # geometry SQL의 실행계획 대신 실제 TRUNCATE/INSERT transaction의 게시 경계를 검증한다.
+    monkeypatch.setattr(
+        postload,
+        "REGION_RADIUS_PARTS_REFRESH_SQL",
+        "TRUNCATE TABLE region_radius_parts; INSERT INTO region_radius_parts VALUES ('new');",
+    )
+    cancel_event = asyncio.Event()
+    actual_guard = load_job_publication_guard(
+        job_id="job", owner_run_id="owner", cancel_event=cancel_event
+    )
+
+    async def guard(conn):
+        if cancelled:
+            cancel_event.set()
+        await actual_guard(conn)
+
+    if cancelled:
+        with pytest.raises(LoadJobLeaseLostError):
+            await postload.refresh_region_radius_parts(ownership_engine, publication_guard=guard)
+    else:
+        await postload.refresh_region_radius_parts(ownership_engine, publication_guard=guard)
+    async with ownership_engine.connect() as conn:
+        assert await conn.scalar(text("SELECT value FROM region_radius_parts")) == (
+            "old" if cancelled else "new"
+        )
