@@ -1,6 +1,6 @@
 # ADR-067: 데이터셋 버전 외부 공개는 serving release 파생 opaque 토큰 + 최소 공개 원칙으로 한다
 
-- 상태: proposed
+- 상태: accepted, amended by [ADR-069](069-dataset-data-token.md) (proposed, 2026-10-13)
 - 날짜: 2026-08-26
 - 결정자: 사용자 요청, claude 설계
 - 관련: ADR-004(raw SQL repository)·ADR-017(batch DAG/MV swap)·ADR-033(ops 스키마)·

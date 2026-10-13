@@ -108,6 +108,38 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
 3. `changed:true, known_version_found:false` → 전체 재동기화 후 새 토큰 저장.
 4. 저장한 토큰은 불투명 값으로만 취급한다 — 위 "계약 4항" 참조.
 
+### 예정(ADR-069 proposed, 미구현) — `data_token` 소비자 규약
+
+> 아래는 [ADR-069](../../adr/069-dataset-data-token.md)가 수용·구현(T-325a~c)되면 적용되는 규약이다.
+> **현재 응답에는 `data_token`이 없다.** 위 "소비자 프로토콜"이 지금의 규약이다.
+
+- entry(`/v2/dataset/version`의 `current`·`/v2/dataset/history`의 `entries[]`)에 `data_token: string`이 **additive**로 더해진다 — 형식
+  `^dd1-[0-9a-f]{32}$`, 활성화 시점의 서빙 데이터 내용 지문에서 파생한 불투명 값. 지문을 계산하지
+  못한 릴리스는 필드를 **생략**한다(`null` 아님).
+- 의미 분리: `version_token`은 릴리스 식별(동일 데이터 재빌드·restore에도 바뀜), `data_token`은
+  서빙 데이터 식별(**데이터가 같으면 같다**, 표 집합·geometry 요약의 한계는 ADR-069 D2·D3).
+- 소비자 규약: `current.data_token`을 저장·비교한다. 같으면 무동작(재빌드), 다르면 전량 재해석 후
+  새 값을 저장, 응답에 없으면 **판정 불가**로 멈추고 운영자에게 보인다(바뀐 것으로 간주하지 않는다).
+  `version_token`·`change_type`은 관측·이력용으로만 쓴다. `known_version`은 그대로 `version_token`이다.
+- 네 조회 응답(`/v2/geocode`·`/v2/reverse`·`/v2/search`·`/v2/regions/within-radius`) 최상위에도
+  `dataset: {version_token, data_token}`이 실린다(active 릴리스 없으면 생략; 외부 출처(`candidates[].source ∈
+  {vworld, juso}`) 후보가 섞여도 **로컬 데이터셋**의 값 — 외부 출처는 `candidates[].source`로 구별). 배치 도중 릴리스가 바뀌었는지는 이
+  값으로 감지한다. 서버가 값을 어떻게 붙이는지(캐시 hit·갱신 지연)는 ADR-069 D7이 정본이다.
+- 폴링 주기 ≥60초는 그대로다.
+
+예정 entry 예시:
+
+```json
+{
+  "version_token": "dv1-9f31c8ab02de47f6a1b5c033e8d21c70",
+  "data_token": "dd1-3b7d1e0c9a52f4e6b81c07d5a9e2f6c4",
+  "activated_at": "2026-10-20T03:12:45+09:00",
+  "change_type": "full",
+  "reference_months": { "juso": "202609" },
+  "reference_months_mixed": false
+}
+```
+
 ## 예시
 
 ```bash

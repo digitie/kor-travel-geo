@@ -10,6 +10,8 @@
   업데이트하기 위함."
 - 결정 기록: [ADR-067](adr/067-external-dataset-version-api.md) (기반 불변식 D0·버전 토큰·
   공개 범위·인증·저장 전략·admin UI 범위·엣지 표)
+- 구현 상태: T-291a~f 완료(2026-08-26, `tasks-done.md`). 그 뒤의 계획은 이 문서 끝 §7
+  — `data_token` 도입([ADR-069](adr/069-dataset-data-token.md), proposed, 미구현).
 - 관련 문서: [t049-ops-metadata-schema.md](t049-ops-metadata-schema.md)(ops 스키마 기반),
   [t050-ops-hardening.md](t050-ops-hardening.md), [t109-backup-source-upload-management.md](t109-backup-source-upload-management.md)
 - 관련 코드: `src/kortravelgeo/infra/sql.py`(ops DDL), `src/kortravelgeo/infra/admin_repo.py`
@@ -332,3 +334,22 @@
 [ADR-067 "하지 않는 것"](adr/067-external-dataset-version-api.md) 절이 정본이다. 요약:
 단조 번호/원장·ETag/304·webhook·내부 해시/UUID 노출·백업 정보 외부 노출·MV 내용 해시·v1
 표면·라이브러리 공개 메서드·키 스코프·이력 편집 UI·1차 스키마 변경·`change_type: "revert"`.
+
+## 7. 계획(ADR-069 proposed, 미구현) — `data_token` 도입과 의미 분리
+
+정본은 [ADR-069](adr/069-dataset-data-token.md)다. 여기는 이 문서의 계약(§1)과 어떻게 맞물리는지만
+적는다 — 상세를 복제하지 않는다.
+
+- **문제.** `version_token`은 release 행의 함수(D1)라 ADR-067이 "허용된 과잉 감지"로 둔 재빌드·restore가
+  소비자(Map·concierge)에서는 전량 재해석 비용이 됐다. `source_set_hash`는 batch 없는 릴리스에서 기준월
+  추론값이라 일변동을 못 본다 — 대체재가 아니다.
+- **의미 분리.** `version_token`(릴리스 식별, 그대로) 옆에 `data_token`(서빙 내용 지문 파생, `dd1-` 32 hex)을
+  **additive**로 더한다. 소비자는 `current.data_token` 동등성으로 "바뀌었는가"를 판정하고, 없으면 판정 불가로
+  멈춘다(계획 없음 — 문구는 ADR-069 D8이 정본, 소비자 ADR도 같은 문구). `version_token`·`change_type`·
+  `known_version`·`history`의 §1 계약은 변경 없다.
+- **지문·캐시·응답.** 표 집합·geometry 요약·계산 위치·fail-open은 ADR-069 D2~D5, 활성 릴리스마다의
+  `geo_cache` 무효화(standalone direct-serving 적재 — ADR-067 D0 4류 — 가 `refresh_mv` 없이 릴리스만 만들어
+  옛 답이 캐시에 남던 문제)는 D6, 네 v2 응답 최상위의 `dataset{version_token, data_token}`은 D7이 정본이다.
+- **ADR-067과의 관계.** "하지 않는 것" #6(MV 내용 해시)은 ADR-069가 뒤집는다(amend). §6 요약의 "MV 내용 해시"도
+  ADR-069 수용 시 삭제한다.
+- 작업: `docs/tasks.md` T-325a~c.
