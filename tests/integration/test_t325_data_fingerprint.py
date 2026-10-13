@@ -44,7 +44,7 @@ from tests.integration._pg_guard import require_disposable_database
 
 pytestmark = pytest.mark.asyncio
 
-# EPSG:5179 square well inside the national grid; "다사 6925 4045" (969255, 1840455) is inside.
+# EPSG:5179 square well inside the national grid; "다바 6925 4045" (969255, 1840455) is inside.
 _SQUARE = (
     "ST_GeomFromText('MULTIPOLYGON(((969000 1840000, 969500 1840000, 969500 1840500,"
     " 969000 1840500, 969000 1840000)))', 5179)"
@@ -55,7 +55,7 @@ _SQUARE_PLUS_VERTEX = (
     " 969500 1840500, 969000 1840500, 969000 1840000)))', 5179)"
 )
 _LINE = "ST_GeomFromText('MULTILINESTRING((969000 1840000, 969500 1840500))', 5179)"
-_SPPN_QUERY = "다사 6925 4045"
+_SPPN_QUERY = "다바 6925 4045"
 _BD_MGT_SN = "9911010100100010000000001"
 
 _CLEANUP_SQL = (
@@ -70,6 +70,7 @@ _CLEANUP_SQL = (
     "DELETE FROM tl_spbd_buld_polygon WHERE bd_mgt_sn LIKE '99%'",
     "DELETE FROM tl_sprd_manage WHERE sig_cd LIKE '99%'",
     "DELETE FROM tl_juso_text WHERE bd_mgt_sn LIKE '99%'",
+    "DELETE FROM load_manifest WHERE source_zip = 't325'",
     "DELETE FROM geo_cache",
 )
 
@@ -86,10 +87,30 @@ async def engine() -> AsyncIterator[AsyncEngine]:
             if await conn.scalar(text("SELECT to_regclass('ops.dataset_snapshots')")) is None:
                 pytest.skip("scratch DB needs `ktgctl init-db` + `alembic stamp head`")
         await _cleanup(eng)
+        async with eng.connect() as conn:
+            started_at = await conn.scalar(text("SELECT clock_timestamp()"))
         yield eng
         await _cleanup(eng)
+        await _drop_ledger_rows_since(eng, started_at)
     finally:
         await eng.dispose()
+
+
+async def _drop_ledger_rows_since(engine: AsyncEngine, started_at: Any) -> None:
+    """Releases this test recorded would otherwise outrank other modules' fixtures in the
+    shared scratch ledger (test_dataset_version_projection reads the whole history)."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("DELETE FROM ops.serving_releases WHERE created_at >= :t"), {"t": started_at}
+        )
+        await conn.execute(
+            text(
+                "DELETE FROM ops.dataset_snapshots s WHERE s.created_at >= :t"
+                " AND NOT EXISTS (SELECT 1 FROM ops.serving_releases r"
+                "                  WHERE r.dataset_snapshot_id = s.dataset_snapshot_id)"
+            ),
+            {"t": started_at},
+        )
 
 
 async def _cleanup(engine: AsyncEngine) -> None:
@@ -264,13 +285,15 @@ async def test_polygon_vertex_added_inside_the_same_bbox_changes_the_token(
     assert before is not None and before != after
 
 
-async def _insert_juso(engine: AsyncEngine, *, zip_no: str = "99001") -> None:
+async def _insert_juso(
+    engine: AsyncEngine, *, bd_mgt_sn: str = _BD_MGT_SN, buld_mnnm: int = 1
+) -> None:
     await _exec(
         engine,
         "INSERT INTO tl_juso_text (bd_mgt_sn, sig_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, bjd_cd,"
         " rn_cd, rn, buld_mnnm, buld_slno, mntn_yn, lnbr_mnnm, lnbr_slno, zip_no)"
-        f" VALUES ('{_BD_MGT_SN}', '99110', '시험도', '시험군', '시험동', '9911010100',"
-        f" '1234567', '시험로', 1, 0, '0', 1, 0, '{zip_no}')",
+        f" VALUES ('{bd_mgt_sn}', '99110', '시험도', '시험군', '시험동', '9911010100',"
+        f" '1234567', '시험로', {buld_mnnm}, 0, '0', {buld_mnnm}, 0, '99001')",
     )
 
 
@@ -290,7 +313,14 @@ async def test_daily_delta_on_the_inferred_source_set_branch_changes_only_the_da
     """MVM 63 (폐지) style: a juso row disappears, the reference month does not move. With no
     load batch and no consistency report the release's source_set comes from the
     month-inference branch, so source_set_hash stays — data_token must not."""
+    await _exec(
+        engine,
+        "INSERT INTO load_manifest (table_name, source_yyyymm, source_zip)"
+        " VALUES ('tl_juso_text', '202609', 't325')"
+        " ON CONFLICT (table_name) DO NOTHING",
+    )
     await _insert_juso(engine)
+    await _insert_juso(engine, bd_mgt_sn="9911010100100020000000002", buld_mnnm=2)
     await refresh_mv(engine)
     _, before_release = await AdminRepository(engine).record_mv_refresh_release(
         load_batch_id=None, release_kind="daily_delta"
@@ -365,6 +395,26 @@ async def test_after_a_failed_fingerprint_the_paths_own_timeout_is_back(
     assert timeout_after == "30min"
 
 
+async def test_after_a_successful_fingerprint_the_paths_own_timeout_is_back(
+    engine: AsyncEngine,
+) -> None:
+    """``SET LOCAL`` inside a RELEASEd savepoint would outlive it; the savepoint is rolled back
+    on success too, so the path's 30 min (not the fingerprint's 10 min) governs what follows."""
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        _, release = await _insert_dataset_snapshot_and_release(
+            conn,
+            snapshot_state="released",
+            release_state="active",
+            release_kind="manual_rebuild",
+            source_set={},
+            row_counts={},
+        )
+        timeout_after = await conn.scalar(text("SHOW statement_timeout"))
+    assert release.data_token is not None
+    assert timeout_after == "30min"
+
+
 # --- all four activation paths: token + cache clear --------------------------------------------
 
 
@@ -417,6 +467,43 @@ async def test_every_activation_path_fingerprints_and_clears_the_cache(
     assert len(set(tokens.values())) == 1, tokens
     # the same backup restored twice ⇒ same token
     assert await restore() == tokens["restore"]
+
+
+async def test_cache_is_cleared_even_when_the_caller_supplies_the_fingerprint(
+    engine: AsyncEngine,
+) -> None:
+    """ADR-069 D4: the clear is tied to "active", not to whether the fingerprint was computed."""
+    await _seed_cache_row(engine)
+    async with engine.begin() as conn:
+        _, release = await _insert_dataset_snapshot_and_release(
+            conn,
+            snapshot_state="released",
+            release_state="active",
+            release_kind="manual_rebuild",
+            source_set={},
+            row_counts={},
+            data_fingerprint="c" * 32,
+        )
+    assert release.data_token is not None
+    assert await _cache_rows(engine) == 0
+
+
+async def test_pending_candidate_neither_fingerprints_nor_clears_the_cache(
+    engine: AsyncEngine,
+) -> None:
+    await _seed_cache_row(engine)
+    _, release = await AdminRepository(engine).record_restore_candidate(
+        restore_artifact_id="t325-pending",
+        target_database="kor_travel_geo_t325_pending",
+        source_manifest={"source_set": {}, "row_counts": {}},
+        activate=False,
+    )
+    assert release.state == "pending"
+    assert release.data_token is None
+    assert await _cache_rows(engine) == 1
+    await AdminRepository(engine).delete_pending_restore_candidate_by_target_database(
+        "kor_travel_geo_t325_pending"
+    )
 
 
 # --- lock ordering (ADR-069 D4 / T-325a acceptance (8)) ------------------------------------------
@@ -485,42 +572,73 @@ async def _sppn_point_4326(engine: AsyncEngine) -> tuple[float, float]:
     return float(row["lon"]), float(row["lat"])
 
 
-@pytest.mark.parametrize("service", ["reverse", "geocode"])
-async def test_standalone_load_activation_invalidates_cached_answers(
-    engine: AsyncEngine, service: str
-) -> None:
-    """A standalone auxiliary load (no refresh_mv ⇒ no refresh_mv cache clear) changes
-    tl_sppn_makarea; after its release, the same request must see the new area name and the
-    new data_token instead of the cached answer."""
+async def _seed_makarea(engine: AsyncEngine) -> None:
     await _exec(
         engine,
         "INSERT INTO tl_sppn_makarea (sig_cd, makarea_id, makarea_nm, geom, source_file)"
         f" VALUES ('99110', 'M1', '구구역', {_SQUARE}, 't325.shp')",
     )
-    first_token = await _activate(engine)
-    if service == "reverse":
-        lon, lat = await _sppn_point_4326(engine)
-        path, payload = "/v2/reverse", {"lon": lon, "lat": lat}
-    else:
-        path, payload = "/v2/geocode", {"query": _SPPN_QUERY}
 
-    first = await _v2(engine, path, payload)
+
+async def _rename_makarea_and_release(engine: AsyncEngine) -> str | None:
+    """A standalone auxiliary load: data changes, a release is recorded, refresh_mv (and its own
+    cache clear) never runs."""
+    await _exec(engine, "UPDATE tl_sppn_makarea SET makarea_nm = '신구역' WHERE sig_cd = '99110'")
+    return await _activate(engine)
+
+
+async def test_standalone_release_invalidates_cached_reverse_and_restamps_v2(
+    engine: AsyncEngine,
+) -> None:
+    await _seed_makarea(engine)
+    first_token = await _activate(engine)
+    lon, lat = await _sppn_point_4326(engine)
+    payload = {"lon": lon, "lat": lat}
+
+    first = await _v2(engine, "/v2/reverse", payload)
     assert "구구역" in str(first["candidates"])
     assert first["dataset"]["data_token"] == first_token
     assert await _cache_rows(engine) >= 1
 
-    await _exec(engine, "UPDATE tl_sppn_makarea SET makarea_nm = '신구역' WHERE sig_cd = '99110'")
-    second_token = await _activate(engine)
+    second_token = await _rename_makarea_and_release(engine)
     assert await _cache_rows(engine) == 0
 
-    second = await _v2(engine, path, payload)
-    assert "신구역" in str(second["candidates"]), "stale cached answer served after release"
+    second = await _v2(engine, "/v2/reverse", payload)
+    assert "신구역" in str(second["candidates"]), "stale cached reverse served after release"
     assert second["dataset"]["data_token"] == second_token != first_token
 
-    # a cache hit is stamped with the *current* token too
-    third = await _v2(engine, path, payload)
+    # a geo_cache hit is stamped with the *current* token too (T-325b (5))
+    third = await _v2(engine, "/v2/reverse", payload)
+    assert await _cache_rows(engine) >= 1
     assert third["candidates"] == second["candidates"]
     assert third["dataset"]["data_token"] == second_token
+
+
+async def test_standalone_release_invalidates_cached_geocode(engine: AsyncEngine) -> None:
+    """The geocode result cache (shared by v1 and v2 geocode) carries the SPPN area context read
+    from tl_sppn_makarea; v2 geocode does not surface the area name, so the cached v1 layer is
+    asserted directly, and the v2 stamp separately."""
+    await _seed_makarea(engine)
+    first_token = await _activate(engine)
+    client = AsyncAddressClient(
+        engine=engine, settings=Settings(_env_file=None, cache_enabled=True)
+    )
+
+    async def area_name() -> str | None:
+        response = await client._geocode_v1(_SPPN_QUERY)
+        area = response.x_extension.sppn_makarea if response.x_extension else None
+        return area.makarea_nm if area is not None else None
+
+    assert await area_name() == "구구역"
+    assert await _cache_rows(engine) == 1
+    v2_first = await _v2(engine, "/v2/geocode", {"query": _SPPN_QUERY})
+    assert v2_first["dataset"]["data_token"] == first_token
+
+    second_token = await _rename_makarea_and_release(engine)
+    assert await _cache_rows(engine) == 0
+    assert await area_name() == "신구역", "stale cached geocode served after release"
+    v2_second = await _v2(engine, "/v2/geocode", {"query": _SPPN_QUERY})
+    assert v2_second["dataset"]["data_token"] == second_token != first_token
 
 
 # --- backfill CLI path --------------------------------------------------------------------------

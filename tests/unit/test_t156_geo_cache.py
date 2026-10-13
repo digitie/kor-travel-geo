@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 import pytest
 
 import kortravelgeo.client as client_module
+import kortravelgeo.infra.cache as cache_module
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import Point, ServiceMeta
@@ -129,12 +130,16 @@ def test_geo_cache_repository_sql_contract() -> None:
     get_source = inspect.getsource(GeoCacheRepository.get_json)
     set_source = inspect.getsource(GeoCacheRepository.set_json)
     clear_source = inspect.getsource(GeoCacheRepository.clear)
+    clear_on_source = inspect.getsource(GeoCacheRepository.clear_on)
 
     assert "hit_count = hit_count + 1" in get_source
     assert "expires_at > now()" in get_source
     assert "ON CONFLICT (cache_key) DO UPDATE" in set_source
     assert "JSONB" in set_source
-    assert "DELETE FROM geo_cache" in clear_source
+    # T-325a (ADR-069 D6): one wipe statement shared by clear() and the in-transaction clear_on()
+    assert "self.clear_on(conn)" in clear_source
+    assert "text(_CLEAR_SQL)" in clear_on_source
+    assert cache_module._CLEAR_SQL == "DELETE FROM geo_cache"
 
 
 @pytest.mark.asyncio

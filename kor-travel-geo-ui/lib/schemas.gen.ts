@@ -60,6 +60,7 @@ export const apiSchemaNames = [
   "DagsterSummaryResponse",
   "DatasetHistoryInput",
   "DatasetHistoryResponse",
+  "DatasetRef",
   "DatasetSnapshot",
   "DatasetVersionEntry",
   "DatasetVersionInput",

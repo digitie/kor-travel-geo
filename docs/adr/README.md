@@ -17,7 +17,7 @@
 | ADR | 제목 | 위치 |
 |-----|------|------|
 | ADR-070 | geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다 (proposed, 미구현 — T-326a~c; Track 2, 호스트 쪽 정본은 Manager ADR-58) | [070-odroid-host-and-empty-host-full-load.md](070-odroid-host-and-empty-host-full-load.md) |
-| ADR-069 | 데이터셋 버전에 서빙 내용 지문 기반 `data_token`을 더하고, 활성 릴리스마다 서버측 결과 캐시를 비운다 (proposed, 미구현 — T-325a~c) | [069-dataset-data-token.md](069-dataset-data-token.md) |
+| ADR-069 | 데이터셋 버전에 서빙 내용 지문 기반 `data_token`을 더하고, 활성 릴리스마다 서버측 결과 캐시를 비운다 (accepted 2026-10-13 — T-325a+b PR #573, T-325c 남음) | [069-dataset-data-token.md](069-dataset-data-token.md) |
 | ADR-068 | 공통 Dagster 복구 정책과 운영 UI 채택 | [068-common-dagster-recovery-and-ui.md](068-common-dagster-recovery-and-ui.md) |
 | ADR-001 | PostgreSQL + PostGIS를 1차 저장소로 채택한다 | [001-postgres-postgis-primary-store.md](001-postgres-postgis-primary-store.md) |
 | ADR-002 | 라이브러리 API는 async-only로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #2) |
