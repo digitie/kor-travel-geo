@@ -2,6 +2,81 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-13 (ADR-069 — 데이터셋 `data_token` 설계, 문서만, by claude)
+
+소유자 지시: geo 주소 데이터셋 릴리스가 소비자(Map·concierge)에 반영되는 경로를 설계하고 각 저장소 문서를
+코딩 가능한 상태로 맞춘다(Track 1). 이 저장소 몫은 [ADR-069](adr/069-dataset-data-token.md)(proposed) +
+백로그 T-325a~c. 코드 변경 없음.
+
+**결정(요약, 정본은 ADR).** `version_token`은 릴리스 행의 함수라(`core/dataset_version.py:78-88`) 데이터 동일
+재빌드에도 바뀌고, 그때마다 Map이 좌표 보유 feature 전량을 다시 해석한다. `source_set_hash`로 대체하는 안은
+batch 없는 릴리스의 `source_set`이 `load_manifest` 기준월 추론(`admin_repo.py:758-759`, `_infer_current_source_set`
+`:2868-2884` → `source_yyyymm_by_kind` `:2802`)이라 일변동
+(법정동 폐지)을 못 봐 기각. 채택: 활성화 시점에 **v2 응답을 만드는 표의 내용 지문**을 `ops.dataset_snapshots.
+data_fingerprint`에 저장하고 `data_token = "dd1-" + sha256(지문)[:32]`로 공개. 소비자 규약은 "`data_token`
+동등성, 없으면 판정 불가, `version_token`은 관측용".
+
+**지문 표는 손으로 고르지 않는다.** 다섯 v2 repo(`reverse_repo`·`zip_repo`·`geometry_repo`·`geocode_repo`·
+`search_repo`)의 `FROM`/`JOIN` 집합에서 유도해 lint로 고정 — head에서 뽑으니 `mv_geocode_target` + `tl_scco_*` 4 +
+`region_radius_parts` + `tl_kodis_bas` + `postal_bulk_delivery` + `tl_sppn_makarea` + `tl_spbd_buld_polygon` +
+`tl_sprd_manage` = 11표. `mv_geocode_text_search`(같은 REFRESH 파생, 유도 집합에 있음)는 허용 목록으로 제외;
+`geo_cache`는 다섯 repo가 읽지 않아 유도 집합 밖(client 계층 파생 캐시, D6에서 무효화)이라 허용 목록에 두지 않는다.
+`_ROW_COUNT_OBJECTS`는 원천 표 목록이라 출처로 못 쓴다. 폴리곤·선 geometry는 WKB md5 대신 `ST_NPoints|Box2D`
+요약(2차 리뷰) — bbox·정점 수가 같은 미세 경계 이동은 못 본다는 한계를 ADR에 박고 소유자 승인으로 올렸다.
+
+**발견: standalone 릴리스 경로가 결과 캐시를 남긴다(2차 리뷰 HIGH).** `geo_cache`는 reverse와 geocode 응답을 함께
+담고(`client.py:494-505, 613-629` geocode; `:592-611` reverse) 키에 데이터셋 성분이 없으며 TTL 30일, `refresh_mv`에서만
+비워진다(`postload.py:67, 95`). 그런데 sppn/pobox/bulk/epost/shp 단독 적재는 `refresh_mv` 없이 `record_mv_refresh_release`만
+부른다(`batch_dag.py:470-480`, `cli/main.py:507, 548, 580, 603, 626, 688` 여섯 곳) — 토큰은 바뀌는데 reverse 답은 옛
+우편번호·옛 SPPN 후보, geocode 답도 옛 SPPN 후보라, 소비자가 "값 동일"로 읽고 새 토큰으로 봉인하는 거짓 음성이 두 경로의
+캐시에서 재현된다. 결정: 네 경로가 지나는 `_insert_dataset_snapshot_and_release`에서 active면 지문 계산과 같은
+transaction에서 `DELETE FROM geo_cache`(`GeoCacheRepository.clear_on(conn)` 추가, SQL 상수 공유). 지문 SELECT 자체는 헬퍼의
+`pg_advisory_xact_lock`(`admin_repo.py:3042-3049`) **앞**에서 돌린다 — lock은 원장만 직렬화하므로 결과가 같고, 동시
+restore/hot-swap/rollback(`statement_timeout=0`)이 지문을 기다리지 않는다(2차 문서 리뷰).
+
+**그 밖에.** 지문 실패는 fail-open(NULL + `serving_releases.notes` 접미 — `run_failure_alerts`는 run 단위 표라
+CLI/restore 경로의 실패를 넣을 run이 없다). 네 v2 응답 최상위에 `dataset{version_token,data_token}`(TTL 10 s,
+캐시 hit에도 현재 토큰, 외부 출처 vworld·juso 후보가 섞여도 로컬 토큰). ADR-067 상태가 구현 완료(T-291a~f, 2026-08-26)
+뒤에도 `proposed`로 남아 있던 drift 정정 — 파일 상태 줄은 `accepted, amended by ADR-069 (proposed, 2026-10-13)`, README
+행은 `(proposed)` 표기를 지우고 `(amended by ADR-069)`로(README 관례상 무표기 = accepted). UI 다이얼로그 경로는 설계의
+`components/admin/`이 아니라 `components/admin/ops/DatasetVersionDetailDialog.tsx`다.
+
+**1차 문서 리뷰(2명) 반영.** (1) 소비자 규약은 설계 초안 §4a #5/#10의 "없으면 바뀜"이 아니라 2차 리뷰 R4-4의
+"없으면 판정 불가(계획 없음)"로 통일하고 ADR D8에 명시 — fail-open의 대가는 과잉 재처리가 아니라 backfill 전
+소비자 정지라는 점을 D5 근거에 다시 적고 소유자 승인 §12 #2에 포함(Map ADR-109·concierge ADR-49도 같은 문구).
+(2) PR 묶음: `.github/workflows/openapi.yml`(`on: pull_request`, `export_openapi.py --check`)과 `ci.yml:135-137`
+(`gen:types` diff 0)이 모든 PR에 돌므로 `openapi.json`·`types/api.gen.ts`·`lib/schemas.gen.ts`는 DTO를 바꾸는
+PR-1(a+b)에 싣는다 — PR-2(c)는 UI 화면·문서·CHANGELOG만. (3) `postal_bulk_delivery.bulk_id BIGSERIAL`(`sql.py:360-367`)
+같은 surrogate key는 지문 제외(같은 파일 재적재마다 바뀜) — D2 제외 규칙에 추가. (4) lint의 `FROM|JOIN` 정규식은
+CTE 이름(`target_pt`·`ranked`·`knn_candidates`(`AS MATERIALIZED`) 등)과 함수 호출을 함께 잡으므로 차감 절차와 양방향
+등식 검사를 D2에 고정. (5) prod 실측 수단 `ktgctl serving fingerprint-active --dry-run`(읽기 전용, 머지 전) 추가(D9).
+(6) savepoint 안 `SET LOCAL`은 RELEASE하면 transaction 끝까지 남으므로 항상 `ROLLBACK TO SAVEPOINT`로 닫는다(D5).
+(7) Alembic 파일명 `0029_t325a_…`, admin_repo 인용 4건 정정(`:952/:995`, `:994`, `:758-759`, `:2868-2884`), ADR 상태
+전환은 승인 시 T-325a PR에서, `llm-summary.md`를 T-325c에 추가, tasks.md 상단 포인터 갱신(tasks-rule §6), ADR-067
+정정 사유는 이 journal만 정본(README·파일 상태 줄은 한 줄로).
+
+**2차 문서 리뷰(2명) 반영.** (1) D6 캐시 전체 삭제를 1차 반영에서 "승인 항목 아님"으로 닫았으나 설계 plan의
+owner_decisions에는 §4a #11로 올라 있어 소유자 승인 **4개**(§12 #1·#2·#18 + §4a #11)로 ADR·resume·tasks를 맞췄다.
+(2) 지문 SELECT가 헬퍼의 advisory lock 임계구간 안에서 돌면 동시 활성화가 최대 10 min 대기 — lock **앞**(같은
+transaction, savepoint 안)으로 위치를 결정(D4). (3) `geo_cache`는 geocode 결과도 담으므로(`client.py:494-505, 613-629`)
+"reverse 캐시"를 "결과 캐시(geocode·reverse)"로 고치고 T-325a 캐시 무효화 수용 기준에 geocode 케이스 추가.
+(4) D2 CTE 정규식이 `AS MATERIALIZED (`(`reverse_repo.py:22`·`geocode_repo.py:120`·`search_repo.py:18, 74`)를 못 잡아
+head에서 즉시 빨갛게 될 것이라 `AS\s+(?:(?:NOT\s+)?MATERIALIZED\s+)?\(`로 정정; 허용 목록은 유도 집합에 실재하는
+`mv_geocode_text_search` 하나로 줄이고(`geo_cache`는 집합 밖) 검사를 `(2) − 허용 == DATA_FINGERPRINT_TABLES` 등식으로;
+정규식은 대소문자 구분이 전제임을 명시. (5) `--dry-run`은 헬퍼와 같은 SQL 상수·같은 10 min timeout으로(측정 대상 =
+수용 기준 대상), `to_jsonb(row)` geometry 직렬화가 첫 지렛대. (6) D4 "항상 계산"은 `mv_hash`와 같은 "인자 None이면
+계산"으로, DELETE는 인자 무관. (7) 활성화 commit 직후 in-flight 요청의 캐시 재삽입 창(요청 1건)은 알고 받아들임
+(결과(부정)). (8) `source_set_hash` 동일 테스트는 `load_batch_id=None`·report 없음(추론 분기 `:758-759`)으로 구성.
+(9) 외부 출처는 vworld만이 아니라 juso도(`dto/v2.py:25`). (10) PR-1은 사용자 가시 변경이라 `CHANGELOG.md`·journal·
+resume를 T-325a 수정 파일에(AGENTS.md 체크리스트), T-325c CHANGELOG는 UI 항목만. (11) resume 배포 순서에서 PR-2·PinVi
+재vendor가 소비자 배포의 선행 조건처럼 읽히던 문장 정정(설계 §9/§11: Map PinVi 재vendor는 Map admin OpenAPI 변경
+때문, geo와 무관). (12) Map admin geo proxy 경로는 `packages/kor-travel-map-admin/frontend/…`(Map origin/main
+`c4d17343e`), weather·transport는 "코드·계약 변경 없음"(문서 1단락은 있음, transport T-045).
+
+**남긴 것.** 소유자 결정 4건(설계 §12 #1·#2·#18 + §4a #11, ADR-069 후속), prod 규모 지문 실측(n150, 소유자,
+`--dry-run`), `postal_pobox` v2 경로 재확인, phase 2 코드 인벤토리 diff 착수 여부(§12 #12), 캐시 행에
+`serving_release_id`를 저장해 in-flight 재삽입 창을 닫을지(후속 후보).
+
 ## 2026-09-30 (T-324 — 긴 geo job의 `dagster/max_runtime`, by claude)
 
 소유자 결정: 공유 instance의 기본 max runtime(6시간)이 geo run에도 걸린다. full load·restore와, 6시간을

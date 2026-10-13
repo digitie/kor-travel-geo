@@ -2,7 +2,19 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-29 갱신, by claude)
+## 현재 진척도 (2026-10-13 갱신, by claude)
+
+- 📝 **T-325 — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 설계 확정(문서만)** (branch
+  `docs/adr-069-dataset-data-token`) — [ADR-069](adr/069-dataset-data-token.md) proposed(미구현; 결정은 D1~D9,
+  수치·표 집합·TTL은 ADR이 정본). 백로그 `tasks.md` T-325a~c(PR-1 = a+b에 `openapi.json`·`gen:types` 산출물 포함,
+  PR-2 = c). 소비자 측은 Map ADR-109·concierge ADR-49(각 저장소, proposed).
+  **다음 한 작업**: 소유자 승인(ADR-069 후속 첫 (open) 항목의 결정 **4개** — 설계 §12 #1·#2·#18 + §4a #11 캐시
+  전체 삭제) → ADR-069 `accepted`(T-325a PR 한 줄) → **T-325a** 구현 → **prod 규모 지문 실측 1회**(소유자가 PR-1
+  브랜치의 `ktgctl serving fingerprint-active --dry-run`으로 n150에서, **머지 전**, `/proc/pressure/io` 동반; 10 min
+  timeout의 50%를 넘으면 재검토) → PR-1(a+b) 머지·배포 → backfill(`--dry-run` 없이) → `current.data_token`
+  비NULL·`geo_cache` 0행 확인(**여기서 소비자 배포 가능** — Map은 자기 admin OpenAPI 변경 때문에 PinVi 재vendor가
+  먼저, concierge는 Manager lane 뒤; 소비자 코드 머지는 geo와 병렬 가능, 각 저장소 문서가 정본) → PR-2(T-325c,
+  소비자와 독립).
 
 - 🔶 **T-324 — 공유 Dagster plane geo 선행 작업** (branch `feat/dagster-shared-stage0`, 미머지) — 이미지 exact
   constraints + base digest, admin API Dagster 조회 geo location 한정, instigator on/off를 코드로(D4),
