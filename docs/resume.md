@@ -2,6 +2,8 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+- 진행: T-325c 관리 UI·문서 코드 구현. 최신 main PR #573의 API를 소비하며 source 검증·리뷰를 먼저 수행한다. 실제 운영 배포/backfill·live UI gate는 최소 배포 완료 뒤 인수하며 완료 체크는 유지한다.
+
 ## 현재 진척도 (2026-10-13 갱신, by claude)
 
 - 🔶 **T-325a+b — 데이터셋 `data_token` + v2 `dataset` 필드 구현(PR-1)** (branch `feat/t325-data-token`, **draft PR #573**,

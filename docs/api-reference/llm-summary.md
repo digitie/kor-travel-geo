@@ -44,3 +44,11 @@ Kakao/Naver/Google은 live provider로 호출하지 않는다. v2는 이들 API�
 - 기존 vworld 호환 소비자와 과거 HTTP 스크립트는 REST v1을 사용한다.
 - Python 라이브러리 사용자, 신규 애플리케이션, provider 비교, C1~C10 분석 UI처럼 후보별 출처와 metadata가 중요한 화면은 후보 목록 표면을 사용한다.
 - 외부 provider live 비교가 꼭 필요하면 별도 task/ADR에서 약관, 캐시, quota, 출처 표기 정책을 먼저 정해야 한다.
+
+
+## v2 데이터셋 지문
+
+`/v2/dataset/version`의 `current`와 `/v2/dataset/history`의 `entries[]`는 선택 `data_token`을 제공합니다.
+`/v2/geocode`, `/v2/reverse`, `/v2/search`, `/v2/regions/within-radius`의 최상위 선택 `dataset`도
+`version_token`과 `data_token`을 제공합니다. 소비자 비교는 `data_token` 동등성으로만 하며 없으면 판정 불가입니다.
+`version_token`은 관측용입니다. 운영 배포·backfill 확인은 별도입니다.

@@ -20,6 +20,18 @@
 
 `include_geometry`는 geocode/reverse와 대칭으로 받는다. **현재 채워지는 경우는 `type="district"` 후보**다 — `match_kind="region"`이고 해석된 행정구역 코드(시도 2자리, 시군구 5자리, 법정동 8/10자리)로 region polygon(`geometry.kind="region"`)을 받는다. **도로명/지번/장소 후보는 도형이 채워지지 않는다(REST 응답에서 `geometry` 필드 생략)**: `bd_mgt_sn`/`rncode_full`/`bjd_cd`/건물번호 같은 건물 도형 조회 key가 v1→v2 search 변환(`metadata={"score"}`만 보존)에서 떨어져 building polygon을 조회할 수 없기 때문이다. 이 key들을 v2 metadata/address까지 보존해 도로/주소 후보도 도형을 받게 하는 것은 후속 작업으로 남긴다. 페이지네이션은 collection 규약(`page`/`size`+`total`, ADR-060 §3)을 따른다.
 
+## 응답 데이터셋 지문
+
+최상위 선택 필드 `dataset`은 이 응답을 만든 로컬 데이터셋의 `version_token`과 `data_token`을 제공합니다.
+활성 릴리스가 없거나 스탬프를 읽지 못하면 `dataset`이 생략되며 지문이 없으면 `data_token`이 생략됩니다.
+외부 출처 후보가 섞여도 로컬 데이터셋 기준입니다. 소비자는 `data_token` 동등성으로만 비교하고,
+없으면 판정 불가로 처리합니다. `version_token`은 관측용이며 다른 릴리스라도 데이터는 같을 수 있습니다.
+운영 반영과 기존 활성 릴리스 backfill 여부는 별도 확인합니다.
+
+```json
+{"dataset":{"version_token":"dv1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","data_token":"dd1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+```
+
 ## 출력
 
 공통 header `{status, query_id, input}` 위에 결과를 둔다:

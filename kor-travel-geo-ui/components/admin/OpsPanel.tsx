@@ -31,6 +31,7 @@ import {
   postJson,
   requestJson
 } from "@/lib/api";
+import { fingerprintFailureNote, recentFingerprintsMissing, sameDataAsPrevious, validDataToken } from "@/lib/dataset-token";
 import { formatBytes, formatMs } from "@/lib/format";
 import { shortHash } from "@/lib/source-files";
 import { toast } from "@/lib/toast";
@@ -103,7 +104,8 @@ const initialWindowFormState: MaintenanceWindowFormState = {
 
 /** T-291d: version_token/change_type/기준월 컬럼 + 상세 다이얼로그 트리거. */
 function buildServingReleaseColumns(
-  onViewDetail: (release: ServingRelease) => void
+  onViewDetail: (release: ServingRelease) => void,
+  releases: ServingRelease[]
 ): VirtualColumn<ServingRelease>[] {
   return [
     { key: "release", header: "release", cell: (r) => r.serving_release_id },
@@ -114,6 +116,24 @@ function buildServingReleaseColumns(
       key: "token",
       header: "version_token",
       cell: (r) => (r.version_token ? <code>{shortHash(r.version_token, 16)}</code> : "-")
+    },
+    {
+      key: "data_token",
+      header: "data_token",
+      cell: (release) => {
+        const token = validDataToken(release.data_token);
+        return token ? (
+          <span className="inline-flex items-center gap-1">
+            <code>{shortHash(token, 16)}</code>
+            {sameDataAsPrevious(release, releases) ? <Badge>데이터 동일</Badge> : null}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1">
+            <Badge tone="warn">지문 없음</Badge>
+            <HelpTip label="데이터 지문 없음 도움말">{fingerprintFailureNote(release)}</HelpTip>
+          </span>
+        );
+      }
     },
     { key: "change_type", header: "change_type", cell: (r) => r.change_type ?? "-" },
     {
@@ -195,10 +215,10 @@ export function OpsPanel() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [viewingRelease, setViewingRelease] = useState<ServingRelease | null>(null);
-  const servingReleaseColumns = buildServingReleaseColumns(setViewingRelease);
   const [capturing, setCapturing] = useState<"stats" | "pgStats" | null>(null);
   const { artifacts, auditEvents, lastResult, pgStats, releases, snapshots, stats, windows } =
     opsData;
+  const servingReleaseColumns = buildServingReleaseColumns(setViewingRelease, releases);
   const { kind, reason } = windowForm;
 
   function setLastResult(value: unknown) {
@@ -319,6 +339,15 @@ export function OpsPanel() {
         <Alert role="alert" variant="destructive">
           <AlertTitle>일부 ops 데이터 로드 실패</AlertTitle>
           <AlertDescription>{loadFailures.join(", ")}</AlertDescription>
+        </Alert>
+      ) : null}
+      {recentFingerprintsMissing(releases) ? (
+        <Alert role="alert" variant="destructive">
+          <AlertTitle>최근 두 활성 릴리스의 데이터 지문이 없습니다</AlertTitle>
+          <AlertDescription>
+            표시된 이력의 데이터 동일성은 판정 불가입니다. 지문 계산 실패 사유를 확인하고
+            현재 활성 릴리스의 지문을 복구하세요. version_token 변경만으로 데이터 변경을 판단하지 않습니다.
+          </AlertDescription>
         </Alert>
       ) : null}
       <div className="grid two">

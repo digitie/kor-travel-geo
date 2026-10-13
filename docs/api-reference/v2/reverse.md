@@ -20,6 +20,18 @@
 
 `include_geometry`는 geocode/search와 대칭으로 받는다. 후보가 도형 조회 key를 가질 때만 채워진다 — 현재 reverse local 후보는 도로명/지번(`match_kind="road"`/`"parcel"`)이고 건물 도형 key(`bd_mgt_sn` 또는 `rncode_full`+`bjd_cd`+상세번호)를 함께 싣지 않으므로 `geometry`가 채워지지 않는다(REST 응답에서 필드 생략). 점 기반 건물 도형 조회는 후속 확장으로 남긴다.
 
+## 응답 데이터셋 지문
+
+최상위 선택 필드 `dataset`은 이 응답을 만든 로컬 데이터셋의 `version_token`과 `data_token`을 제공합니다.
+활성 릴리스가 없거나 스탬프를 읽지 못하면 `dataset`이 생략되며 지문이 없으면 `data_token`이 생략됩니다.
+외부 출처 후보가 섞여도 로컬 데이터셋 기준입니다. 소비자는 `data_token` 동등성으로만 비교하고,
+없으면 판정 불가로 처리합니다. `version_token`은 관측용이며 다른 릴리스라도 데이터는 같을 수 있습니다.
+운영 반영과 기존 활성 릴리스 backfill 여부는 별도 확인합니다.
+
+```json
+{"dataset":{"version_token":"dv1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","data_token":"dd1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+```
+
 ## 출력
 
 `candidates[]`는 도로명/지번 후보를 함께 담는다. 입력 좌표가 한국 SPPN 지원 envelope 안에 있으면 계산된 국가지점번호를 `match_kind="sppn"` 후보로 함께 반환한다. 표기 의무지역 polygon에 포함되면 같은 후보 metadata에 `makarea` 문맥도 붙는다. 각 후보는 `match_kind`, `address`, `point`(`{lon, lat}`), `region`, `source`, `distance_m`, `confidence`를 포함할 수 있다. 응답은 공통 header `{status, query_id, input}` 위에 `candidates[]`를 둔다. 값이 없는 선택 필드(`point_precision`/`geometry`/`bbox` 등)는 REST 응답에서 생략된다(`null` 아님).

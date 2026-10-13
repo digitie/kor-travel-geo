@@ -100,20 +100,13 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
 - `next_cursor`: 다음 페이지가 있을 때만 포함. 마지막 페이지면 생략.
 - entry 모델은 `/v2/dataset/version`의 `current`와 동일하다.
 
-## 소비자 프로토콜
+## 소비자 프로토콜 (ADR-069 accepted)
 
-1. `known_version`을 포함해 폴링(≥60초). `changed:false` → 무동작.
-2. `changed:true, known_version_found:true` → `history`를 `since_version`으로 소급, 각
-   entry의 `change_type`별로 갱신(`delta`=증분, `full`=전체) 후 새 토큰을 저장.
-3. `changed:true, known_version_found:false` → 전체 재동기화 후 새 토큰 저장.
-4. 저장한 토큰은 불투명 값으로만 취급한다 — 위 "계약 4항" 참조.
+코드에는 `data_token` 계약이 구현됐습니다. 운영 배포와 기존 활성 릴리스의 지문 backfill은 별도 확인합니다.
+소비자는 `data_token` 동등성으로만 데이터 변경을 판정하고 없으면 판정 불가입니다.
+`version_token`과 `change_type`은 관측·이력용이며 `known_version`에는 계속 `version_token`을 보냅니다.
 
-### 예정(ADR-069 proposed, 미구현) — `data_token` 소비자 규약
-
-> 아래는 [ADR-069](../../adr/069-dataset-data-token.md)가 수용·구현(T-325a~c)되면 적용되는 규약이다.
-> **현재 응답에는 `data_token`이 없다.** 위 "소비자 프로토콜"이 지금의 규약이다.
-
-- entry(`/v2/dataset/version`의 `current`·`/v2/dataset/history`의 `entries[]`)에 `data_token: string`이 **additive**로 더해진다 — 형식
+- entry(`/v2/dataset/version`의 `current`·`/v2/dataset/history`의 `entries[]`)에 `data_token: string`이 **additive**로 포함된다 — 형식
   `^dd1-[0-9a-f]{32}$`, 활성화 시점의 서빙 데이터 내용 지문에서 파생한 불투명 값. 지문을 계산하지
   못한 릴리스는 필드를 **생략**한다(`null` 아님).
 - 의미 분리: `version_token`은 릴리스 식별(동일 데이터 재빌드·restore에도 바뀜), `data_token`은
@@ -127,7 +120,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   값으로 감지한다. 서버가 값을 어떻게 붙이는지(캐시 hit·갱신 지연)는 ADR-069 D7이 정본이다.
 - 폴링 주기 ≥60초는 그대로다.
 
-예정 entry 예시:
+entry 예시:
 
 ```json
 {
