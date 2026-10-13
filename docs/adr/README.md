@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-070.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-071.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -16,6 +16,7 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
+| ADR-070 | geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다 (proposed, 미구현 — T-326a~c; Track 2, 호스트 쪽 정본은 Manager ADR-58) | [070-odroid-host-and-empty-host-full-load.md](070-odroid-host-and-empty-host-full-load.md) |
 | ADR-069 | 데이터셋 버전에 서빙 내용 지문 기반 `data_token`을 더하고, 활성 릴리스마다 서버측 결과 캐시를 비운다 (proposed, 미구현 — T-325a~c) | [069-dataset-data-token.md](069-dataset-data-token.md) |
 | ADR-068 | 공통 Dagster 복구 정책과 운영 UI 채택 | [068-common-dagster-recovery-and-ui.md](068-common-dagster-recovery-and-ui.md) |
 | ADR-001 | PostgreSQL + PostGIS를 1차 저장소로 채택한다 | [001-postgres-postgis-primary-store.md](001-postgres-postgis-primary-store.md) |

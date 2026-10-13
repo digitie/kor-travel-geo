@@ -2,6 +2,107 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-13 (ADR-070 — geo 스택 odroid 이전 + 빈 호스트 풀로드, 문서만, by claude)
+
+소유자 지시(Track 2): geo·weather·transport와 그들의 PostgreSQL을 odroid(192.168.1.13)로 옮기고 n150의
+Map/PinVi/concierge는 REST로만 호출한다 — 포트·URL·이름은 n150과 동일, 호스트만 `.14 → .13`. 각 저장소 문서를
+코딩 가능한 상태로 맞춘다. 이 저장소 몫은 [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md)(proposed, Track 1
+ADR-069 다음 번호 — README 다음 후보 071) + 백로그 T-326a~c + T-055/T-108/런북 정정. **코드 변경 없음**, branch
+`docs/adr-070-odroid-host-full-load`(origin/main `6dd4951`에서). 호스트 쪽 정본은 Manager ADR-58이라 복제하지 않고
+포인터만 뒀다.
+
+**실측으로 닫힌 것(2026-10-13, 설계 fact base §A2/§A3 — 저장소 밖 수치).** odroid는 ODROID M1S **aarch64 Cortex-A55×4
+1.8 GHz, 7,676 MiB, swap 0**, eMMC 58 GB(`/`·docker) + NVMe 938 GB `/mnt/media`(Plex 라이브러리와 공존, PCIe 2.0 ×1),
+Docker 29.1.3에 `docker compose` v2·buildx 없음, cgroup v1(swap accounting on). `docs/t055`의 "H4 Plus x86" 가정은
+오류로 확정 — 본문은 역사 기록으로 두고 정정 블록만 붙였다(T-063 보류는 odroid 몫을 T-326a가 승계). 같은 날 03:4xZ
+소유자 승인으로 WSL 직접 ssh·NOPASSWD sudo·docker 그룹·NTP 수동 동기까지 **완료**, timesyncd 부팅 순서 drop-in·
+compose v2/buildx·방화벽·fstab bind·swapfile은 **미완** — 문서에 그대로 구분해 적었다.
+
+**이 저장소 head(`6dd4951`)에서 설계와 다르게 확인한 것 2건.** (1) 설계·런북의 풀로드 라우팅 env
+`KOR_TRAVEL_GEO_DAGSTER_EXECUTED_JOB_KINDS`는 T-290k PR3(#482) 이후 **존재하지 않는다**(`src/kortravelgeo/api/
+_full_load_launch.py:9-11` "opt-in gate … are gone") — `docs/deploy/staging-full-load.md:43,78`의 두 줄을 역사 기록으로
+표시하고 ADR D3에 "라우팅 설정 없음"으로 적었다. (2) 공개 API 키의 "loopback 신뢰 peer 면제"는 peer IP만으로 성립하지
+않는다 — `_trusted_public_client`(`public_api_key.py:55-56,70-71`) → `resolve_request_context`(`security.py:154-176`)는
+peer CIDR(`:127-133`) **+** `KTG_ADMIN_PROXY_SECRET` 헤더(`:144-151`) **+** `x-ktg-actor`·role(`:161-170`)을 다 요구하는
+admin 프록시 경로다. 오늘 상태는 저장소 안 기록으로 닫힌다(2차 리뷰에서 정정): Map은 actor/roles 헤더를 보내지 않아
+(Map `src/kortravelmap/` grep 0건) 오늘도 키 경로이고, 2026-08-08 Map용 DB 키 발급 = env 폴백 컷오버·08-17 전환 완료
+(이 journal `:1540-1543`)라 **n150 DB에 발급 키 ≥1, VWorld 폴백 off, Map 키는 loopback에서 이미 대조돼 왔다**. 전환 뒤 peer
+`.14`는 CIDR에서 떨어지지만 바뀌는 것은 "어느 DB가 대조하는가"뿐 — 빈 odroid DB(풀로드)로 플립하면 Map의 현재 키가 401이다
+→ 결정은 "CIDR에 `.14`를 넣지 않는다(loopback 유지) + 키 정책을 전환 전에 고정(§14-21 — 설계의 (가) VWorld 폴백 유지 추천은
+**철회**, Map이 VWorld 키 통로를 가드로 끊었고(Map ADR-110 결정 §4, #979) 08-13 사고 구성과 같다; (나) 소비자별 발급 추천) +
+풀로드 재적재 뒤 `public_api_keys`가 비므로 재발급(dump 복원은 `ops` 포함이라 보존, `infra/backup.py:1175-1206`) + 전환 전
+n150에서 현재 값 기록 1회(active 키 수·Map 키 200/401 — curl은 actor 헤더가 없어 면제 여부는 측정 불가)"(ADR D2).
+all-or-nothing 함정(`public_api_key.py:65` `active_hashes or _vworld_default_key_hashes`)과 "VWorld env가 비면 전부 거부"
+(`:144-150` → `:66-67`; Manager compose 기본값 빈 문자열 `:1100,1163`)를 런북·tasks에 명시.
+
+**결정(요약, 정본은 ADR).** D1 호스트만 — `KTG_PG_DSN`·RustFS·Dagster loopback 문자열 불변(odroid 전용 PG는 같은
+이름·포트 11000, imresamu arm64 — Manager), `KTG_ADMIN_TRUSTED_PROXY_CIDRS` loopback 유지, `KTG_DAGSTER_PUBLIC_URL`은
+odroid plane host(§14-4). D3 빈 호스트 풀로드 = 소스 재확보(n150에도 없음, §14-8) → Manager compose 상시 bind(overlay
+대신, 파일 수 > 0 프리플라이트) → **serving DB 직접**(`target_database` 없음; scratch 절차는 "운영 중 재적재"로 한정)
+(한 run이 게이트 → `mv_refresh` child까지, 2차 리뷰 정정) → 키 재발급 → smoke; 지름길 = n150 dump(≈4.4 GiB) 복원(NOCREATEDB
+롤이라 Dagster `db_restore`는 E0410 — 수동 `pg_restore` 또는 롤 amendment 전제, 2차 리뷰). D4 `full_load_batch`·`db_restore` 24 h는
+충분(`recovery.py:15,24`), standalone `mv_refresh`만 6 h 상한의 61~80 %(1.22~1.59 h × A55 ×3 가정 = 3.7~4.8 h — 설계의 "4~5 h"를
+산수대로 고침)라 실측 뒤 `LONG_JOBS` 추가 또는 실측×1.5를 `policy_for_job` 매핑으로(`tests/test_definitions.py:76-88` 동기, T-326b). D5
+odroid에서 geo 백업·04:00 drill(`backup_maintenance.py:74-75`) off. D6 geo cs `mem_limit 2g + memswap_limit 2g`, 플립
+조건 n150 geo cs anon ≤ **0.95 GiB**(여유 0.2 산식 — 과제 지시문의 "≤1.2"는 설계 실측 반영 기록 #29로 대체된 옛 값)
+미달이면 n150 잔류. D7 GDAL arm64 현지 빌드(`docker/api.Dockerfile:13-19`, `dagster.Dockerfile:45-49`), 레지스트리·
+QEMU 불채택(T-108 보류; 내용 해시 태그에 arch 없음이 선결). D8 Track 1 — 풀로드는 새 `data_token` → (ADR-069 구현 뒤)
+소비자 전량 재계획 **수용**(URL 전환은 batch SUCCESS 다음 날), dump 복원은 0; `GEO_HEAVY_POOL` 근거는 'odroid CPU 보호'(Map
+ADR-110). D9 실측 항목(T-326a).
+
+**설계와 달리 쓴 점(설계 쪽 정정 전달).** 위 2건 외에 D7 — 설계 §8.2/§8.4는 Dagster base digest가 amd64 manifest면
+"태그로 완화"라 하지만, geo Dagster 이미지는 `kor-travel-geo-dagster/tests/test_image_constraints.py:96-102`가 두 FROM의
+digest 형식·동일성을 결박하고 있어 태그 완화는 테스트 완화를 수반한다 → ADR은 **index digest 재핀**을 추천안으로 두고
+태그 완화를 소유자 §14-6에 병기했다(기존 결박 유지, 새 결박 아님). 설계 §3.6의 "디스크 183 GB"는 세 DB 합계라 geo 몫은 34 GB로
+썼다.
+
+**바뀐 파일.** 신규 `docs/adr/070-*.md`; `docs/adr/README.md`(071, 070 행); `docs/t055-…`·`docs/t108-…` 정정/보류
+블록; `docs/deploy/staging-full-load.md`(정정 + "빈 호스트(odroid) 풀로드 — 계획" 절: 전제표·순서·소요 표·지름길·
+재적재 런북; 기존 curl의 `/admin/loads` → `/v1/admin/loads` 오기 정정, `app.py:177`); `AGENTS.md` 식별자 표·`README.md` 운영
+호스트 한 줄(계획); `docs/ports.md:27` PG 행 비고에 "계획(ADR-070 D1)" 1문장(과제 범위 목록 밖 — ADR D1이 예고한 포인터 한 줄,
+범위 확장은 이것뿐); `docs/tasks.md` T-326a~c(+T-063 승계 메모; `.env.prod.example` 주석 변경은 T-326b "수정 파일"에 — 이번 PR은
+문서만); 이 journal·`resume.md`.
+
+**리뷰 반영(1차 적대 리뷰 2명, 2026-10-13, 커밋 전).** MED 반영: ADR 정정표의 t055 인용 6건을 편집 뒤 head 줄(`:52-57`·`:112`·
+`:328`)로, t108 `:33-35`; 새 tasks 문장·런북 curl의 `/admin/loads`를 `/v1/admin/loads`로(`src/kortravelgeo/api/app.py:177`,
+`tests/unit/test_api_app_contract.py:47`); T-326a (1) "odroid root 뒤"를 "지금 가능(sudo·docker 완료) / 수동 fio만 fstab bind 뒤"로;
+D4·T-326b 수용 기준 "< 상한의 70 %"는 (ⅱ) 실측×1.5에서 항진명제라 효과(태그 값 == round(실측×1.5), (ⅰ)은 21600 s 초과 시만)로;
+D7 digest 재핀이 설계 §8.2/§8.4와 다른 점 명시; 근거 A의 183 GB → geo 몫 34 GB; 결과(긍정)의 "오늘 면제 경로" 단정 제거 + Map
+`geocoding.py:92-96,103-107` 키 401 처리 정황을 컨텍스트 1에. LOW 반영: 배포 행 D9 → D7; accepted 게이트를 §14-8·12·21 세 건으로
+고정(나머지 4건은 추천안 수용 시 변경 0); "공용 plane 기록 없음"을 "T-324·`run_tags.py:1-6`에 있고 포트·Manager PR만 없음"으로;
+`prod-deployment.md` 절 번호(§9.1)와 설계 절(§11.1) 분리; fstab bind 귀속 ADR-58 (4) R5, drill 문구 정정 대상은 설계 §3.3·§5.7만;
+`docs/ports.md` 변경 보고; resume의 리뷰 반영 문장을 실제 결과로; tasks의 curl·anon 측정법 복제를 ADR D2/D6·런북 6단계 포인터로.
+기각: journal 656 KB 아카이브 분리 — geo에는 바이트 상한 규약이 없고 이번 PR 이전 상태라 범위 밖(별도 doc-only 항목은 소유자
+제안으로만 보고).
+
+**2차 리뷰 반영(적대 리뷰 2명, 2026-10-13, 커밋 전).** HIGH 2건(한 뿌리): (ⅰ) 지름길 `db_restore`는 CREATEDB + maintenance DB
+CONNECT가 없으면 job 생성 전 E0410(`infra/db_capabilities.py:3-11`, `routers/admin.py:2299-2310`, op `infra/backup.py:483-489`)이고
+odroid 롤도 NOCREATEDB(설계 §5.4) — `target_dsn`을 줘도 대상이 현재 DB와 달라야·비어야 해서(`infra/backup.py:570-573`) serving DB에는
+못 쓴다(리뷰어 제안의 `target_dsn` 우회는 그래서 채택하지 않음) → D3-6·런북 지름길 절·tasks에 "(a) `shared_admin` 수동 `pg_restore`
+(추천) 또는 (b) ADR-58 롤 amendment + `db_restore` + 수동 hot-swap"을 전제로 결박, 2.18 h는 전용 12500 시절 값으로 표시, D5의
+"CREATEDB면 skip 없음" 문장을 "둘 다 기본"으로 정정; (ⅱ) D2 (가) "변경 0"·"발급 키 유무 미확인"은 이 journal 2026-08-17 기록과
+Map ADR-110으로 반박됨 → 컨텍스트 1·D2·결과(긍정)·런북 전제표·T-326a (2)ⓒ를 위 "(2)" 문단대로 재서술, (나) 추천으로 §14-21
+재질의, dump 복원의 키 보존을 구분. MED 7건 반영: T-326b 의존을 §11.2 8a(플립 PR·n150 geo cs stop·odroid 재설치) **뒤**로,
+T-326c를 9단계 뒤로, 런북 순서 0에 효과 검사(odroid validate의 geo host == odroid); `full_load_batch`가 게이트 → `mv_refresh` child를
+한 run에 포함(`loaders/batch_dag.py:3-4,22`)하므로 D3-5·런북 순서 3/4·소요 표·결과(부정)의 이중 합산 제거, D4 입력은 standalone
+`mv_refresh` 1회; D4 (ⅱ)는 job 태그가 아니라 `policy_for_job` 매핑(`recovery.py:21-27`; `geo_job`이 policy 태그를 뒤에 병합 `:34`,
+`RecoveryPolicy.tags` 소스는 구현 전 1회 확인), T-326b 수정 파일 `recovery.py` 필수; Map actor 헤더 0건으로 면제 여부는 코드로
+닫고 curl의 목적을 키 유효성으로 한정; odroid root `.env` `KOR_TRAVEL_GEO_VWORLD_API_KEY` 비면 전부 거부 전제를 런북 전제표·D2·
+T-326b 수용 기준에; D8·T-326c의 Track 1 센서를 "ADR-069 구현 뒤의 동작(계획)"·조건부 수용 기준으로; T-326a (2)ⓐ mv_refresh 기동
+경로를 `POST /v1/admin/maintenance/refresh-mv`(`routers/admin.py:1867`)로. LOW 반영 7건: 6,416,637은 참고값(통과 조건은 count > 0 +
+n150 운영 count 비교); D8 timeout 창을 9단계 `ensure map` 사이로 한정; 상태 줄에 §14-12 잔류 → `rejected` 분기; D7에
+`dagster.Dockerfile:31-32` 주석(index digest) 인용 + 재핀 블록을 amd64일 때만으로 축소; T-326a (1)에 `--probe-dir`·디렉터리 권한·scp
+반입; overlay 삭제 조건에 `geo-materialize` 볼륨(`:31,34,37`); t055 정정 블록의 PG 값 복제 삭제(ADR-58 포인터만); T-MGR-05 오귀속
+→ 런북 수동 프리플라이트; §14-4 `weather-dagster.`/`geo-dagster.` 병기; n150 full load를 "serving DB 적재 없음 + scratch e2e 1회
+(2026-07-12, wall clock 미기록)"로. **기각 1건**: "Manager compose `:38` `KOR_TRAVEL_GEO_SOURCE_DIR` 기본값 `/data/juso` 충돌" —
+그 줄은 stale 로컬 체크아웃 `F:\dev\kor-travel-docker-manager`(7d6917f)에만 있고 origin/main 기반 ktdm-t2docs에는 grep 0건이며, 설계
+§13 머리가 모든 Manager 작업을 origin/main@08a515e 이후로 고정하므로 전달 대상이 아니다.
+
+**미결 소유자 결정(설계 §14).** accepted 게이트: 8(소스 ZIP·직접 풀로드·dump 지름길 — 지름길이면 수동 `pg_restore`/롤 amendment
+포함), 12(플립 여유 값/n150 잔류 — 잔류면 ADR `rejected`), 21(키 정책 — (나) 소비자별 발급 추천으로 재질의).
+추천안 수용이면 변경 0: 19(Track 1 재계획 수용), 4(odroid plane 공개 host), 7(geo 백업 off), 6(빌드 경로 + base digest 재핀 vs
+태그 완화). 게이트 3건이 닫히면 ADR `accepted`(T-326b PR 한 줄).
+
 ## 2026-10-13 (ADR-069 — 데이터셋 `data_token` 설계, 문서만, by claude)
 
 소유자 지시: geo 주소 데이터셋 릴리스가 소비자(Map·concierge)에 반영되는 경로를 설계하고 각 저장소 문서를

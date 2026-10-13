@@ -6,6 +6,37 @@
 - 대상 브랜치: `codex/t055-n150-odroid-plan`
 - 사용자 RFC: 2026-05-27 — "N150 16GB, NVMe 1TB Ubuntu 26.04 환경 검토 odroid 환경과 더불어 함께 검토 예정임."
 
+### 2026-10-13 정정 — Odroid는 실측됐고 x86 가정은 오류다 (ADR-070)
+
+아래 본문은 2026-05-27 시점의 계획이며 **역사 기록으로 그대로 둔다.** 2026-10-13 odroid(192.168.1.13) 비root
+읽기 전용 실측(설계 fact base §A2 — 저장소 밖 수치)으로 다음이 확정됐다. 결정·전환 계획은
+[ADR-070](adr/070-odroid-host-and-empty-host-full-load.md)(proposed, 미구현)이 정본이고, 호스트 초기화·PG 인스턴스는
+Manager ADR-58이 정본이다.
+
+| 항목 | 본문의 가정 | 실측(2026-10-13) 또는 계획(표시) |
+|------|------------|------------------|
+| 기종/CPU | "H4 Plus 가정, Intel N97/N305 x86"(아래 표) | **실측** ODROID M1S — aarch64, Cortex-A55 ×4, max 1.8 GHz. 아래 Odroid 열의 x86 전제·`odroid-h4` 라벨은 무효(라벨은 `odroid-m1s`) |
+| RAM / swap | "8~32 GB DDR5" | **실측** 7,676 MiB(7.5 GiB), swap 0(swapfile 4 GB는 **계획** — Manager ADR-58 결정 (8), 미구현) |
+| 저장소 | "NVMe 또는 SATA" | **실측** eMMC 58 GB(`/`·`/var/lib/docker`, 33 G free) + NVMe 938 GB ext4 통째 `/mnt/media`(Plex 라이브러리 336 G 공존, 555 G free), 링크 PCIe 2.0 ×1(순차는 SATA급; IOPS/지연은 fio 미측정) |
+| OS / Docker | "Ubuntu 26.04 또는 Debian 12" | **실측** noble userland + PID1 systemd 245(focal) + kernel 5.10.198; Docker 29.1.3, `docker compose` v2·buildx 없음(설치는 **계획**); cgroup v1(memory on, swap accounting on) |
+| PostgreSQL | 아래 "Odroid 권장" 열(`shared_buffers` 2 GB·`effective_cache_size` 6 GB·`work_mem` 32 MB …) | 아래 "권장" 열은 **무효** — 값은 Manager ADR-58 결정 (8)(proposed, 미구현)이 정본이고 여기 복제하지 않는다(`mem_limit` 가드 vs 하드 캡은 설계 §14-14 소유자 결정, 열림). "RAM 8GB라면 `shared_buffers` 축소"(남은 위험 절)는 T-326a n150 anon·T-326b odroid 실측 뒤 닫는다 |
+| MV swap temp | "+11.67GiB" 위치 미명시 | **계획**(ADR-070 D3·Manager ADR-58 결정 (4) 파생 규칙 R5, fstab bind 미완): odroid에서는 PGDATA·temp가 NVMe(`/mnt/media/kor-travel/shared-data/pgdata`) 전제 — eMMC(33 G free)에는 둘 수 없다 |
+| 접근 | — | **실측** WSL에서 직접 `ssh digitie@192.168.1.13` 가능, NOPASSWD sudo·docker 그룹·NTP 수동 활성화 **완료**(2026-10-13 03:4xZ); timesyncd 부팅 순서 drop-in·compose v2/buildx·방화벽·fstab bind·swapfile은 **미완** |
+
+- 실측 실행(T-063)은 더는 "하드웨어 없음"으로 보류되지 않는다 — odroid 몫은 **T-326a**(`docs/tasks.md`)가
+  승계한다: `scripts/capture_deployment_envelope.py --run-probes`(스크립트 기본 probe = fio randread 8k QD32 ×4 jobs +
+  sysbench cpu/memory, `scripts/capture_deployment_envelope.py:134-176` — 스크립트는 바꾸지 않는다) **+ 수동 fio 3종**을
+  `/mnt/media/kor-travel/` 위에서 Plex 유휴·재생 중 **2회**, 풀로드 phase별 wall clock, `mv_refresh` 소요(ADR-070 D4 입력),
+  `db_restore`, n150→odroid `/v2/reverse` p50/p95. 산출물 구조는 아래 "측정 산출물" 그대로(`<env>` = `odroid-m1s`).
+  수동 fio 명령줄(공통: `--directory=/mnt/media/kor-travel/perf --size=4G --runtime=60 --time_based --direct=1
+  --group_reporting --output-format=json`; 그 디렉터리는 §11.1-6 디스크 단계(fstab bind·트리 생성, root:root) 뒤에만 있으므로
+  `sudo install -d -o digitie /mnt/media/kor-travel/perf` 선행 — 그 전에는 스크립트 probe만 `--probe-dir /mnt/media/<tmp>`로):
+  - `fio --name=randread4k --rw=randread --bs=4k --iodepth=32 --numjobs=1 …`
+  - `fio --name=randwrite4k --rw=randwrite --bs=4k --iodepth=32 --numjobs=1 …`
+  - `fio --name=seq1m --rw=rw --rwmixread=50 --bs=1M --iodepth=8 --numjobs=1 …`(seq read/write)
+- 본문의 "결정 기준 → 가칭 ADR-040"은 ADR-070으로 대체됐다(ADR-040은 삭제된 번호).
+- 멀티아치 이미지·레지스트리(`docs/t108-deploy-automation.md`)는 채택하지 않고 odroid 현지 빌드(ADR-070 D7).
+
 ## 목적
 
 `kor-travel-geo`는 WSL2 개발 환경에서 동작하지만, 운영 배포는 작은 폼팩터 박스(N150 또는 Odroid)에서 single-host로 돌리는 시나리오를 검토 중이다. 본 task는 두 운영 환경의 envelope과 성능 측정 계획을 미리 문서화하고, 하드웨어 도착 후 실측을 수행한다.
