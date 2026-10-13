@@ -780,6 +780,10 @@ class ServingRelease(FrozenModel):
     # debugging detail, deliberately not part of the external v2 DTO (ADR-067 D2 non-goal).
     # If reference_months doesn't normalize directly from this, it came from lineage fallback.
     source_set: dict[str, Any] | None = None
+    # T-325a (ADR-069 D1/D9): the linked snapshot's serving-content token. None when the
+    # snapshot has no fingerprint (history before backfill, or a fail-open activation whose
+    # fingerprint failed — notes then carries "data_fingerprint_failed: <code>").
+    data_token: str | None = None
 
 
 class RollbackPlan(FrozenModel):

@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 CACHE_KEY_SCHEMA_VERSION = 1
 
+#: The single cache-wipe statement, shared by :meth:`GeoCacheRepository.clear` and
+#: :meth:`GeoCacheRepository.clear_on`.
+_CLEAR_SQL = "DELETE FROM geo_cache"
+
 
 def make_cache_key(service: str, params: Mapping[str, Any]) -> str:
     """Build a deterministic opaque key without storing raw address text in the key."""
@@ -83,5 +87,12 @@ ON CONFLICT (cache_key) DO UPDATE
 
     async def clear(self) -> int:
         async with self.engine.begin() as conn:
-            result = await conn.execute(text("DELETE FROM geo_cache"))
+            return await self.clear_on(conn)
+
+    @staticmethod
+    async def clear_on(conn: Any) -> int:
+        """Empty the cache inside the caller's transaction (ADR-069 D6 — activation clears it
+        atomically with the release row)."""
+
+        result = await conn.execute(text(_CLEAR_SQL))
         return int(result.rowcount or 0)

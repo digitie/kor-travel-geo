@@ -21,6 +21,11 @@ VERSION_TOKEN_PREFIX = "dv1-"
 _TOKEN_NAMESPACE = "ktg.dataset.version:"
 VERSION_TOKEN_RE = re.compile(r"^dv1-[0-9a-f]{32}$")
 
+#: ADR-069 D1 — ``data_token`` is a function of the serving-content fingerprint, not of the
+#: release row: equal data ⇒ equal token across rebuild/restore/rollback releases.
+DATA_TOKEN_PREFIX = "dd1-"
+DATA_TOKEN_RE = re.compile(r"^dd1-[0-9a-f]{32}$")
+
 #: External reference_months key vocabulary (ADR-067 D2) — fixed regardless of which
 #: internal source_set shape produced it. ``pobox`` is reserved: no current writer emits it.
 EXTERNAL_REFERENCE_MONTH_KEYS: frozenset[str] = frozenset(
@@ -86,6 +91,19 @@ def derive_version_token(serving_release_id: str | UUID) -> str:
     canonical = str(UUID(str(serving_release_id)))
     digest = hashlib.sha256((_TOKEN_NAMESPACE + canonical).encode("utf-8")).hexdigest()
     return VERSION_TOKEN_PREFIX + digest[:32]
+
+
+def derive_data_token(data_fingerprint: str | None) -> str | None:
+    """``dd1-`` + first 32 hex chars of sha256(fingerprint) (ADR-069 D1).
+
+    ``None`` when the release has no fingerprint (pre-backfill history, or a fail-open
+    activation whose fingerprint query failed — ADR-069 D5). Consumers read a missing token as
+    "cannot judge", never as "changed" (D8).
+    """
+    if not data_fingerprint:
+        return None
+    digest = hashlib.sha256(data_fingerprint.encode("utf-8")).hexdigest()
+    return DATA_TOKEN_PREFIX + digest[:32]
 
 
 def derive_change_type(release_kind: str) -> ChangeType:

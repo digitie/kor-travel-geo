@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.core.dataset_version import (
     derive_change_type,
+    derive_data_token,
     derive_version_token,
     normalize_reference_months_from_source_set,
     reference_months_mixed,
@@ -56,7 +57,9 @@ from kortravelgeo.dto.admin import (
 )
 from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.cache import GeoCacheRepository
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
+from kortravelgeo.infra.data_fingerprint import DataFingerprintResult, compute_data_fingerprint
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
 from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.uploads import extract_upload_set_ids
@@ -108,7 +111,8 @@ SELECT serving_release_id, dataset_snapshot_id, state, release_kind, previous_se
 _DATASET_VERSION_SELECT = """
 SELECT sr.serving_release_id, sr.state, sr.release_kind,
        COALESCE(sr.activated_at, sr.created_at) AS ordered_at,
-       ds.dataset_snapshot_id, ds.source_set, ds.parent_dataset_snapshot_id
+       ds.dataset_snapshot_id, ds.source_set, ds.parent_dataset_snapshot_id,
+       ds.data_fingerprint
   FROM ops.serving_releases sr
   JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)
 """
@@ -127,6 +131,7 @@ class _DatasetVersionCandidate:
     release_kind: str
     source_set: Mapping[str, Any]
     parent_dataset_snapshot_id: str | None
+    data_token: str | None = None
 
 
 def _dataset_version_candidate(row: Mapping[str, Any]) -> _DatasetVersionCandidate:
@@ -136,6 +141,7 @@ def _dataset_version_candidate(row: Mapping[str, Any]) -> _DatasetVersionCandida
         release_kind=str(row["release_kind"]),
         source_set=_json_dict(row.get("source_set")),
         parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
+        data_token=derive_data_token(_optional_str(row.get("data_fingerprint"))),
     )
 
 _ARTIFACT_SELECT = """
@@ -690,7 +696,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         snapshot_row = (
             await conn.execute(
                 text(
-                    "SELECT source_set, parent_dataset_snapshot_id"
+                    "SELECT source_set, parent_dataset_snapshot_id, data_fingerprint"
                     "  FROM ops.dataset_snapshots"
                     " WHERE dataset_snapshot_id = :id"
                 ),
@@ -699,8 +705,10 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         ).mappings().first()
         reference_months: dict[str, str] | None = None
         own_source_set: dict[str, Any] | None = None
+        data_token: str | None = None
         if snapshot_row is not None:
             own_source_set = _json_dict(snapshot_row.get("source_set")) or None
+            data_token = derive_data_token(_optional_str(snapshot_row.get("data_fingerprint")))
             reference_months = await self._resolve_reference_months(
                 conn,
                 source_set=own_source_set or {},
@@ -717,6 +725,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 "reference_months_mixed": (
                     reference_months_mixed(reference_months) if reference_months else None
                 ),
+                "data_token": data_token,
             }
         )
 
@@ -820,6 +829,71 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 return None
             return await self._dataset_version_entry(conn, _dataset_version_candidate(dict(row)))
 
+    async def current_dataset_ref(self) -> tuple[str, str | None] | None:
+        """``(version_token, data_token)`` of the active release — the cheap projection the v2
+        lookup responses stamp onto every answer (ADR-069 D4/D7). ``None`` when nothing is
+        active; ``data_token`` is ``None`` for a release without a fingerprint."""
+
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        "SELECT sr.serving_release_id, ds.data_fingerprint"
+                        "  FROM ops.serving_releases sr"
+                        "  JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)"
+                        " WHERE sr.state = 'active' LIMIT 1"
+                    )
+                )
+            ).mappings().first()
+        if row is None:
+            return None
+        return (
+            derive_version_token(row["serving_release_id"]),
+            derive_data_token(_optional_str(row.get("data_fingerprint"))),
+        )
+
+    async def fingerprint_active_release(self, *, dry_run: bool) -> DataFingerprintResult | None:
+        """Backfill the active release's ``data_fingerprint`` (ADR-069 D9).
+
+        Without ``dry_run``: compute it, store it on the active release's snapshot, and clear
+        ``geo_cache`` in the same transaction (a backfill bypasses the activation helper, so the
+        clear runs here explicitly). With ``dry_run``: a READ ONLY transaction that only runs
+        the same ``DATA_FINGERPRINT_SQL`` under the same timeout — nothing is stored or
+        deleted. ``None`` when there is no active release."""
+
+        async with self.engine.begin() as conn:
+            if dry_run:
+                await conn.execute(text("SET TRANSACTION READ ONLY"))
+            snapshot_id = await _active_release_snapshot_id_for_conn(conn)
+            if snapshot_id is None:
+                return None
+            result = await compute_data_fingerprint(conn)
+            if dry_run or result.fingerprint is None:
+                return result
+            # Like the activation helper: scan outside the lock, write inside it. A release
+            # activated during the scan already carries its own fingerprint — don't stamp ours
+            # onto a snapshot that is no longer the active one.
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {
+                    "key": AdvisoryLockKey.global_key(
+                        AdvisoryLockNamespace.SERVING_RELEASE_ACTIVATION
+                    ).as_int()
+                },
+            )
+            if await _active_release_snapshot_id_for_conn(conn) != snapshot_id:
+                msg = "active release changed while fingerprinting; rerun the backfill"
+                raise RuntimeError(msg)
+            await conn.execute(
+                text(
+                    "UPDATE ops.dataset_snapshots SET data_fingerprint = :fingerprint"
+                    " WHERE dataset_snapshot_id = :id"
+                ),
+                {"fingerprint": result.fingerprint, "id": snapshot_id},
+            )
+            await GeoCacheRepository.clear_on(conn)
+            return result
+
     async def find_dataset_version(self, version_token: str) -> DatasetVersionEntry | None:
         """Resolve an opaque ``version_token`` back to its entry, by scanning the
         projectable ledger and deriving each candidate's token (the derivation is a one-way
@@ -919,6 +993,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             reference_months_mixed=(
                 reference_months_mixed(reference_months) if reference_months else None
             ),
+            data_token=candidate.data_token,
         )
 
     async def _resolve_reference_months(
@@ -3022,7 +3097,20 @@ async def _insert_dataset_snapshot_and_release(
     notes: str | None = None,
     source_match_set_id: str | None = None,
     snapshot_metadata: Mapping[str, Any] | None = None,
+    data_fingerprint: str | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
+    # T-325a (ADR-069 D4/D5): fingerprint the served content BEFORE the activation lock. The
+    # lock serializes only the ledger read-decide-write, not data loads, so the result equals
+    # what it would be inside the lock, and a concurrent activation never waits out the (up to
+    # 10 min) scan. Same rule as mv_hash below: computed only for an active release when the
+    # caller passed none (the argument exists for tests). Fail-open: a failed fingerprint
+    # stores NULL and the release still activates, with the reason appended to notes.
+    if release_state == "active" and data_fingerprint is None:
+        fingerprint_result = await compute_data_fingerprint(conn)
+        data_fingerprint = fingerprint_result.fingerprint
+        if fingerprint_result.error_code is not None:
+            suffix = f"data_fingerprint_failed: {fingerprint_result.error_code}"
+            notes = f"{notes}; {suffix}" if notes else suffix
     # T-293: SELECT ... FOR UPDATE below only fully serializes concurrent callers when a
     # matching 'active' row already exists to lock. Two race windows without this:
     # (1) zero active rows (fresh DB, or a hot-swapped-in database whose own history has
@@ -3100,12 +3188,12 @@ INSERT INTO ops.dataset_snapshots
   (dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
    git_commit, alembic_revision, postgres_version, postgis_version,
    row_counts, consistency_report_id, backup_artifact_id, source_match_set_id,
-   created_by_job_id, validated_at)
+   created_by_job_id, validated_at, data_fingerprint)
 VALUES
   (:dataset_snapshot_id, :state, :parent_dataset_snapshot_id, :source_set, :source_set_hash,
    :git_commit, :alembic_revision, :postgres_version, :postgis_version,
    :row_counts, :consistency_report_id, :backup_artifact_id, :source_match_set_id,
-   :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END)
+   :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END, :data_fingerprint)
 RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
           git_commit, alembic_revision, postgres_version, postgis_version,
           row_counts, table_stats_artifact_id, consistency_report_id,
@@ -3133,6 +3221,7 @@ RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, so
                 "source_match_set_id": source_match_set_id,
                 "created_by_job_id": created_by_job_id,
                 "validated": snapshot_state in {"validated", "released"},
+                "data_fingerprint": data_fingerprint,
             },
         )
     ).mappings().one()
@@ -3174,6 +3263,13 @@ RETURNING serving_release_id, dataset_snapshot_id, state, release_kind, previous
         )
     ).mappings().one()
 
+    if release_state == "active":
+        # ADR-069 D6: geo_cache (geocode + reverse) answers were computed from the previous
+        # release's data and carry no release marker, so every activation empties it in this
+        # same transaction, whatever the data_fingerprint argument was. Standalone loads get
+        # here without refresh_mv's own clear.
+        await GeoCacheRepository.clear_on(conn)
+
     await _insert_ops_audit_event(
         conn,
         action=(
@@ -3195,7 +3291,10 @@ RETURNING serving_release_id, dataset_snapshot_id, state, release_kind, previous
             "source_set_hash": canonical_payload_hash(source_set),
         },
     )
-    return _dataset_snapshot(dict(snapshot_row)), _serving_release(dict(release_row))
+    release = _serving_release(dict(release_row)).model_copy(
+        update={"data_token": derive_data_token(data_fingerprint)}
+    )
+    return _dataset_snapshot(dict(snapshot_row)), release
 
 
 async def _active_release_snapshot_id_for_conn(conn: Any) -> str | None:
