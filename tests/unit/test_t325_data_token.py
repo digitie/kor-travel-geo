@@ -11,7 +11,6 @@ import pytest
 from pydantic import ValidationError
 
 from kortravelgeo.api.app import create_app
-from kortravelgeo.api.dataset_ref import DatasetRefCache, get_dataset_ref
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.core.dataset_version import (
@@ -38,6 +37,7 @@ from kortravelgeo.infra.data_fingerprint import (
     DATA_FINGERPRINT_TABLE_SPECS,
     compute_data_fingerprint,
 )
+from kortravelgeo.infra.dataset_ref import DatasetRefCache
 
 _VERSION = derive_version_token("00000000-0000-0000-0000-000000000001")
 _DATA = derive_data_token("0123456789abcdef0123456789abcdef")
@@ -102,7 +102,8 @@ def test_fingerprint_sql_geometry_rules() -> None:
     for column in ("source_file", "source_yyyymm", "loaded_at", "refreshed_at", "bulk_id"):
         assert f"t.{column}" not in sql
     assert (
-        "md5(string_agg(table_name || ':' || coalesce(h, 0)::text, ',' ORDER BY table_name))"
+        "md5(string_agg(table_name || ':' || coalesce(h, 0)::text, ','"
+        ' ORDER BY table_name COLLATE "C"))'
         in sql
     )
 
@@ -138,10 +139,23 @@ class _Rows:
         return self._rows
 
 
+def _live_columns(drop: str | None = None) -> list[dict[str, Any]]:
+    rows = []
+    for spec in DATA_FINGERPRINT_TABLE_SPECS:
+        columns = [*sorted(spec.accounted_columns), "loaded_at"]
+        if spec.name == drop:
+            columns.append("new_unhashed_col")
+        rows.append({"table_name": spec.name, "columns": columns})
+    return rows
+
+
 class _FingerprintConn:
-    def __init__(self, *, fail: BaseException | None = None) -> None:
+    def __init__(
+        self, *, fail: BaseException | None = None, drift_table: str | None = None
+    ) -> None:
         self.log: list[str] = []
         self.fail = fail
+        self.drift_table = drift_table
 
     async def begin_nested(self) -> _Nested:
         self.log.append("SAVEPOINT")
@@ -149,14 +163,16 @@ class _FingerprintConn:
 
     async def execute(self, statement: Any, params: Any = None) -> _Rows:
         sql = str(statement)
-        self.log.append(sql.splitlines()[0])
+        self.log.append(sql.strip().splitlines()[0])
+        if "pg_attribute" in sql:
+            return _Rows(_live_columns(self.drift_table))
         if sql == DATA_FINGERPRINT_SQL:
             if self.fail is not None:
                 raise self.fail
             return _Rows(
                 [
                     {"table_name": "mv_geocode_target", "h": 12, "fingerprint": "f" * 32},
-                    {"table_name": "tl_kodis_bas", "h": None, "fingerprint": "f" * 32},
+                    {"table_name": "tl_scco_sig", "h": None, "fingerprint": "f" * 32},
                 ]
             )
         return _Rows([])
@@ -169,7 +185,7 @@ async def test_compute_fingerprint_runs_inside_a_savepoint_that_is_always_rolled
 
     assert result.fingerprint == "f" * 32
     assert result.error_code is None
-    assert result.table_hashes == {"mv_geocode_target": "12", "tl_kodis_bas": None}
+    assert result.table_hashes == {"mv_geocode_target": "12", "tl_scco_sig": None}
     assert conn.log[0] == "SAVEPOINT"
     assert conn.log[1] == "SET LOCAL statement_timeout = '10min'"
     assert conn.log[-1] == "ROLLBACK TO SAVEPOINT"
@@ -195,29 +211,87 @@ async def test_compute_fingerprint_fails_open_with_an_error_code(
     assert conn.log[-1] == "ROLLBACK TO SAVEPOINT"
 
 
+@pytest.mark.asyncio
+async def test_compute_fingerprint_fails_open_on_schema_drift_before_scanning() -> None:
+    conn = _FingerprintConn(drift_table="tl_sprd_manage")
+    result = await compute_data_fingerprint(conn)
+
+    assert result.fingerprint is None
+    assert result.error_code == "schema_drift:tl_sprd_manage"
+    assert not any(line.startswith("WITH parts") for line in conn.log)
+    assert conn.log[-1] == "ROLLBACK TO SAVEPOINT"
+
+
+def test_schema_drift_detects_missing_extra_and_absent_tables() -> None:
+    live = {
+        spec.name: [*spec.accounted_columns, "source_file"]
+        for spec in DATA_FINGERPRINT_TABLE_SPECS
+    }
+    assert data_fingerprint.schema_drift(live) is None
+    assert data_fingerprint.schema_drift({**live, "tl_scco_li": ["li_cd", "geom"]}) == "tl_scco_li"
+    absent = {k: v for k, v in live.items() if k != "region_radius_parts"}
+    assert data_fingerprint.schema_drift(absent) == "region_radius_parts"
+
+
+@pytest.mark.asyncio
+async def test_compute_fingerprint_honours_a_caller_timeout() -> None:
+    conn = _FingerprintConn()
+    await compute_data_fingerprint(conn, statement_timeout="2min")
+    assert conn.log[1] == "SET LOCAL statement_timeout = '2min'"
+
+
 def test_activation_helper_fingerprints_before_the_lock_and_clears_cache_after_insert() -> None:
     """Source-order pin for ADR-069 D4/D6 (the integration suite checks the timing effect)."""
     source = inspect.getsource(admin_repo._insert_dataset_snapshot_and_release)
-    fingerprint_at = source.index("await compute_data_fingerprint(conn)")
+    fingerprint_at = source.index("await fingerprint_for_activation(conn)")
     lock_at = source.index("pg_advisory_xact_lock")
+    superseded_at = source.index('"superseded_during_scan"')
     release_insert_at = source.index("INSERT INTO ops.serving_releases")
     clear_at = source.index("await GeoCacheRepository.clear_on(conn)")
-    assert fingerprint_at < lock_at < release_insert_at < clear_at
-    assert 'if release_state == "active" and data_fingerprint is None:' in source
+    assert fingerprint_at < lock_at < superseded_at < release_insert_at < clear_at
     # the cache clear is NOT conditioned on the data_fingerprint argument
     clear_guard = source[:clear_at].rsplit("\n    if ", 1)[1]
     assert clear_guard.startswith('release_state == "active":')
     assert "data_fingerprint_failed: " in source
 
 
-def test_hotswap_restore_and_postload_paths_are_not_touched() -> None:
-    """ADR-069 D4: the four activation paths are covered through the shared helper."""
+def test_mv_refresh_release_scans_before_the_publication_guard() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository.record_mv_refresh_release)
+    scan_at = source.index("await fingerprint_for_activation(conn)")
+    guard_at = source.index("await publication_guard(conn)")
+    assert scan_at < guard_at
+    assert "fingerprint_attempt=fingerprint_attempt" in source
+
+
+def test_activation_paths_route_through_the_helper() -> None:
+    """ADR-069 D4: partial_restore/postload only reach the helper; hot-swap pre-computes."""
     from kortravelgeo.infra import hotswap, partial_restore
     from kortravelgeo.loaders import postload
 
-    for module in (hotswap, partial_restore, postload):
-        assert "compute_data_fingerprint" not in inspect.getsource(module)
+    for module in (partial_restore, postload):
+        assert "fingerprint" not in inspect.getsource(module)
+    hotswap_source = inspect.getsource(hotswap)
+    assert hotswap_source.count("fingerprint_attempt=fingerprint_attempt") == 2
     assert data_fingerprint.DATA_FINGERPRINT_STATEMENT_TIMEOUT == "10min"
+
+
+@pytest.mark.parametrize(
+    ("current", "target", "blocked"),
+    [
+        ("0029_t325a_data_fingerprint", "0029_t325a_data_fingerprint", False),
+        ("0029_t325a_data_fingerprint", "0028_t319_source_month_manifest", True),
+        ("0029_t325a_data_fingerprint", None, True),
+    ],
+)
+def test_hot_swap_refuses_a_restore_database_on_another_schema_revision(
+    current: str, target: str | None, blocked: bool
+) -> None:
+    from kortravelgeo.infra.hotswap import alembic_revision_mismatch_blocker
+
+    message = alembic_revision_mismatch_blocker(current_revision=current, target_revision=target)
+    assert (message is not None) is blocked
+    if blocked:
+        assert "alembic upgrade head" in str(message)
 
 
 # --- v2 dataset stamp -------------------------------------------------------------------------
@@ -246,8 +320,9 @@ async def test_dataset_ref_cache_serves_within_ttl_and_refreshes_after() -> None
 
 
 @pytest.mark.asyncio
-async def test_dataset_ref_cache_does_not_cache_failures_and_caches_no_active_release() -> None:
-    cache = DatasetRefCache(ttl_s=10.0, clock=lambda: 0.0)
+async def test_dataset_ref_cache_remembers_failures_briefly() -> None:
+    now = [0.0]
+    cache = DatasetRefCache(ttl_s=10.0, failure_ttl_s=1.0, clock=lambda: now[0])
     attempts: list[int] = []
 
     async def failing() -> tuple[str, str | None] | None:
@@ -255,29 +330,127 @@ async def test_dataset_ref_cache_does_not_cache_failures_and_caches_no_active_re
         raise RuntimeError("ledger down")
 
     assert await cache.get(failing) is None
+    now[0] = 0.9
+    assert await cache.get(failing) is None
+    assert len(attempts) == 1  # the failure is shared, not retried by every waiter
+    now[0] = 1.0
     assert await cache.get(failing) is None
     assert len(attempts) == 2
 
-    async def no_release() -> tuple[str, str | None] | None:
-        attempts.append(1)
-        return None
 
-    assert await cache.get(no_release) is None
-    assert await cache.get(no_release) is None
-    assert len(attempts) == 3
+@pytest.mark.asyncio
+async def test_concurrent_waiters_share_one_failing_load() -> None:
+    import asyncio
+
+    cache = DatasetRefCache(ttl_s=10.0, failure_ttl_s=1.0)
+    attempts: list[int] = []
+
+    async def slow_failing() -> tuple[str, str | None] | None:
+        attempts.append(1)
+        await asyncio.sleep(0.05)
+        raise RuntimeError("ledger down")
+
+    results = await asyncio.gather(*(cache.get(slow_failing) for _ in range(5)))
+    assert results == [None] * 5
+    assert len(attempts) == 1
+
+
+def _stub_client(monkeypatch: pytest.MonkeyPatch, ref: DatasetRef | None) -> Any:
+    """A client whose stamp is ``ref`` and whose v1 lookups record the stamp they were given."""
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.dto.common import Point, ServiceMeta
+    from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse
+
+    seen: list[Any] = []
+
+    async def fake_ref(self: AsyncAddressClient) -> DatasetRef | None:
+        return ref
+
+    async def fake_reverse_v1(
+        self: AsyncAddressClient, x: float, y: float, **kwargs: Any
+    ) -> ReverseResponse:
+        seen.append(kwargs["dataset"])
+        return ReverseResponse(
+            service=ServiceMeta(name="kor-travel-geo", operation="reverse_geocode"),
+            status="NOT_FOUND",
+            input=ReverseInput(point=Point(x=x, y=y)),
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", fake_ref)
+    monkeypatch.setattr(AsyncAddressClient, "_reverse_geocode_v1", fake_reverse_v1)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    client._t325_seen = seen  # type: ignore[attr-defined]
+    return client
+
+
+@pytest.mark.asyncio
+async def test_client_stamps_the_answer_with_the_ref_it_keyed_the_cache_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ref = DatasetRef(version_token=_VERSION, data_token=_DATA)
+    client = _stub_client(monkeypatch, ref)
+    response = await client.reverse(127.036, 37.501)
+    assert response.dataset == ref
+    assert client._t325_seen == [ref]  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_client_omits_the_stamp_without_an_active_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _stub_client(monkeypatch, None)
+    response = await client.reverse(127.036, 37.501)
+    assert response.dataset is None
+    assert "dataset" not in response.model_dump(exclude_none=True)
+
+
+def test_cache_keys_carry_the_release() -> None:
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.dto.common import Point
+    from kortravelgeo.dto.geocode import GeocodeInput
+    from kortravelgeo.dto.reverse import ReverseInput
+
+    r1 = DatasetRef(version_token=_VERSION, data_token=_DATA)
+    r2 = DatasetRef(version_token=derive_version_token("00000000-0000-0000-0000-000000000002"))
+    rev = ReverseInput(point=Point(x=127.0, y=37.5))
+    geo = GeocodeInput(address="서울특별시 중구 세종대로 110")
+    keys = {
+        AsyncAddressClient._reverse_cache_key(rev, sig_cd=None, bjd_cd=None, dataset=r)
+        for r in (r1, r2, None)
+    }
+    assert len(keys) == 3
+    keys = {
+        AsyncAddressClient._geocode_cache_key(geo, sig_cd=None, bjd_cd=None, dataset=r)
+        for r in (r1, r2, None)
+    }
+    assert len(keys) == 3
+
+
+@pytest.mark.asyncio
+async def test_client_survives_a_ledger_failure_by_omission() -> None:
+    from kortravelgeo.client import AsyncAddressClient
+
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    assert await client.dataset_ref() is None
 
 
 class _StampClient:
-    """Each method returns a fixed v2 response, as a cache hit would."""
+    """Each method returns a fixed, already-stamped v2 response."""
+
+    def __init__(self, ref: DatasetRef | None) -> None:
+        self.ref = ref
 
     async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
-        return GeocodeV2Response(status="OK", input=GeocodeV2Input(query=kwargs["query"]))
+        inp = GeocodeV2Input(query=kwargs["query"])
+        return GeocodeV2Response(status="OK", input=inp, dataset=self.ref)
 
     async def reverse(self, lon: float, lat: float, **_: Any) -> ReverseV2Response:
-        return ReverseV2Response(status="OK", input=ReverseV2Input(lon=lon, lat=lat))
+        inp = ReverseV2Input(lon=lon, lat=lat)
+        return ReverseV2Response(status="OK", input=inp, dataset=self.ref)
 
     async def search(self, **kwargs: Any) -> SearchV2Response:
-        return SearchV2Response(status="OK", input=SearchV2Input(query=kwargs["query"]))
+        inp = SearchV2Input(query=kwargs["query"])
+        return SearchV2Response(status="OK", input=inp, dataset=self.ref)
 
     async def regions_within_radius(self, **kwargs: Any) -> RegionsWithinRadiusResponse:
         inp = RegionsWithinRadiusInput(lon=kwargs["lon"], lat=kwargs["lat"])
@@ -286,6 +459,7 @@ class _StampClient:
             input=inp,
             center=RegionWithinRadiusCenter(lon=inp.lon, lat=inp.lat),
             radius_km=inp.radius_km,
+            dataset=self.ref,
         )
 
 
@@ -299,9 +473,8 @@ _V2_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
 
 async def _post_all(ref: DatasetRef | None) -> list[dict[str, Any]]:
     app = create_app()
-    app.dependency_overrides[get_client] = lambda: _StampClient()
+    app.dependency_overrides[get_client] = lambda: _StampClient(ref)
     app.dependency_overrides[require_public_api_key] = lambda: None
-    app.dependency_overrides[get_dataset_ref] = lambda: ref
     transport = httpx.ASGITransport(app=app)
     bodies = []
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
@@ -325,24 +498,6 @@ async def test_dataset_stamp_omits_absent_data_token_and_absent_release() -> Non
         assert body["dataset"] == {"version_token": _VERSION}
     for body in await _post_all(None):
         assert "dataset" not in body
-
-
-@pytest.mark.asyncio
-async def test_dataset_stamp_survives_a_ledger_failure_by_omission() -> None:
-    """The stamp is metadata: if the release lookup fails the lookup answer still returns."""
-
-    class _BrokenEngineClient(_StampClient):
-        def _engine(self) -> Any:
-            raise RuntimeError("no engine")
-
-    app = create_app()
-    app.dependency_overrides[get_client] = lambda: _BrokenEngineClient()
-    app.dependency_overrides[require_public_api_key] = lambda: None
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
-        response = await http_client.post("/v2/reverse", json={"lon": 127.036, "lat": 37.501})
-    assert response.status_code == 200
-    assert "dataset" not in response.json()
 
 
 def test_openapi_publishes_dataset_on_the_four_lookup_responses() -> None:

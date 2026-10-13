@@ -59,7 +59,12 @@ from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.cache import GeoCacheRepository
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
-from kortravelgeo.infra.data_fingerprint import DataFingerprintResult, compute_data_fingerprint
+from kortravelgeo.infra.data_fingerprint import (
+    DataFingerprintResult,
+    FingerprintAttempt,
+    compute_data_fingerprint,
+    fingerprint_for_activation,
+)
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
 from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.uploads import extract_upload_set_ids
@@ -112,7 +117,7 @@ _DATASET_VERSION_SELECT = """
 SELECT sr.serving_release_id, sr.state, sr.release_kind,
        COALESCE(sr.activated_at, sr.created_at) AS ordered_at,
        ds.dataset_snapshot_id, ds.source_set, ds.parent_dataset_snapshot_id,
-       ds.data_fingerprint
+       to_jsonb(ds) ->> 'data_fingerprint' AS data_fingerprint
   FROM ops.serving_releases sr
   JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)
 """
@@ -696,8 +701,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         snapshot_row = (
             await conn.execute(
                 text(
-                    "SELECT source_set, parent_dataset_snapshot_id, data_fingerprint"
-                    "  FROM ops.dataset_snapshots"
+                    "SELECT source_set, parent_dataset_snapshot_id,"
+                    "       to_jsonb(s) ->> 'data_fingerprint' AS data_fingerprint"
+                    "  FROM ops.dataset_snapshots s"
                     " WHERE dataset_snapshot_id = :id"
                 ),
                 {"id": release.dataset_snapshot_id},
@@ -792,6 +798,11 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 }
             row_counts = await _collect_row_counts_for_conn(conn)
             mv_hash = await _mv_hash_for_conn(conn, row_counts.get("mv_geocode_target"))
+            # T-325a (ADR-069 D4): the content scan also runs here, before publication_guard —
+            # the guard holds the load_jobs row FOR UPDATE (blocking cancel/renew_lease/
+            # set_progress) and sets lock_timeout 5s for the rest of the transaction; neither
+            # may cover a multi-minute scan. Staleness is re-checked under the activation lock.
+            fingerprint_attempt = await fingerprint_for_activation(conn)
             # 통계 조회 중에는 중지/회수가 가능하도록 소유 행 잠금을 미룬다.
             if publication_guard is not None:
                 await publication_guard(conn)
@@ -810,6 +821,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 notes=release_notes,
                 source_match_set_id=source_match_set_id,
                 snapshot_metadata=snapshot_metadata,
+                fingerprint_attempt=fingerprint_attempt,
             )
             if publication_guard is not None:
                 await publication_guard(conn)
@@ -838,7 +850,8 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             row = (
                 await conn.execute(
                     text(
-                        "SELECT sr.serving_release_id, ds.data_fingerprint"
+                        "SELECT sr.serving_release_id,"
+                        "       to_jsonb(ds) ->> 'data_fingerprint' AS data_fingerprint"
                         "  FROM ops.serving_releases sr"
                         "  JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)"
                         " WHERE sr.state = 'active' LIMIT 1"
@@ -864,6 +877,10 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         async with self.engine.begin() as conn:
             if dry_run:
                 await conn.execute(text("SET TRANSACTION READ ONLY"))
+            else:
+                # The scan sets its own 10 min inside a savepoint; this covers the lock wait,
+                # UPDATE and geo_cache DELETE that follow (the session default is 5 s).
+                await conn.execute(text("SET LOCAL statement_timeout = '5min'"))
             snapshot_id = await _active_release_snapshot_id_for_conn(conn)
             if snapshot_id is None:
                 return None
@@ -1137,6 +1154,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         previous_alias: str,
         pre_swap_release_id: str | None = None,
         maintenance_window_id: str | None = None,
+        fingerprint_attempt: FingerprintAttempt | None = None,
     ) -> ServingRelease:
         """Record the post-hot-swap restored DB as the active serving release (T-241).
 
@@ -1173,6 +1191,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                         "maintenance_window_id": maintenance_window_id,
                     }
                 },
+                fingerprint_attempt=fingerprint_attempt,
             )
             return release
 
@@ -1184,6 +1203,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         previous_alias: str,
         pre_rollback_release_id: str | None = None,
         maintenance_window_id: str | None = None,
+        fingerprint_attempt: FingerprintAttempt | None = None,
     ) -> ServingRelease:
         """Record a manual hot-swap rollback as the active serving release (T-264).
 
@@ -1221,6 +1241,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                         "maintenance_window_id": maintenance_window_id,
                     }
                 },
+                fingerprint_attempt=fingerprint_attempt,
             )
             return release
 
@@ -3098,19 +3119,38 @@ async def _insert_dataset_snapshot_and_release(
     source_match_set_id: str | None = None,
     snapshot_metadata: Mapping[str, Any] | None = None,
     data_fingerprint: str | None = None,
+    fingerprint_attempt: FingerprintAttempt | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
-    # T-325a (ADR-069 D4/D5): fingerprint the served content BEFORE the activation lock. The
-    # lock serializes only the ledger read-decide-write, not data loads, so the result equals
-    # what it would be inside the lock, and a concurrent activation never waits out the (up to
-    # 10 min) scan. Same rule as mv_hash below: computed only for an active release when the
-    # caller passed none (the argument exists for tests). Fail-open: a failed fingerprint
+    # T-325a (ADR-069 D4/D5): fingerprint the served content BEFORE the activation lock, so a
+    # concurrent activation never waits out the (up to 10 min) scan. Callers that hold other
+    # locks later in the transaction (publication_guard, hot-swap rename) scan earlier and pass
+    # ``fingerprint_attempt``; ``data_fingerprint`` is a test-only override. Same rule as
+    # mv_hash below: only an active release is fingerprinted. Fail-open: a failed fingerprint
     # stores NULL and the release still activates, with the reason appended to notes.
-    if release_state == "active" and data_fingerprint is None:
-        fingerprint_result = await compute_data_fingerprint(conn)
-        data_fingerprint = fingerprint_result.fingerprint
-        if fingerprint_result.error_code is not None:
-            suffix = f"data_fingerprint_failed: {fingerprint_result.error_code}"
-            notes = f"{notes}; {suffix}" if notes else suffix
+    fingerprint_error: str | None = None
+    has_fingerprint_column = bool(
+        await conn.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_attribute"
+                " WHERE attrelid = 'ops.dataset_snapshots'::regclass"
+                "   AND attname = 'data_fingerprint' AND NOT attisdropped)"
+            )
+        )
+    )
+    if not has_fingerprint_column:
+        # A database restored from a pre-0029 backup: record the release without the column
+        # rather than failing the activation (ADR-069 구현 기록).
+        if release_state == "active":
+            fingerprint_error = "schema_missing"
+        data_fingerprint = None
+        fingerprint_attempt = None
+    elif release_state == "active" and data_fingerprint is None:
+        if fingerprint_attempt is None:
+            fingerprint_attempt = await fingerprint_for_activation(conn)
+        data_fingerprint = fingerprint_attempt.result.fingerprint
+        fingerprint_error = fingerprint_attempt.result.error_code
+    else:
+        fingerprint_attempt = None
     # T-293: SELECT ... FOR UPDATE below only fully serializes concurrent callers when a
     # matching 'active' row already exists to lock. Two race windows without this:
     # (1) zero active rows (fresh DB, or a hot-swapped-in database whose own history has
@@ -3152,6 +3192,20 @@ SELECT serving_release_id, dataset_snapshot_id
     ).mappings().first()
     parent_snapshot_id = _optional_str(previous["dataset_snapshot_id"]) if previous else None
     previous_release_id = _optional_str(previous["serving_release_id"]) if previous else None
+    if (
+        fingerprint_attempt is not None
+        and data_fingerprint is not None
+        and previous_release_id != fingerprint_attempt.active_release_id_before
+    ):
+        # Another activation committed between our scan's snapshot and this lock: its data
+        # may be newer than what we hashed, and we are about to supersede it. Recomputing here
+        # would hold the lock (and any caller lock) for the scan, so record "cannot judge" and
+        # let the backfill CLI repair it (H1).
+        data_fingerprint = None
+        fingerprint_error = "superseded_during_scan"
+    if fingerprint_error is not None:
+        suffix = f"data_fingerprint_failed: {fingerprint_error}"
+        notes = f"{notes}; {suffix}" if notes else suffix
 
     # T-291e: self-complete rows whose own source_set carries no category/kind keys of its
     # own (form C — hot-swap/rollback metadata payloads) by resolving the lineage walk ONCE
@@ -3180,6 +3234,8 @@ UPDATE ops.serving_releases
 
     snapshot_id = str(uuid4())
     release_id = str(uuid4())
+    fingerprint_column = ", data_fingerprint" if has_fingerprint_column else ""
+    fingerprint_value = ", :data_fingerprint" if has_fingerprint_column else ""
     snapshot_row = (
         await conn.execute(
             _json_text(
@@ -3188,22 +3244,24 @@ INSERT INTO ops.dataset_snapshots
   (dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
    git_commit, alembic_revision, postgres_version, postgis_version,
    row_counts, consistency_report_id, backup_artifact_id, source_match_set_id,
-   created_by_job_id, validated_at, data_fingerprint)
+   created_by_job_id, validated_at{fingerprint_column})
 VALUES
   (:dataset_snapshot_id, :state, :parent_dataset_snapshot_id, :source_set, :source_set_hash,
    :git_commit, :alembic_revision, :postgres_version, :postgis_version,
    :row_counts, :consistency_report_id, :backup_artifact_id, :source_match_set_id,
-   :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END, :data_fingerprint)
+   :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END{fingerprint_value})
 RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
           git_commit, alembic_revision, postgres_version, postgis_version,
           row_counts, table_stats_artifact_id, consistency_report_id,
           performance_artifact_id, backup_artifact_id, created_by_job_id,
           created_at, validated_at
-""",
+""".replace("{fingerprint_column}", fingerprint_column)
+                .replace("{fingerprint_value}", fingerprint_value),
                 "source_set",
                 "row_counts",
             ),
             {
+                **({"data_fingerprint": data_fingerprint} if has_fingerprint_column else {}),
                 "dataset_snapshot_id": snapshot_id,
                 "state": snapshot_state,
                 "parent_dataset_snapshot_id": parent_snapshot_id,
@@ -3221,7 +3279,6 @@ RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, so
                 "source_match_set_id": source_match_set_id,
                 "created_by_job_id": created_by_job_id,
                 "validated": snapshot_state in {"validated", "released"},
-                "data_fingerprint": data_fingerprint,
             },
         )
     ).mappings().one()

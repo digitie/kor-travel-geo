@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,7 +67,9 @@ class FingerprintTable:
 
 _SCCO = ("geom",)
 
-#: ADR-069 D2 — the 11 tables the v2 responses are built from (head 2026-10-13).
+#: ADR-069 D2 — the 9 tables the v2 responses are built from (head 2026-10-13; derived from every
+#: ``infra/*_repo.py`` not on the non-v2 allow-list — ``postal_bulk_delivery``/``tl_kodis_bas`` are
+#: read only by the v1 ``zip_repo`` and are therefore not hashed).
 DATA_FINGERPRINT_TABLE_SPECS: tuple[FingerprintTable, ...] = (
     FingerprintTable(
         "mv_geocode_target",
@@ -81,14 +83,10 @@ DATA_FINGERPRINT_TABLE_SPECS: tuple[FingerprintTable, ...] = (
         dropped_columns=("pt_4326",),
     ),
     FingerprintTable(
-        "postal_bulk_delivery", columns=("zip_no", "bd_mgt_sn", "bulk_name", "detail")
-    ),
-    FingerprintTable(
         "region_radius_parts",
         columns=("level", "code", "name", "parent_sido_cd", "parent_sig_cd", "part_no"),
         summary_columns=_SCCO,
     ),
-    FingerprintTable("tl_kodis_bas", columns=("bas_mgt_sn", "bas_id"), summary_columns=_SCCO),
     FingerprintTable(
         "tl_scco_ctprvn", columns=("ctprvn_cd", "ctp_kor_nm"), summary_columns=_SCCO
     ),
@@ -152,12 +150,12 @@ def _build_fingerprint_sql(specs: tuple[FingerprintTable, ...]) -> str:
         "),\n"
         "fp AS (\n"
         "  SELECT md5(string_agg(table_name || ':' || coalesce(h, 0)::text, ','"
-        " ORDER BY table_name)) AS fingerprint\n"
+        " ORDER BY table_name COLLATE \"C\")) AS fingerprint\n"
         "    FROM parts\n"
         ")\n"
         "SELECT p.table_name, p.h, fp.fingerprint\n"
         "  FROM parts p CROSS JOIN fp\n"
-        " ORDER BY p.table_name"
+        " ORDER BY p.table_name COLLATE \"C\""
     )
 
 
@@ -176,6 +174,50 @@ class DataFingerprintResult:
     error_code: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class FingerprintAttempt:
+    """A fingerprint computed for an activation, plus the active release seen before the scan.
+
+    The activation helper compares ``active_release_id_before`` with the active release it reads
+    under the activation lock: if another activation committed in between, this scan may predate
+    that release's data and is discarded (``superseded_during_scan``, ADR-069 구현 기록).
+    """
+
+    result: DataFingerprintResult
+    active_release_id_before: str | None
+
+
+_ACTIVE_RELEASE_ID_SQL = """
+SELECT serving_release_id::text
+  FROM ops.serving_releases
+ WHERE state = 'active'
+ ORDER BY activated_at DESC NULLS LAST, created_at DESC
+ LIMIT 1
+"""
+
+_TABLE_COLUMNS_SQL = """
+SELECT c.relname::text AS table_name, array_agg(a.attname::text) AS columns
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+ WHERE n.nspname = 'public' AND c.relname = ANY(CAST(:names AS name[]))
+ GROUP BY c.relname
+"""
+
+
+def schema_drift(actual: Mapping[str, Iterable[str]]) -> str | None:
+    """First fingerprinted table whose live columns differ from its spec, else ``None``.
+
+    A column the spec does not account for (neither hashed, summarized, dropped nor excluded)
+    would silently stay out of the token; a spec column that no longer exists would fail the
+    SQL. Either way the fingerprint is not trustworthy, so the caller fails open."""
+    for spec in sorted(DATA_FINGERPRINT_TABLE_SPECS, key=lambda s: s.name):
+        columns = actual.get(spec.name)
+        if columns is None or set(columns) - EXCLUDED_COLUMNS != spec.accounted_columns:
+            return spec.name
+    return None
+
+
 def _error_code(exc: BaseException) -> str:
     orig = getattr(exc, "orig", None)
     sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
@@ -184,26 +226,44 @@ def _error_code(exc: BaseException) -> str:
     return f"exception:{type(orig or exc).__name__}"
 
 
-async def compute_data_fingerprint(conn: Any) -> DataFingerprintResult:
+class _SchemaDriftError(Exception):
+    def __init__(self, table: str) -> None:
+        super().__init__(table)
+        self.table = table
+
+
+async def compute_data_fingerprint(
+    conn: Any, *, statement_timeout: str | None = None
+) -> DataFingerprintResult:
     """Run :data:`DATA_FINGERPRINT_SQL` on ``conn`` without disturbing its transaction.
 
     Fail-open (ADR-069 D5): the SELECT runs inside a savepoint with its own
     ``SET LOCAL statement_timeout``; the savepoint is rolled back on success *and* failure, so
     a failure leaves the outer transaction usable and the caller's ``statement_timeout`` is in
     force again for whatever it runs next. Errors come back as ``error_code`` (``timeout`` |
-    ``exception:<ClassName>``), never raised.
+    ``schema_drift:<table>`` | ``exception:<ClassName>``), never raised. Before scanning, the
+    live columns of every fingerprinted table are checked against the specs.
     """
 
+    timeout = statement_timeout or DATA_FINGERPRINT_STATEMENT_TIMEOUT
     started = time.monotonic()
     savepoint = await conn.begin_nested()
     try:
-        await conn.execute(
-            text(f"SET LOCAL statement_timeout = '{DATA_FINGERPRINT_STATEMENT_TIMEOUT}'")
-        )
+        await conn.execute(text(f"SET LOCAL statement_timeout = '{timeout}'"))
+        live = (
+            await conn.execute(
+                text(_TABLE_COLUMNS_SQL), {"names": sorted(DATA_FINGERPRINT_TABLES)}
+            )
+        ).mappings().all()
+        drifted = schema_drift({str(row["table_name"]): row["columns"] for row in live})
+        if drifted is not None:
+            raise _SchemaDriftError(drifted)
         rows = (await conn.execute(text(DATA_FINGERPRINT_SQL))).mappings().all()
     except Exception as exc:  # fail-open by design (ADR-069 D5)
         await savepoint.rollback()
-        code = _error_code(exc)
+        code = (
+            f"schema_drift:{exc.table}" if isinstance(exc, _SchemaDriftError) else _error_code(exc)
+        )
         _LOGGER.warning("data fingerprint failed (%s); activation proceeds without it", code)
         return DataFingerprintResult(
             fingerprint=None,
@@ -221,3 +281,20 @@ async def compute_data_fingerprint(conn: Any) -> DataFingerprintResult:
         elapsed_s=time.monotonic() - started,
         error_code=None if fingerprint else "exception:EmptyResult",
     )
+
+
+async def active_release_id(conn: Any) -> str | None:
+    value = await conn.scalar(text(_ACTIVE_RELEASE_ID_SQL))
+    return None if value is None else str(value)
+
+
+async def fingerprint_for_activation(
+    conn: Any, *, statement_timeout: str | None = None
+) -> FingerprintAttempt:
+    """Read the active release, then fingerprint — the pair the activation helper re-checks
+    under its lock. Run it BEFORE any lock the scan must not hold (the activation lock,
+    ``publication_guard``'s ``load_jobs`` row lock)."""
+
+    before = await active_release_id(conn)
+    result = await compute_data_fingerprint(conn, statement_timeout=statement_timeout)
+    return FingerprintAttempt(result=result, active_release_id_before=before)

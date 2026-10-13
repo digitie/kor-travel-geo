@@ -783,7 +783,7 @@ class ServingRelease(FrozenModel):
     # T-325a (ADR-069 D1/D9): the linked snapshot's serving-content token. None when the
     # snapshot has no fingerprint (history before backfill, or a fail-open activation whose
     # fingerprint failed — notes then carries "data_fingerprint_failed: <code>").
-    data_token: str | None = None
+    data_token: str | None = Field(default=None, pattern=r"^dd1-[0-9a-f]{32}$")
 
 
 class RollbackPlan(FrozenModel):
