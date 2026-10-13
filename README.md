@@ -75,6 +75,8 @@ source scripts/agent_env.sh
 
 자세한 환경 구성, GDAL 핀, Linux Git/CodeGraph 기준, Playwright 실행 방식은 [`docs/dev-environment.md`](docs/dev-environment.md)와 [`docs/runbooks/agent-workflow.md`](docs/runbooks/agent-workflow.md)를 따릅니다.
 
+운영 호스트는 지금 n150(`192.168.1.14`)이며, odroid(`192.168.1.13`)로의 이전은 계획입니다(포트·컨테이너명 불변, 호스트만 변경 — [ADR-070](docs/adr/070-odroid-host-and-empty-host-full-load.md) proposed, 미구현).
+
 ## 로컬 실행 요약
 
 ### 백엔드

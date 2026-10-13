@@ -83,6 +83,7 @@
 | 환경변수 prefix | `KTG_*` |
 | PostgreSQL DB 이름 | `kor_travel_geo` (dot 불가) |
 | 프론트엔드 패키지 | `kor-travel-geo-ui` (Node.js) |
+| 운영 호스트 | 지금 n150 `192.168.1.14`; **계획** odroid `192.168.1.13`(ADR-070 proposed, 미구현) — 포트·컨테이너명·DSN 문자열 불변, 호스트만 바뀜 |
 
 ## 개발 환경 정책 (Linux-only, WSL 포함)
 

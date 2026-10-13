@@ -1,5 +1,15 @@
 # T-108 운영 배포 자동화
 
+> **보류(2026-10-13, ADR-070).** 아래 멀티플랫폼 build/push·`deploy_app.py` 노드 배포 경로는 **실행되지 않았고
+> Track 2(odroid 이전)에서도 채택하지 않는다.** 정식 prod 기동은 `kor-travel-docker-manager`이며(아래 "운영 도메인"
+> 절), odroid에서는 **레지스트리 없이 현지 빌드**한다 — n150에는 binfmt가 없어 buildx+QEMU도 쓰지 않는다
+> ([ADR-070](adr/070-odroid-host-and-empty-host-full-load.md) D7 — 설계 §14-6 추천안, 소유자 승인 대기). 레지스트리를
+> 도입하려면 Manager의 내용 해시 이미지 태그에 arch가 없어 같은 태그가 두 arch 내용을 가리키는 문제가 **선결
+> 조건**이다(설계 §8.4, Manager ADR-58 결정 (9)); 재검토 조건은 호스트 셋 이상. 아래의 `linux/arm64`는 2026-10-13 실측으로
+> **확정**됐다(odroid = ODROID M1S,
+> aarch64 Cortex-A55 ×4 — 종전 "문서상, 미측정" 상태 해소; `docs/t055-deployment-n150-odroid.md` 정정 블록).
+> `deploy_app.py`·`tests/unit/test_deploy_app.py`는 코드로 남아 있으나 운영 경로가 아니다.
+
 ## 원문
 
 `pinvi`의 `docs/tasks.md`에서 가져온 원문은 다음과 같다.

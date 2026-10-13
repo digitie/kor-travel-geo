@@ -4,6 +4,33 @@
 
 ## 현재 진척도 (2026-10-13 갱신, by claude)
 
+- 📝 **T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 설계 확정(문서만, Track 2)** (branch
+  `docs/adr-070-odroid-host-full-load`) — [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md) proposed(미구현;
+  결정은 D1~D9, 호스트 쪽 정본은 Manager ADR-58). 백로그 `tasks.md` T-326a~c; 런북 `deploy/staging-full-load.md`
+  "빈 호스트(odroid) 풀로드 — 계획" 절; `t055`(x86 가정 → 실측 aarch64 A55×4·7,676 MiB 정정)·`t108`(레지스트리 보류).
+  head에서 바로잡은 것: 풀로드 라우팅 env는 T-290k 이후 없음(`_full_load_launch.py:9-11`); 공개 키 면제는 admin 프록시
+  경로(`security.py:154-176`)라 소비자는 **오늘도** 키 경로이고 Map은 2026-08-08 발급 키를 쓴다(journal `:1540-1543`) — 빈 odroid
+  DB로 플립하면 그 키가 401이라 설계의 "(가) 폴백 유지, 변경 0" 추천은 철회하고 (나) 소비자별 발급을 추천(Map ADR-110 결정 §4와
+  합치); dump 복원 지름길은 NOCREATEDB 롤에서 Dagster `db_restore`가 E0410이라 수동 `pg_restore` 또는 ADR-58 롤 amendment가 전제
+  (`db_capabilities.py:3-11`). odroid 상태(2026-10-13 03:4xZ): ssh 직결·NOPASSWD sudo·
+  docker 그룹·NTP 동기 **완료**, timesyncd drop-in·compose v2/buildx·방화벽·fstab bind·swapfile **미완**(Manager 몫).
+  작성 중 head 대조로 바로잡은 것: Manager T-MGR-01d의 소스 bind 컨테이너 경로 `/source`는 오기 — geo 계약은
+  `/app/data/source`, Manager PR에 전달; drill은 STOPPED 기본·독립 토글이라 D5 재서술. 1차 적대 리뷰 2명(2026-10-13, journal
+  항목 "리뷰 반영" 문단) 반영: t055 인용 줄번호, `/v1/admin/loads` 경로(런북 curl 오기 정정), D4 수용 기준을 효과로, D7 digest
+  재핀이 설계 §8.2/§8.4와 다른 점 명시(§14-6 병기), 183 GB → geo 몫 34 GB, 면제 단정 제거, accepted 게이트 3건 고정. 2차 적대 리뷰
+  2명 반영(journal "2차 리뷰 반영" 문단): D2 키 정책 재서술(HIGH ×2), 지름길 E0410 전제, 순서 8a→8b, batch가 mv_refresh child 포함,
+  D4 (ⅱ) 구현 자리(`policy_for_job`), refresh-mv 경로, VWorld env 전제, ADR-069 조건부, LOW 8건.
+  **다음 한 작업**: 소유자 결정(accepted 게이트 §14-8(지름길이면 수동 `pg_restore`/롤 amendment 포함)·12(잔류면 `rejected`)·
+  21((나) 추천으로 재질의); 추천안 수용이면 변경 0인 §14-19·4·7·6 — ADR-070 후속 첫 (open) 항목) → **T-326a**(지금 가능: n150
+  geo cs·PG cgroup anon 실측 → D6 플립 판정 anon ≤ 0.95 GiB + 전환 전 현재 값 기록 1회(active 키 수·Map 키 200/401·운영 MV
+  count) + base digest index 확인; odroid는 sudo·docker 그룹 완료라 `nvme smart-log`·`docker info`·
+  `capture_deployment_envelope.py --run-probes --probe-dir /mnt/media/<tmp>` 지금 가능, 수동 fio 3종 2회만 fstab bind(Manager 몫)
+  뒤) → Manager odroid 초기화·`ensure dagster`(odroid PG)·상시 소스 bind(`/app/data/source`) 머지 → **geo 플립 PR(§11.2 8a,
+  Manager) → n150 geo cs stop → odroid 재설치** → **T-326b**(= 8b: 소스 반입 → serving DB 직접 `full_load_batch`(mv_refresh child
+  포함) → standalone `mv_refresh` 1회 실측 → 상한 결정 코드 + 키 재발급 + `.env.prod.example` 주석 + ADR `accepted`) → §11.2 9단계
+  (소비자 URL 전환, batch SUCCESS 다음 날) → **T-326c**(키 경로 200·peer `.14`·p50/p95; Track 1 재계획 확인은 T-325 구현 여부에
+  따라 조건부). Track 1 T-325와 머지 순서 무관(둘 다 소유자 승인 대기) — 단 T-326c의 센서 항목만 T-325 결과에 결박.
+
 - 📝 **T-325 — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 설계 확정(문서만)** (branch
   `docs/adr-069-dataset-data-token`) — [ADR-069](adr/069-dataset-data-token.md) proposed(미구현; 결정은 D1~D9,
   수치·표 집합·TTL은 ADR이 정본). 백로그 `tasks.md` T-325a~c(PR-1 = a+b에 `openapi.json`·`gen:types` 산출물 포함,

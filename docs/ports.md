@@ -24,7 +24,7 @@
 
 | 표면 | host 포트 | compose 내부 대상 | 비고 |
 |------|-----------|-------------------|------|
-| PostgreSQL/PostGIS | `11000` | `kor-travel-shared-postgres` (host network, `postgres -p 11000`) | **공용 제어 평면 instance**(manager ADR-45, T-308): 이 저장소가 쓰는 DB는 `kor_travel_geo`·`kor_travel_geo_dagster`, 둘 다 `kor_travel_geo_app` 소유. concierge·PinVi·weather·transport도 같은 instance의 자기 DB를 쓴다(role별 CONNECT 격리). 확장(postgis/pg_trgm/unaccent/pg_stat_statements, 스키마 `x_extension`)은 cluster admin이 만들고 앱 role은 `x_extension` USAGE만 가진다. `127.0.0.1` 바인드·loopback scram-sha-256, host network라 `-p`가 곧 host 포트다 — 컨테이너 안 `psql`도 `-p 11000`. 옛 `kor-travel-geo-postgres`(`12500`)는 2026-09-28 은퇴했고 PGDATA만 호스트에 남아 있다 |
+| PostgreSQL/PostGIS | `11000` | `kor-travel-shared-postgres` (host network, `postgres -p 11000`) | **공용 제어 평면 instance**(manager ADR-45, T-308): 이 저장소가 쓰는 DB는 `kor_travel_geo`·`kor_travel_geo_dagster`, 둘 다 `kor_travel_geo_app` 소유. concierge·PinVi·weather·transport도 같은 instance의 자기 DB를 쓴다(role별 CONNECT 격리). 확장(postgis/pg_trgm/unaccent/pg_stat_statements, 스키마 `x_extension`)은 cluster admin이 만들고 앱 role은 `x_extension` USAGE만 가진다. `127.0.0.1` 바인드·loopback scram-sha-256, host network라 `-p`가 곧 host 포트다 — 컨테이너 안 `psql`도 `-p 11000`. 옛 `kor-travel-geo-postgres`(`12500`)는 2026-09-28 은퇴했고 PGDATA만 호스트에 남아 있다. **계획**(ADR-070 D1 proposed, 미구현): odroid 이전 뒤에는 같은 이름·포트(`kor-travel-shared-postgres` 11000)의 **odroid 전용** 인스턴스(arm64 imresamu, Manager ADR-58 결정 (3)) — DSN 문자열 불변 |
 | RustFS S3 API | `12101` | `rustfs:9000` | `KTG_RUSTFS_ENDPOINT_URL`의 host 기준값 |
 | RustFS console | `12105` | `rustfs:9001` | object 확인·수동 삭제 등 운영 콘솔 |
 | Grafana | `12205` | `grafana:3000` | Prometheus datasource 자동 등록 |
