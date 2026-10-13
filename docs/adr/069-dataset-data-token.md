@@ -363,6 +363,12 @@ hit에도 현재 토큰" 규칙과 어긋난다.
    `JOIN tl_new_table`·유령 허용 항목·집합에서 표 제거에 빨갛고, 일반/`MATERIALIZED`/`NOT MATERIALIZED` CTE와
    `JOIN generate_series(` 추가에는 초록이다.
 
+**재실측(1차 리뷰 반영 뒤, 9표 + 열 대조, 2026-10-13 13:47Z).** 5회: **485.8 s 성공**(지문 `dd1-2689bb39…`, drift 없음) —
+그러나 그때 n150은 다른 작업으로 load 10~20, IO pressure some 70~95%였다(성공 측정 3·4회의 57/103 s는 조용할 때). 즉
+**경합 시 10 min의 81%까지 간다 — 50% 기준 초과**. ADR 결과(부정)의 규칙대로 머지 전 소유자 판단이 필요하다: 지렛대(표
+요약 강화·`mv_geocode_target` 열 축소)를 더 쓸지, 경합 시 fail-open(→ backfill)을 수용할지. 조용한 시간대 재측정은 하지
+않았다(prod에 스캔을 더 얹지 않으려고).
+
 ### 구현 기록 — 적대 리뷰 1차(2026-10-13, PR #573 head `b559d3e` 대상 2명) 반영
 
 9. **(H1) 지문은 활성화 lock 앞에서 계산하되, lock 뒤에 낡았는지 다시 본다.** READ COMMITTED에서 스캔 snapshot은
