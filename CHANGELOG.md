@@ -4,7 +4,26 @@
 
 ## [Unreleased]
 
+### Added
+- **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 11표
+  (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_kodis_bas`·`postal_bulk_delivery`·
+  `tl_sppn_makarea`·`tl_spbd_buld_polygon`·`tl_sprd_manage`)의 내용 지문을 `ops.dataset_snapshots.data_fingerprint`
+  (Alembic `0029_t325a_data_fingerprint`)에 저장하고 `data_token = "dd1-" + sha256(지문)[:32]`로 공개한다. 같은 데이터의
+  재빌드·restore·rollback은 같은 토큰, 일변동·보조 표 단독 적재는 새 토큰이다. 지문은 10분 안에 못 끝나거나 실패하면
+  NULL로 활성화를 통과시키고(fail-open) `serving_releases.notes`에 `data_fingerprint_failed: <code>`를 붙인다.
+  `POST /v2/dataset/version`·`/v2/dataset/history`의 `DatasetVersionEntry.data_token`(지문 없는 릴리스는 생략)과 admin
+  `ServingRelease.data_token`이 additive로 생겼다. 소비자 규약: `data_token` 동등성으로 판정, 없으면 판정 불가,
+  `version_token`은 관측용.
+- **v2 조회 응답의 `dataset{version_token, data_token}`(T-325b, ADR-069 D7).** `/v2/geocode`·`/v2/reverse`·`/v2/search`·
+  `/v2/regions/within-radius` 응답 최상위에 그 답을 만든 로컬 데이터셋의 토큰을 싣는다(프로세스 캐시 TTL 10초, 활성
+  릴리스가 없으면 생략, 외부 출처 후보가 섞여도 로컬 데이터셋 기준). additive 필드.
+- **`ktgctl serving fingerprint-active [--dry-run]`(ADR-069 D9).** 배포 전 활성 릴리스 1건의 지문을 backfill하고
+  `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
+
 ### Changed
+- **활성 릴리스마다 `geo_cache`(geocode·reverse 결과 캐시)를 비운다(T-325a, ADR-069 D6).** 기록과 같은 transaction에서
+  지운다 — 지금까지는 `refresh_mv`만 비워서, MV refresh 없이 릴리스를 만드는 standalone 적재(SPPN 구역·우편번호·
+  건물 SHP 등) 뒤에는 최대 30일 동안 옛 답이 캐시에서 나갔다. 활성화 직후 첫 조회는 캐시 miss다.
 - **Dagster 복구·공통 운영 UI 채택(ADR-068).** 조회 장애를 UNKNOWN으로 격리하고 worker
   소유권·관측 lease를 원자적으로 확인한다. 복구 이력 100건 순회, DB/RPC 상한, step
   동시성 1, backup_verify에 한정된 인프라 재시도를 적용한다. common 로그인·메뉴·

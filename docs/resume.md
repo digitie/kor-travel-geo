@@ -4,6 +4,14 @@
 
 ## 현재 진척도 (2026-10-13 갱신, by claude)
 
+- 🔶 **T-325a+b — 데이터셋 `data_token` + v2 `dataset` 필드 구현(PR-1)** (branch `feat/t325-data-token`, **draft PR #573**,
+  미머지) — ADR-069 **accepted**(2026-10-13 소유자 승인, 추천안 4개). 구현에서 달라진 점은 ADR "구현 기록" 절(지문 열 명시
+  목록 = D1 지렛대 1, revision id `0029_t325a_data_fingerprint`, reverse 캐시 케이스는 `tl_sppn_makarea`). prod dry-run 실측
+  57.4 s(warm)·103.4 s(page cache 15%) — 50%(300 s) 기준 통과; 공용 PG lock table 고갈(Map `feature-write`) 때 한 번 fail-open.
+  상세 `journal.md` 2026-10-13 T-325a+b. **다음 한 작업**: PR #573 리뷰·CI green → 머지(소유자) → 배포(Alembic 0029) →
+  `ktgctl serving fingerprint-active`(backfill, `--dry-run` 없이) → `/v2/dataset/version`의 `current.data_token` 비NULL·
+  `geo_cache` 0행 확인 → 소비자(Map ADR-109·concierge ADR-49) 활성화 검증 → **T-325c**(UI 배지·api-reference 문서).
+
 - 📝 **T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 설계 확정(문서만, Track 2)** (branch
   `docs/adr-070-odroid-host-full-load`) — [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md) proposed(미구현;
   결정은 D1~D9, 호스트 쪽 정본은 Manager ADR-58). 백로그 `tasks.md` T-326a~c; 런북 `deploy/staging-full-load.md`

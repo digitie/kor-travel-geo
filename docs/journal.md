@@ -2,6 +2,43 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-13 (T-325a+b 구현 — 데이터셋 `data_token` + v2 `dataset` 필드, ADR-069 accepted, by claude)
+
+소유자가 ADR-069 추천안 4개를 모두 승인(서빙 내용 지문·fail-open·geometry 요약 지문·활성화마다 `geo_cache` 전체 삭제)해
+상태를 `accepted`로 바꾸고 PR-1(T-325a+b)을 구현했다. branch `feat/t325-data-token`(origin/main `3ee05ee`에서), draft PR #573.
+
+**구현.** `infra/data_fingerprint.py`(신규) — `DATA_FINGERPRINT_TABLE_SPECS` 11표, `DATA_FINGERPRINT_SQL` 한 상수(표마다
+`sum(hashtextextended(행 입력, 0)::numeric)` → `md5(string_agg(t:h ORDER BY t))`), `compute_data_fingerprint(conn)`(savepoint +
+`SET LOCAL statement_timeout='10min'`, 성공·실패 모두 ROLLBACK TO, 실패는 `timeout`/`exception:<Class>`로 돌려줌).
+`_insert_dataset_snapshot_and_release`는 active + 인자 None이면 **advisory lock 앞**에서 지문을 계산하고(실패 시 `notes`에
+`data_fingerprint_failed: <code>`), lock 뒤 release INSERT 다음에 인자와 무관하게 `GeoCacheRepository.clear_on(conn)`(`clear()`와
+SQL 상수 공유). `hotswap.py`·`partial_restore.py`·`postload.py`는 손대지 않았다. `derive_data_token`(`dd1-`),
+`DatasetVersionEntry.data_token`·`ServingRelease.data_token`, `AdminRepository.current_dataset_ref()`·`fingerprint_active_release()`,
+`ktgctl serving fingerprint-active [--dry-run]`(dry-run은 READ ONLY transaction; 실제 backfill은 스캔 뒤 activation lock을 잡고 활성
+snapshot이 그대로일 때만 씀), Alembic `0029_t325a_data_fingerprint`. T-325b: `DatasetRef` + 네 v2 응답 `dataset`,
+`api/dataset_ref.py`(프로세스 TTL 10초, 시계 주입, 조회 실패는 생략·미캐시), 핸들러 `model_copy`.
+
+**설계와 달라진 것(ADR "구현 기록" 절).** (1) 첫 prod dry-run(설계 원안 `to_jsonb(row) - …`)이 10분 timeout — 폴리곤을 GeoJSON으로
+만든 뒤 버리는 비용. D1의 첫 지렛대(열 명시, `ROW(…)::text`)로 바꾸고 열 목록을 lint 두 겹(DDL·MV select 파싱 단위 테스트 + live
+`pg_attribute` 통합 테스트)으로 고정했다. (2) revision id는 35자 원안이 `varchar(32)`를 넘어 `0029_t325a_data_fingerprint`.
+(3) reverse는 `postal_bulk_delivery`를 읽지 않는다(우편번호는 `mv_geocode_target.zip_no`) — 캐시 무효화 reverse 케이스는
+`tl_sppn_makarea`로, geocode 케이스는 v2가 구역명을 싣지 않아 공유 geocode 캐시층에서 단언. (4) `postal_pobox`는 v1 전용으로 확인.
+
+**prod 실측(n150, 읽기 전용, `systemd-run` unit, 배포 API 이미지 + PR 소스 마운트, DSN은 API 컨테이너 env에서 이름으로).**
+대상 heap+toast 6.98 GB. 1회 `to_jsonb` 600 s timeout → fail-open; 2회(명시 열) 204 s에 `out of shared memory`(53200) → fail-open;
+3회 57.4 s(warm); 4회 103.4 s(시작 시 page cache 상주 15%, 지문 3회와 동일 = 결정성). 50%(300 s) 기준 통과. 2회를 죽인 것은
+공용 PG lock table 고갈 — Map `feature-write` advisory lock이 2026-10-12 09Z부터 시간당 약 120건 `out of shared memory`를 낸다
+(geo 문제 아님, Map/Manager에 전달 필요; 지속되면 geo 활성화 지문도 가끔 fail-open).
+
+**검증.** n150 venv(py3.12, GDAL 3.12.2) `pytest -q` 전체 1,830 passed/138 skipped(실패 1건 `test_t156` 계약 테스트는 `clear_on` 공유로
+갱신), `ruff`·`mypy --strict`(168 files)·`lint-imports` 초록, `export_openapi.py --check` 초록, UI(WSL 미러) `gen:types`·lint·
+type-check·vitest 231·`next build` 초록, mock Playwright `debug-v2`·`ops` chromium 12/12(WSL — UI node_modules가 WSL 미러에만 있어
+n150 대신; n150 디스크 90%). 통합(n150 throwaway `postgis/postgis:16-3.5-alpine`, tmpfs, 1 CPU) `test_t325_data_fingerprint.py`
+26 passed + 기존 race·projection·t319 통과. **일부러 빨갛게** 18개 변형 전부 해당 테스트 실패 확인(ADR 구현 기록 8). T-325b
+수용 기준 (3) reverse p50: in-process base/branch 교대 측정은 n150 부하로 ±50% 잡음이라 판정 불가, 스탬프 경로 자체 비용은 요청당
+약 2.5 µs(p50 9~21 ms의 0.03% 미만)로 측정. live e2e(`tests/e2e/live`)는 비prod 데이터 스택이 문서에 없어(dev 스택도 공용 PG의
+prod DB에 붙음) 실행하지 않았다.
+
 ## 2026-10-13 (ADR-070 — geo 스택 odroid 이전 + 빈 호스트 풀로드, 문서만, by claude)
 
 소유자 지시(Track 2): geo·weather·transport와 그들의 PostgreSQL을 odroid(192.168.1.13)로 옮기고 n150의

@@ -72,6 +72,10 @@ version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32
 역은 보증하지 않는다**(동일 데이터 재적재도 새 토큰 = 허용된 과잉 감지). 토큰은 불투명
 값으로, 동등 비교만 허용하고 파싱·정렬은 계약 위반이다.
 
+> **amend (ADR-069, accepted 2026-10-13).** 이 문장은 `version_token`에 대해 그대로 유효하다. "바뀌었는가"
+> 판정은 이제 서빙 내용 지문에서 파생한 `data_token`(`dd1-`)의 동등성으로 하고, `version_token`은 관측용이다
+> (ADR-069 D8). `data_token`은 역도 성립한다(같은 데이터 ⇒ 같은 토큰).
+
 기각한 대안:
 
 - **epoch + 단조 seq 신규 원장 테이블** — hot-swap restore가 원장 테이블 자체를 백업 시점으로
