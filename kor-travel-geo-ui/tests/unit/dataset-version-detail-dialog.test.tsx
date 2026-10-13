@@ -134,4 +134,35 @@ describe("DatasetVersionDetailDialog (T-291d)", () => {
     expect(screen.getAllByText(/더 이상 현재 활성 릴리스가 아닙니다/).length).toBe(1);
   });
 
+  it("재조회 중과 실패 뒤에는 이전 성공 지문을 현재 동일성으로 표시하지 않는다", async () => {
+    const token = "dd1-" + "a".repeat(32);
+    apiMocks.postJson.mockResolvedValueOnce({ status: "OK", query_id: "q", available: true,
+      current: { version_token: ACTIVE_RELEASE.version_token, data_token: token } });
+    render(<DatasetVersionDetailDialog release={{ ...ACTIVE_RELEASE, data_token: token }} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "POST /v2/dataset/version 호출" }));
+    await screen.findByText(/선택 릴리스와 데이터 동일/);
+    let reject!: (reason: Error) => void;
+    apiMocks.postJson.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    fireEvent.click(screen.getByRole("button", { name: "POST /v2/dataset/version 호출" }));
+    expect(screen.queryByText(/선택 릴리스와 데이터 동일/)).toBeNull();
+    reject(new Error("retry failed"));
+    await screen.findByText("retry failed");
+    expect(screen.queryByText(/선택 릴리스와 데이터 동일/)).toBeNull();
+  });
+
+  it.each([
+    { status: "ERROR", available: true, version_token: ACTIVE_RELEASE.version_token },
+    { status: "OK", available: false, version_token: ACTIVE_RELEASE.version_token },
+    { status: "OK", available: true, version_token: "bad-version" },
+  ])("비정상 응답 %j의 지문은 현재 데이터 동일성을 보장하지 않는다", async ({ status, available, version_token }) => {
+    const token = "dd1-" + "a".repeat(32);
+    apiMocks.postJson.mockResolvedValue({ status, query_id: "q", available, changed: false,
+      current: { version_token, data_token: token } });
+    render(<DatasetVersionDetailDialog release={{ ...ACTIVE_RELEASE, data_token: token }} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "POST /v2/dataset/version 호출" }));
+    await screen.findByText("현재 서빙 데이터 확인 불가 — 판정 불가");
+    expect(screen.queryByText(/선택 릴리스와 데이터 동일/)).toBeNull();
+    expect(screen.queryByText(/이 release가 지금도 현재 활성 릴리스입니다/)).toBeNull();
+  });
+
 });

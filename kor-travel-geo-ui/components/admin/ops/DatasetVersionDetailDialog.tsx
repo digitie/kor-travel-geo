@@ -55,6 +55,7 @@ export function DatasetVersionDetailDialog({
 
   async function loadPreview() {
     setPreviewLoading(true);
+    setPreview(null);
     setPreviewError(null);
     try {
       // known_version을 이 release의 값으로 보낸다 — 그래야 응답의 changed/known_version_found로
@@ -183,26 +184,7 @@ export function DatasetVersionDetailDialog({
             )}
           </p>
           {previewError ? <p className="form-note warn">{previewError}</p> : null}
-          {preview && preview.changed === true ? (
-            <p className="form-note warn">
-              이 release는 더 이상 현재 활성 릴리스가 아닙니다 — 아래 <code>current</code>는
-              지금 서빙 중인 다른 릴리스({preview.current?.version_token ?? "?"})입니다.
-            </p>
-          ) : null}
-          {preview && preview.changed === false ? (
-            <p className="form-note">
-              이 release가 지금도 현재 활성 릴리스입니다 — 아래 <code>current</code>가 이
-              release와 동일합니다.
-            </p>
-          ) : null}
-          {preview ? (
-            <p className="form-note">
-              현재 서빙 데이터 지문: <code>{validDataToken(preview.current?.data_token) ?? "지문 없음 — 판정 불가"}</code>
-              {validDataToken(release.data_token) && validDataToken(release.data_token) === validDataToken(preview.current?.data_token)
-                ? " · 선택 릴리스와 데이터 동일" : ""}
-            </p>
-          ) : null}
-          {preview ? <JsonBlock value={preview} /> : null}
+          <DatasetVersionPreviewResult preview={preview} selectedToken={release.data_token} />
         </section>
 
         <section className="manifest-section">
@@ -211,6 +193,42 @@ export function DatasetVersionDetailDialog({
         </section>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 릴리스 관측과 데이터 동일성은 별도 신호로 표시한다. */
+function DatasetVersionPreviewResult({ preview, selectedToken }: {
+  preview: DatasetVersionPreview | null;
+  selectedToken?: string | null;
+}) {
+  if (!preview) return null;
+  const current = preview.current;
+  const verified = preview.status === "OK" && preview.available === true &&
+    typeof current?.version_token === "string" && /^dv1-[0-9a-f]{32}$/.test(current.version_token);
+  if (!verified) return <><p className="form-note warn">현재 서빙 데이터 확인 불가 — 판정 불가</p><JsonBlock value={preview} /></>;
+  const currentToken = validDataToken(current.data_token);
+  const token = validDataToken(selectedToken);
+  const sameData = token !== null && token === currentToken;
+  return (
+    <>
+      {preview.changed === true ? (
+        <p className="form-note warn">
+          이 release는 더 이상 현재 활성 릴리스가 아닙니다 — 아래 <code>current</code>는
+          지금 서빙 중인 다른 릴리스({preview.current?.version_token ?? "?"})입니다.
+        </p>
+      ) : null}
+      {preview.changed === false ? (
+        <p className="form-note">
+          이 release가 지금도 현재 활성 릴리스입니다 — 아래 <code>current</code>가 이
+          release와 동일합니다.
+        </p>
+      ) : null}
+      <p className="form-note">
+        현재 서빙 데이터 지문: <code>{currentToken ?? "지문 없음 — 판정 불가"}</code>
+        {sameData ? " · 선택 릴리스와 데이터 동일" : ""}
+      </p>
+      <JsonBlock value={preview} />
+    </>
   );
 }
 

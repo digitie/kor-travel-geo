@@ -12,10 +12,9 @@
 - `/v2/geocode`의 `include_geometry=true`는 기존 `CandidateV2.point`를 도형으로 대체하지 않는다. 응답은 `point + geometry` 구조이며, `geometry.kind`는 `building`, `region`, `road` 중 하나다.
 - `sig_cd`는 2자리 시도 또는 5자리 시군구, `bjd_cd`는 8자리 prefix 또는 10자리 법정동 코드다.
 - 외부 API fallback은 명시적으로 `fallback="api"`를 지정할 때만 동작한다.
-- `/v2/dataset/version`·`/v2/dataset/history`의 `version_token`은 불투명 값이다 — 동등 비교만
-  허용하고 파싱·정렬은 계약 위반이다. 토큰이 같으면 서빙 데이터셋이 안 바뀐 것이 보증되지만,
-  역은 보증하지 않는다(동일 데이터 재적재도 새 토큰일 수 있음). 이 두 endpoint는 candidate
-  표면과 달리 Python 라이브러리로 공개하지 않는다(REST 전용).
+- `/v2/dataset/version`·`/v2/dataset/history`의 소비자 데이터 비교는 `data_token` 동등성으로만 한다.
+  지문이 없으면 판정 불가이며 `version_token`은 관측용이다. 불투명 토큰을 파싱·정렬하지 않는다.
+  이 두 endpoint는 REST 전용이고, 네 후보 조회 응답의 선택 `dataset`도 같은 지문을 제공한다.
 
 ## 엔드포인트
 
@@ -24,11 +23,12 @@
 | v1 geocode | `GET /v1/address/geocode` | `address`, `type`, `fallback`, `sig_cd`, `bjd_cd` | `status`, `refined`, `result.point`, `x_extension` |
 | v1 reverse | `GET /v1/address/reverse` | `x`, `y`, `type`, `radius_m`, `sig_cd`, `bjd_cd` | `result[]` |
 | v1 search | `GET /v1/address/search` | `query`, `type`, `page`, `size`, `sig_cd`, `bjd_cd` | `result[]`, `total` |
-| v2 geocode | `POST /v2/geocode` | `query` 또는 `road_address`/`jibun_address`/`keyword`, `bbox`, `fallback`, `include_geometry` | `candidates[]`, 선택 `geometry` |
-| v2 reverse | `POST /v2/reverse` | `lon`, `lat`, `radius_m`, `include_zipcode` | `candidates[]` |
-| v2 search | `POST /v2/search` | `query`, `type`, `category_group_code`, `bbox` | `candidates[]`, `total` |
-| v2 dataset version | `POST /v2/dataset/version` | `known_version`(선택) | `available`, `changed`, `known_version_found`, `current`(`version_token`/`activated_at`/`change_type`/`reference_months`) |
-| v2 dataset history | `POST /v2/dataset/history` | `since_version`, `limit`, `cursor`(모두 선택) | `since_found`, `entries[]`, `next_cursor` |
+| v2 geocode | `POST /v2/geocode` | `query` 또는 `road_address`/`jibun_address`/`keyword`, `bbox`, `fallback`, `include_geometry` | `candidates[]`, 선택 `geometry`·`dataset` |
+| v2 reverse | `POST /v2/reverse` | `lon`, `lat`, `radius_m`, `include_zipcode` | `candidates[]`, 선택 `dataset` |
+| v2 search | `POST /v2/search` | `query`, `type`, `category_group_code`, `bbox` | `candidates[]`, `total`, 선택 `dataset` |
+| v2 dataset version | `POST /v2/dataset/version` | `known_version`(선택) | `available`, `changed`, `known_version_found`, `current`(`version_token`/선택 `data_token`/`activated_at`/`change_type`/`reference_months`) |
+| v2 dataset history | `POST /v2/dataset/history` | `since_version`, `limit`, `cursor`(모두 선택) | `since_found`, `entries[]`(선택 `data_token`), `next_cursor` |
+| v2 regions within radius | `POST /v2/regions/within-radius` | `lon`, `lat`, `radius_km`, `levels` | `center`, `sido[]`/`sigungu[]`/`emd[]`, 선택 `dataset` |
 
 ## Source 출처
 

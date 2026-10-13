@@ -5,7 +5,7 @@
 ## 2026-10-14 — T-325c 데이터 지문 관리 UI 구현 중
 
 - data_token 동등성·없으면 판정 불가·version_token 관측용 규약을 관리 UI와 API 문서에 반영했다. 행 순서 대신 previous_serving_release_id로 실제 이전 활성화를 찾고 누락된 이력에서는 동일성·연속 실패를 추측하지 않는다. 데이터 동일/지문 없음 배지·실패 사유 도움말·두 활성화 누락 경고·실제 미리보기의 지문을 표시한다.
-- 최초 집중 19 PASS·전체 UI 249 PASS. 이전 lint/type/build PASS 뒤 최종 추가 회귀를 검증 중이다. 원래 상세 컴포넌트는 새 의미 회귀 2건에서 실패했으며 원문을 보존한다. ops 표 회귀 3 PASS·두 적대 리뷰·후속 live UI 검증은 진행 중이고 운영 배포/backfill 완료로 표시하지 않는다. CodeGraph MCP가 ext4 인덱스를 읽지 못해 Linux CLI context/status로 영향도를 확인했다.
+- 최초 집중 19 PASS·전체 UI 249 PASS 뒤 리뷰 회귀 4건을 추가했다. 집중 상세 11 PASS·전체 UI 253 PASS·최종 lint/type/build PASS다. 원래 상세 컴포넌트는 새 의미 회귀 2건에서 실패했으며 원문을 보존한다. ops 표 회귀 3 PASS. 리뷰에서 확인한 재조회 실패 뒤의 오래된 동일성 표시를 제거하고 정상 status/available/current 토큰만 비교한다. ReactDoctor가 지적한 상세 화면 복잡도는 미리보기 결과 분리로 해소했다(기존 범위의 경고 14건은 남는다). 두 적대 리뷰 재검토·후속 live UI 검증은 진행 중이고 운영 배포/backfill 완료로 표시하지 않는다. CodeGraph MCP가 ext4 인덱스를 읽지 못해 Linux CLI context/status로 영향도를 확인했다.
 
 
 ## 2026-10-13 (T-325 #573 적대 리뷰 1·2차 반영 + prod 재실측 + 소유자 결정, by claude)
