@@ -106,7 +106,7 @@ PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGE
   남은 것: 머지·배포 → backfill(수용 기준 (4)). prod dry-run 실측(수용 기준 (3))은 2026-10-13 수행 — 성공 57.4 s(warm)·
   103.4 s(page cache 15%), 50% 기준(300 s) 통과(ADR-069 구현 기록 2).
 
-  `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_dataset_data_fingerprint`, 직전 head
+  `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_data_fingerprint`, 직전 head
   `0028_t319_source_month_manifest`; `infra/sql.py` DDL + `sql/ddl/001_schema.sql` 사본) +
   `DATA_FINGERPRINT_TABLES`/`DATA_FINGERPRINT_SQL`(ADR-069 D2·D3 — surrogate key·적재 메타 제외) +
   `_insert_dataset_snapshot_and_release`가 `data_fingerprint` 인자 None이고 active면 지문 계산(`mv_hash`와 같은 규칙;
@@ -115,7 +115,7 @@ PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGE
   `GeoCacheRepository.clear_on(conn)`(D4~D6) + `derive_data_token`(`core/dataset_version.py`) +
   `DatasetVersionEntry.data_token`·admin `ServingRelease.data_token` + `ktgctl serving fingerprint-active [--dry-run]`(D9 —
   `--dry-run`은 헬퍼와 같은 `DATA_FINGERPRINT_SQL`·같은 10 min timeout).
-  - 수정 파일: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `alembic/versions/0029_t325a_dataset_data_fingerprint.py`(신규),
+  - 수정 파일: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `alembic/versions/0029_t325a_data_fingerprint.py`(신규),
     `src/kortravelgeo/infra/admin_repo.py`, `src/kortravelgeo/infra/cache.py`, `src/kortravelgeo/core/dataset_version.py`,
     `src/kortravelgeo/dto/v2.py`, `src/kortravelgeo/dto/admin.py`, `src/kortravelgeo/cli/main.py`,
     `tests/unit/test_data_fingerprint_covers_serving_tables.py`(신규), 통합 테스트, **`openapi.json`**(재export),

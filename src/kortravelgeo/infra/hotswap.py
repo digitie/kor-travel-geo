@@ -39,6 +39,7 @@ from kortravelgeo.infra.data_fingerprint import (
     FingerprintAttempt,
     fingerprint_for_activation,
 )
+from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
@@ -217,10 +218,11 @@ def alembic_revision_mismatch_blocker(
     )
 
 
-async def _fingerprint_database_before_rename(dsn: str) -> FingerprintAttempt:
+async def _fingerprint_database_before_rename(settings: Settings, dsn: str) -> FingerprintAttempt:
     """Fingerprint the database that is about to be served, while it is not yet serving and
-    outside the rename — the result rides into the post-rename release record (M4)."""
-    engine = create_async_engine(dsn)
+    outside the rename — the result rides into the post-rename release record (M4). Uses the
+    app engine factory so the scan sees the same ``search_path`` (``x_extension`` = PostGIS)."""
+    engine = make_async_engine(settings, pg_dsn=dsn)
     try:
         async with engine.begin() as conn:
             return await fingerprint_for_activation(
@@ -460,7 +462,7 @@ async def execute_restore_hot_swap(
     if revision_block is not None and not req.allow_version_mismatch:
         msg = f"hot-swap schema mismatch (set allow_version_mismatch to override): {revision_block}"
         raise InvalidInputError(msg)
-    fingerprint_attempt = await _fingerprint_database_before_rename(restore_dsn)
+    fingerprint_attempt = await _fingerprint_database_before_rename(settings, restore_dsn)
 
     pre_swap_release_id = await _active_serving_release_id(engine)
     current = plan.current_database
@@ -679,7 +681,7 @@ async def execute_hot_swap_rollback(
     )
     pre_rollback_release_id = await _active_serving_release_id(engine)
     fingerprint_attempt = await _fingerprint_database_before_rename(
-        _dsn_for_database(settings.pg_dsn, previous)
+        settings, _dsn_for_database(settings.pg_dsn, previous)
     )
     meta = dict(audit_meta or {})
     base_payload = {

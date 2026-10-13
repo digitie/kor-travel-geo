@@ -31,13 +31,21 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.api.app import create_app
-from kortravelgeo.api.dataset_ref import DatasetRefCache
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.core.dataset_version import derive_data_token, derive_version_token
+from kortravelgeo.dto.common import Point
+from kortravelgeo.dto.reverse import ReverseInput
 from kortravelgeo.infra import data_fingerprint
-from kortravelgeo.infra.admin_repo import AdminRepository, _insert_dataset_snapshot_and_release
+from kortravelgeo.infra.admin_repo import (
+    _DATASET_VERSION_SELECT,
+    AdminRepository,
+    _insert_dataset_snapshot_and_release,
+)
+from kortravelgeo.infra.dataset_ref import DatasetRefCache
 from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.publication import load_job_publication_guard
 from kortravelgeo.loaders.postload import refresh_mv
 from kortravelgeo.settings import Settings
 from tests.integration._pg_guard import require_disposable_database
@@ -80,7 +88,8 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
         pytest.skip("set KTG_TEST_PG_DSN to a disposable PostgreSQL scratch DB")
-    eng = make_async_engine(Settings(pg_dsn=dsn))
+    # 60 s: a cold CI backend's first ST_Transform (PROJ load) can exceed the 5 s default.
+    eng = make_async_engine(Settings(pg_dsn=dsn, pg_statement_timeout_ms=60_000))
     try:
         await require_disposable_database(eng)
         async with eng.connect() as conn:
@@ -183,21 +192,15 @@ async def test_same_data_reactivation_keeps_the_token(engine: AsyncEngine) -> No
     assert (await _current(engine))[1] == second
 
 
-async def test_bulk_delivery_reload_with_new_surrogate_keys_keeps_the_token(
-    engine: AsyncEngine,
-) -> None:
-    rows = (
-        "INSERT INTO postal_bulk_delivery (zip_no, bd_mgt_sn, bulk_name, detail, loaded_at)"
-        " VALUES ('99001', '9900000000000000000000001', '대량A', '1동', now()),"
-        "        ('99002', '9900000000000000000000002', '대량B', NULL, now())"
-    )
-    await _exec(engine, rows)
+async def test_v1_only_tables_do_not_move_the_token(engine: AsyncEngine) -> None:
+    """postal_bulk_delivery/tl_kodis_bas are read only by the v1 zipcode endpoint (M1)."""
     before = await _activate(engine)
-    # the "same file loaded twice": rows deleted and re-inserted, bulk_id/loaded_at re-assigned
     await _exec(
         engine,
-        "DELETE FROM postal_bulk_delivery WHERE bd_mgt_sn LIKE '99%'",
-        rows.replace("now()", "now() + interval '1 hour'"),
+        "INSERT INTO postal_bulk_delivery (zip_no, bd_mgt_sn, bulk_name)"
+        " VALUES ('99001', '9900000000000000000000001', '대량A')",
+        "INSERT INTO tl_kodis_bas (bas_mgt_sn, bas_id, geom)"
+        f" VALUES ('99000001', '99001', {_SQUARE})",
     )
     after = await _activate(engine)
     assert before is not None and before == after
@@ -228,16 +231,6 @@ _SENSITIVITY_CASES: dict[str, tuple[str, str]] = {
         "INSERT INTO region_radius_parts (level, code, name, part_no, geom)"
         f" VALUES ('sigungu', '99110', '구군', 1, {_SQUARE})",
         "UPDATE region_radius_parts SET name = '신군' WHERE code = '99110'",
-    ),
-    "tl_kodis_bas": (
-        "INSERT INTO tl_kodis_bas (bas_mgt_sn, bas_id, geom)"
-        f" VALUES ('99000001', '99001', {_SQUARE})",
-        "UPDATE tl_kodis_bas SET bas_id = '99002' WHERE bas_mgt_sn = '99000001'",
-    ),
-    "postal_bulk_delivery": (
-        "INSERT INTO postal_bulk_delivery (zip_no, bd_mgt_sn, bulk_name)"
-        " VALUES ('99001', '9900000000000000000000001', '대량A')",
-        "UPDATE postal_bulk_delivery SET zip_no = '99009' WHERE bd_mgt_sn LIKE '99%'",
     ),
     "tl_sppn_makarea": (
         "INSERT INTO tl_sppn_makarea (sig_cd, makarea_id, makarea_nm, geom, source_file)"
@@ -516,10 +509,12 @@ async def test_fingerprint_runs_before_the_activation_lock(
     monkeypatch.setattr(data_fingerprint, "DATA_FINGERPRINT_SQL", _SLOW_SQL.format(seconds=3))
     finished: dict[str, float] = {}
 
+    releases: dict[str, Any] = {}
+
     async def activate(name: str, **kwargs: Any) -> None:
         conn: AsyncConnection
         async with engine.begin() as conn:
-            await _insert_dataset_snapshot_and_release(
+            _, releases[name] = await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
                 release_state="active",
@@ -537,19 +532,29 @@ async def test_fingerprint_runs_before_the_activation_lock(
     await task_a
     assert finished["b"] - started < 2.0, "B waited for A's fingerprint: it ran under the lock"
     assert finished["a"] > finished["b"]
+    # B activated while A was scanning, so A's fingerprint may predate B's data: A must not
+    # stamp it on the release that now supersedes B (H1).
+    assert releases["a"].data_token is None
+    assert releases["a"].notes == "data_fingerprint_failed: superseded_during_scan"
 
 
 # --- cache invalidation through the v2 API (T-325a acceptance (1), T-325b (5)) -----------------
 
 
-async def _v2(engine: AsyncEngine, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _cached_client(engine: AsyncEngine) -> AsyncAddressClient:
+    """Result cache on, stamp re-read on every request (no 10 s staleness in tests)."""
     client = AsyncAddressClient(
         engine=engine, settings=Settings(_env_file=None, cache_enabled=True)
     )
+    client._dataset_ref_cache = DatasetRefCache(ttl_s=0.0, failure_ttl_s=0.0)
+    return client
+
+
+async def _v2(engine: AsyncEngine, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    client = _cached_client(engine)
     app = create_app()
     app.dependency_overrides[get_client] = lambda: client
     app.dependency_overrides[require_public_api_key] = lambda: None
-    app.state.dataset_ref_cache = DatasetRefCache(ttl_s=0.0)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         response = await http_client.post(path, json=payload)
@@ -559,7 +564,9 @@ async def _v2(engine: AsyncEngine, path: str, payload: dict[str, Any]) -> dict[s
 
 
 async def _sppn_point_4326(engine: AsyncEngine) -> tuple[float, float]:
-    async with engine.connect() as conn:
+    async with engine.begin() as conn:
+        # the first ST_Transform in a fresh backend loads PROJ, which can exceed the 5 s default
+        await conn.execute(text("SET LOCAL statement_timeout = '60s'"))
         row = (
             await conn.execute(
                 text(
@@ -620,9 +627,7 @@ async def test_standalone_release_invalidates_cached_geocode(engine: AsyncEngine
     asserted directly, and the v2 stamp separately."""
     await _seed_makarea(engine)
     first_token = await _activate(engine)
-    client = AsyncAddressClient(
-        engine=engine, settings=Settings(_env_file=None, cache_enabled=True)
-    )
+    client = _cached_client(engine)
 
     async def area_name() -> str | None:
         response = await client._geocode_v1(_SPPN_QUERY)
@@ -683,3 +688,193 @@ async def _insert_release_without_fingerprint(engine: AsyncEngine) -> Any:
             {"id": snapshot.dataset_snapshot_id},
         )
     return snapshot, release
+
+
+# --- review round 1 (H1/H2/H3/M2/M3) -----------------------------------------------------------
+
+
+async def _wait_for_sleeping_scan(engine: AsyncEngine, seconds: int) -> None:
+    """Block until another session's fingerprint statement (with its injected pg_sleep) runs."""
+    needle = f"pg_sleep({seconds})"
+    for _ in range(200):
+        async with engine.connect() as conn:
+            running = await conn.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity"
+                    " WHERE state = 'active' AND pid <> pg_backend_pid()"
+                    "   AND position(:needle in query) > 0"
+                ),
+                {"needle": needle},
+            )
+        if running:
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("the delayed fingerprint scan never started")
+
+
+def _delayed(sql: str, seconds: int) -> str:
+    """The real fingerprint SQL, made to last ``seconds`` longer. Its snapshot is still taken
+    at statement start (READ COMMITTED), so data committed during the delay is not seen."""
+    delayed = sql.replace(
+        "WITH parts AS MATERIALIZED (",
+        f"WITH delay AS MATERIALIZED (SELECT pg_sleep({seconds}) AS z),\nparts AS MATERIALIZED (",
+        1,
+    ).replace(
+        "  FROM parts p CROSS JOIN fp\n", "  FROM parts p CROSS JOIN fp CROSS JOIN delay\n", 1
+    )
+    assert delayed != sql and "CROSS JOIN delay" in delayed
+    return delayed
+
+
+async def test_activation_superseded_during_its_scan_does_not_keep_a_stale_token(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H1: B changes data and activates between A's scan start and A's lock. A then becomes the
+    active release, so its token must describe the final data — or be absent — never the data
+    A's snapshot saw."""
+    real_sql = data_fingerprint.DATA_FINGERPRINT_SQL
+
+    async def fingerprint_now() -> str:
+        async with engine.connect() as conn:
+            row = (await conn.execute(text(real_sql))).mappings().first()
+        assert row is not None
+        return str(row["fingerprint"])
+
+    await _seed_makarea(engine)
+    await _activate(engine)
+    stale = await fingerprint_now()
+    monkeypatch.setattr(data_fingerprint, "DATA_FINGERPRINT_SQL", _delayed(real_sql, 3))
+
+    task_a = asyncio.ensure_future(
+        AdminRepository(engine).record_mv_refresh_release(release_kind="manual_rebuild")
+    )
+    await _wait_for_sleeping_scan(engine, 3)  # A's snapshot is taken
+    await _exec(engine, "UPDATE tl_sppn_makarea SET makarea_nm = '신구역' WHERE sig_cd = '99110'")
+    fresh = await fingerprint_now()
+    async with engine.begin() as conn:  # B: the load's own activation, fingerprinted correctly
+        await _insert_dataset_snapshot_and_release(
+            conn,
+            snapshot_state="released",
+            release_state="active",
+            release_kind="manual_rebuild",
+            source_set={},
+            row_counts={},
+            data_fingerprint=fresh,
+        )
+    _, a_release = await task_a
+
+    assert stale != fresh
+    version, token = await _current(engine)
+    assert version == derive_version_token(a_release.serving_release_id)  # A is active
+    assert token != derive_data_token(stale), "A stamped the data its scan saw, not the final data"
+    assert token in (None, derive_data_token(fresh))
+    assert a_release.notes is not None and "superseded_during_scan" in a_release.notes
+
+
+async def test_a_late_cache_write_under_the_old_release_is_never_served(
+    engine: AsyncEngine,
+) -> None:
+    """H2: an in-flight request computed on the old data writes its answer AFTER the
+    activation-time DELETE. Keyed by release, that row is unreachable under the new stamp."""
+    await _seed_makarea(engine)
+    await _activate(engine)
+    client = _cached_client(engine)
+    lon, lat = await _sppn_point_4326(engine)
+    old_ref = await client.dataset_ref()
+    old_answer = await client._reverse_geocode_v1(lon, lat, radius_m=200, dataset=old_ref)
+    assert "구구역" in str(old_answer.x_extension)
+
+    await _rename_makarea_and_release(engine)
+    assert await _cache_rows(engine) == 0
+    inp = ReverseInput(point=Point(x=lon, y=lat), radius_m=200)
+    late_key = client._reverse_cache_key(inp, sig_cd=None, bjd_cd=None, dataset=old_ref)
+    await client._store_reverse_cache(late_key, old_answer)
+    assert await _cache_rows(engine) == 1
+
+    body = await _v2(engine, "/v2/reverse", {"lon": lon, "lat": lat, "radius_m": 200})
+    assert "신구역" in str(body["candidates"]), "late stale cache row served under the new release"
+    assert body["dataset"]["version_token"] != old_ref.version_token if old_ref else True
+
+
+async def test_publication_guard_is_not_held_during_the_scan(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H3: while the fingerprint scans, the owning load_jobs row stays writable (lease renewal,
+    progress, cancel) — the guard's FOR UPDATE is taken only after the scan."""
+    job_id, run_id = "t325-guard-job", "t325-guard-run"
+    await _exec(
+        engine,
+        f"DELETE FROM load_jobs WHERE job_id = '{job_id}'",
+        "INSERT INTO load_jobs (job_id, kind, payload, state, executor, orchestrator_run_id)"
+        f" VALUES ('{job_id}', 'mv_refresh', '{{}}'::jsonb, 'running', 'dagster', '{run_id}')",
+    )
+    monkeypatch.setattr(data_fingerprint, "DATA_FINGERPRINT_SQL", _SLOW_SQL.format(seconds=3))
+    guard = load_job_publication_guard(
+        job_id=job_id, owner_run_id=run_id, cancel_event=asyncio.Event()
+    )
+    try:
+        task = asyncio.ensure_future(
+            AdminRepository(engine).record_mv_refresh_release(
+                release_kind="manual_rebuild", publication_guard=guard
+            )
+        )
+        await _wait_for_sleeping_scan(engine, 3)
+        # Renew the "lease" every 0.25 s until the activation finishes: no attempt may wait out
+        # a 1 s lock_timeout. Only the short post-scan publication window holds the row.
+        renewals = 0
+        while not task.done():
+            async with engine.begin() as conn:
+                await conn.execute(text("SET LOCAL lock_timeout = '1s'"))
+                await conn.execute(
+                    text("UPDATE load_jobs SET heartbeat_at = now() WHERE job_id = :id"),
+                    {"id": job_id},
+                )
+            renewals += 1
+            await asyncio.sleep(0.25)
+        assert renewals >= 5
+        _, release = await task
+        assert release.state == "active"
+    finally:
+        await _exec(engine, f"DELETE FROM load_jobs WHERE job_id = '{job_id}'")
+
+
+async def test_schema_drift_fails_open_before_scanning(engine: AsyncEngine) -> None:
+    """M2: a column the spec does not account for makes the fingerprint untrustworthy."""
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        try:
+            await conn.execute(text("ALTER TABLE tl_scco_li ADD COLUMN t325_extra TEXT"))
+            result = await data_fingerprint.compute_data_fingerprint(conn)
+        finally:
+            await trans.rollback()
+    assert result.fingerprint is None
+    assert result.error_code == "schema_drift:tl_scco_li"
+
+
+async def test_a_pre_0029_snapshot_table_is_tolerated(engine: AsyncEngine) -> None:
+    """M3': a database restored from a backup taken before 0029 has no data_fingerprint column;
+    activation and the dataset-version read must still work (token absent, reason in notes)."""
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        try:
+            await conn.execute(
+                text("ALTER TABLE ops.dataset_snapshots DROP COLUMN data_fingerprint")
+            )
+            _, release = await _insert_dataset_snapshot_and_release(
+                conn,
+                snapshot_state="released",
+                release_state="active",
+                release_kind="restore",
+                source_set={},
+                row_counts={},
+            )
+            row = (
+                await conn.execute(
+                    text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1")
+                )
+            ).mappings().first()
+        finally:
+            await trans.rollback()
+    assert release.data_token is None
+    assert release.notes == "data_fingerprint_failed: schema_missing"
+    assert row is not None and row["data_fingerprint"] is None

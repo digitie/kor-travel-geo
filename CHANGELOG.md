@@ -5,12 +5,13 @@
 ## [Unreleased]
 
 ### Added
-- **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 11표
-  (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_kodis_bas`·`postal_bulk_delivery`·
-  `tl_sppn_makarea`·`tl_spbd_buld_polygon`·`tl_sprd_manage`)의 내용 지문을 `ops.dataset_snapshots.data_fingerprint`
+- **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 9표
+  (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
+  `tl_sprd_manage`; v1 우편번호 전용 `postal_bulk_delivery`·`tl_kodis_bas`는 제외)의 내용 지문을 `ops.dataset_snapshots.data_fingerprint`
   (Alembic `0029_t325a_data_fingerprint`)에 저장하고 `data_token = "dd1-" + sha256(지문)[:32]`로 공개한다. 같은 데이터의
   재빌드·restore·rollback은 같은 토큰, 일변동·보조 표 단독 적재는 새 토큰이다. 지문은 10분 안에 못 끝나거나 실패하면
-  NULL로 활성화를 통과시키고(fail-open) `serving_releases.notes`에 `data_fingerprint_failed: <code>`를 붙인다.
+  NULL로 활성화를 통과시키고(fail-open) `serving_releases.notes`에 `data_fingerprint_failed: <code>`를 붙인다(`timeout`·
+  `schema_drift:<표>`·`superseded_during_scan`(스캔 중 다른 활성화)·`schema_missing`(0029 이전 DB)·`exception:<Class>`).
   `POST /v2/dataset/version`·`/v2/dataset/history`의 `DatasetVersionEntry.data_token`(지문 없는 릴리스는 생략)과 admin
   `ServingRelease.data_token`이 additive로 생겼다. 소비자 규약: `data_token` 동등성으로 판정, 없으면 판정 불가,
   `version_token`은 관측용.
@@ -21,6 +22,11 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+- **`geo_cache` 키에 활성 릴리스(`version_token`)가 들어간다(T-325, ADR-069 구현 기록 10).** 활성화 직후 in-flight
+  요청이 옛 답을 늦게 써도 새 릴리스에서는 닿지 않는다. 배포 직후 기존 캐시 행은 모두 miss다.
+- **hot-swap preflight가 restore DB의 Alembic revision 불일치를 거부한다(T-325, ADR-069 구현 기록 14).** 0029 이전
+  백업은 restore DB에 `alembic upgrade head` 뒤 swap한다(`allow_version_mismatch`로 우회 가능). hot-swap·rollback은
+  rename 전에 서빙될 DB를 2분 예산으로 지문한다.
 - **활성 릴리스마다 `geo_cache`(geocode·reverse 결과 캐시)를 비운다(T-325a, ADR-069 D6).** 기록과 같은 transaction에서
   지운다 — 지금까지는 `refresh_mv`만 비워서, MV refresh 없이 릴리스를 만드는 standalone 적재(SPPN 구역·우편번호·
   건물 SHP 등) 뒤에는 최대 30일 동안 옛 답이 캐시에서 나갔다. 활성화 직후 첫 조회는 캐시 miss다.

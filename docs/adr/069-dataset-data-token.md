@@ -90,7 +90,7 @@ data_fingerprint = md5(string_agg(t || ':' || coalesce(h, 0)::text, ',' ORDER BY
 data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 ```
 
-- 저장: `ops.dataset_snapshots.data_fingerprint TEXT NULL` — Alembic `0029_t325a_dataset_data_fingerprint`
+- 저장: `ops.dataset_snapshots.data_fingerprint TEXT NULL` — Alembic `0029_t325a_data_fingerprint`(원안 이름은 32자 초과 — 구현 기록 4)
   (저장소 관례 `NNNN_tNNN_slug`; 직전 head `0028_t319_source_month_manifest`) + `infra/sql.py:522-545`
   DDL + `sql/ddl/001_schema.sql:485` 사본(세 곳 동기).
 - 파생: `core/dataset_version.py`에 `DATA_TOKEN_PREFIX = "dd1-"`, `DATA_TOKEN_RE = ^dd1-[0-9a-f]{32}$`,
@@ -104,7 +104,7 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 ### D2 — 지문 표 집합은 손으로 고르지 않고 유도한다
 
 정의: **"v2 응답을 만드는 infra repo(`reverse_repo`·`zip_repo`·`geometry_repo`·`geocode_repo`·
-`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표):
+`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표 — 1차 리뷰 뒤 v1 전용 두 표를 빼 9표, 구현 기록 12):
 
 | 표 | 읽는 repo | 지문에 넣는 열 |
 |---|---|---|
@@ -362,6 +362,47 @@ hit에도 현재 토큰" 규칙과 어긋난다.
    안으로 이동, `notes` 접미 제거 — 18개 변형 모두 해당 통합 테스트가 실패함을 확인했다(PR 본문). lint는 가짜
    `JOIN tl_new_table`·유령 허용 항목·집합에서 표 제거에 빨갛고, 일반/`MATERIALIZED`/`NOT MATERIALIZED` CTE와
    `JOIN generate_series(` 추가에는 초록이다.
+
+### 구현 기록 — 적대 리뷰 1차(2026-10-13, PR #573 head `b559d3e` 대상 2명) 반영
+
+9. **(H1) 지문은 활성화 lock 앞에서 계산하되, lock 뒤에 낡았는지 다시 본다.** READ COMMITTED에서 스캔 snapshot은
+   lock보다 이르므로, 스캔 사이에 다른 활성화가 commit되면 더 새 데이터를 가진 릴리스를 옛 지문으로 덮을 수 있었다.
+   이제 스캔 직전에 활성 `serving_release_id`를 읽고(`FingerprintAttempt.active_release_id_before`), lock 뒤
+   `previous_release_id`와 다르면 지문을 버리고 `data_fingerprint_failed: superseded_during_scan`(NULL, 판정 불가)로
+   기록한다. lock 안 재계산은 하지 않는다 — lock(과 호출자의 다른 잠금)을 스캔 시간만큼 잡게 되기 때문이고, 드문 경합이며
+   복구는 D9 CLI다. 스캔 중 데이터만 바뀌고 활성화가 없었다면 그 적재가 곧 자기 활성화(자기 지문)로 이 릴리스를 대체한다.
+10. **(H2) `geo_cache` 키에 release를 넣는다.** 활성화 DELETE 직후 옛 데이터로 계산을 끝낸 in-flight 요청이 다시 쓴 행이
+    새 토큰 아래 30일 살아남는 창(결과(부정)에 "알고 받아들인다"로 적었던 것)을 닫는다. 키의 release는
+    `version_token`이고, v2 응답의 `dataset`과 **같은 `DatasetRef` 값**에서 온다 — 스탬프를 라우터 의존성에서
+    `AsyncAddressClient`로 옮겨, v2 메서드가 요청당 한 번 읽어 캐시 키와 응답에 함께 쓴다(`api/dataset_ref.py` 삭제 →
+    `infra/dataset_ref.py`). 활성화 DELETE는 이제 최적화일 뿐이다. v1 엔드포인트도 같은 키 규칙을 쓴다.
+11. **(H3) `record_mv_refresh_release`는 `publication_guard` 전에 스캔한다.** guard는 `load_jobs` 행을 `FOR UPDATE`로 잡고
+    `lock_timeout='5s'`를 transaction 끝까지 남긴다 — 그 안에서 스캔하면 cancel·`renew_lease`·`set_progress`가 스캔 내내
+    막히고(300 s lease 만료 → reconciler가 정상 job을 죽일 수 있음) 5 s lock_timeout이 스캔에 샌다. 스캔은 `mv_hash` 옆에서
+    하고 결과를 `fingerprint_attempt`로 넘긴다(실패해도 "계산했고 실패" 상태로 넘어가 `notes` 접미가 그대로 붙는다).
+12. **(M1) 지문 표는 9개다.** `zip_repo`는 v1 `/v1/address/zipcode` 전용이라(`client.zipcode` → `api/routers/zipcode.py`)
+    `postal_bulk_delivery`·`tl_kodis_bas`를 뺐다(`postal_pobox`를 뺀 것과 같은 이유). lint는 이제 `infra/*_repo.py` 전부를
+    스캔하고, 비v2 허용 목록(`admin_repo`·`file_inventory_repo`·`source_upload_repo`·`pobox_repo`·`zip_repo`, 각 사유)의
+    클래스가 v2 클라이언트 메서드에 나오지 않음을 함께 단언한다 — v2 경로에서 쓰이는 새 repo는 숨을 수 없다.
+13. **(M2) 스캔 전에 열을 대조한다.** `compute_data_fingerprint`가 같은 savepoint에서 `pg_attribute`를 읽어
+    "해시·요약·제외·드롭 열 = 실제 열"이 아니면 스캔하지 않고 `schema_drift:<table>`로 fail-open한다.
+14. **(M3') 0029 이전 백업 복원.** 읽기는 `to_jsonb(ds) ->> 'data_fingerprint'`로 열이 없어도 동작하고, 활성화는 열이
+    없으면 열 없이 INSERT하고 `schema_missing`을 `notes`에 붙인다. hot-swap preflight는 restore DB의 `alembic_version`이
+    serving DB와 다르면 rename 전에 거부한다(`allow_version_mismatch`로만 우회; 메시지가 `alembic upgrade head`를 안내).
+    **배포 노트**: 0029 이전 백업을 hot-swap하려면 restore DB에 먼저 `alembic upgrade head`를 돌린다; replace_current 복원은
+    열 없이 기록되며(토큰 없음) 그 뒤 `alembic upgrade head` + `ktgctl serving fingerprint-active`로 복구한다.
+15. **(M4) hot-swap·rollback은 rename 전에, 서빙될 DB를 2분 예산으로 지문한다**(`HOT_SWAP_FINGERPRINT_TIMEOUT`). 동기 admin
+    요청이 UI 프록시 300 s를 넘지 않게 하려는 상한이고, 넘으면 `timeout`으로 fail-open → backfill CLI. 앱 엔진 팩토리로
+    연결해 `search_path`(`x_extension` = PostGIS)가 같다 — `create_async_engine` 원 DSN이면 `ST_NPoints`가
+    `UndefinedFunction`이었다(라이브 hot-swap 왕복 테스트가 잡음).
+16. **(M5) `DatasetRefCache`는 실패를 1초 기억한다** — 원장 조회가 실패할 때 대기자가 lock 뒤에 줄지어 재시도하지 않는다.
+17. **(M6) CI `integration-postgis` job.** `postgis/postgis:16-3.5` 서비스 + `ktgctl init-db` + `alembic stamp head` 뒤
+    T-325 통합·lineage race·projection·hot-swap 왕복을 돌리고, junit에서 skip 0·수집 ≥ 35를 요구한다.
+18. **(L) 그 밖.** lint가 콤마 조인·`FROM ONLY`·`LATERAL`·schema 한정 이름을 보고, CTE 이름은 모듈 안에서만 뺀다(각각
+    빨강 케이스). `mv_geocode_text_search` 허용 근거(출처가 `mv_geocode_target` 하나)를 테스트로 고정. `string_agg` 정렬은
+    `COLLATE "C"` — 그래도 PostGIS 버전·바이트 순서가 바뀌면(odroid aarch64 이전 등) `Box2D` 텍스트·`ST_AsBinary`가 달라져
+    토큰이 한 번 바뀔 수 있다(ADR-070 D8과 같은 "전량 재계획 1회"). admin `ServingRelease.data_token`도 `dd1-` 패턴.
+    backfill CLI는 lock 대기·UPDATE·DELETE를 `statement_timeout 5min`으로 한다(세션 기본 5 s).
 
 ## 후속
 

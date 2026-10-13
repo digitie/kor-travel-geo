@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from kortravelgeo.dto.admin import (
@@ -66,6 +67,21 @@ async def _open_window(engine, confirmation: str, reason: str) -> None:
     )
 
 
+async def _set_alembic_revision(source_dsn: str, database: str, revision: str | None) -> None:
+    """Give ``database`` an alembic_version row, or drop the table (harness DBs have none)."""
+    engine = create_async_engine(_dsn_for_database(source_dsn, database))
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+            if revision is not None:
+                await conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+                await conn.execute(
+                    text("INSERT INTO alembic_version VALUES (:r)"), {"r": revision}
+                )
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
     skip_reason = missing_requirement()
@@ -79,6 +95,21 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
             # --- forward hot-swap -------------------------------------------------
             swap_conf = hot_swap_confirmation(h.current_database, h.restore_database)
             await _open_window(engine, swap_conf, "t246 hot-swap")
+            # T-325 (M3'): a restore DB on another schema revision is refused before any rename.
+            await _set_alembic_revision(h.source_dsn, h.restore_database, "0028_t319_older")
+            with pytest.raises(InvalidInputError, match="alembic revision mismatch"):
+                await execute_restore_hot_swap(
+                    engine,
+                    h.settings,
+                    RestoreHotSwapExecuteRequest(
+                        restore_database=h.restore_database,
+                        previous_alias=h.previous_alias,
+                        typed_confirmation=swap_conf,
+                        run_smoke_test=True,
+                    ),
+                )
+            assert await database_exists(h.source_dsn, h.restore_database) is True
+            await _set_alembic_revision(h.source_dsn, h.restore_database, None)
             swap = await execute_restore_hot_swap(
                 engine,
                 h.settings,
@@ -102,6 +133,8 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
             active = await AdminRepository(engine).list_serving_releases(limit=5, state="active")
             assert active and active[0].release_kind == "restore"
             assert active[0].serving_release_id == swap.serving_release_id
+            # T-325 (M4): fingerprinted before the rename and carried into the release record.
+            assert active[0].data_token is not None, active[0].notes
             swap_audits = await AdminRepository(engine).list_audit_events(
                 action="serving_release.hot_swap"
             )
@@ -130,6 +163,7 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
             rb_active = await AdminRepository(engine).list_serving_releases(limit=5, state="active")
             assert rb_active and rb_active[0].release_kind == "rollback"
             assert rb_active[0].serving_release_id == rollback.serving_release_id
+            assert rb_active[0].data_token is not None, rb_active[0].notes
             rb_audits = await AdminRepository(engine).list_audit_events(
                 action="serving_release.hot_swap_rollback"
             )

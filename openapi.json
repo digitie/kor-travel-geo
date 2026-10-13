@@ -10099,6 +10099,7 @@
           "data_token": {
             "anyOf": [
               {
+                "pattern": "^dd1-[0-9a-f]{32}$",
                 "type": "string"
               },
               {

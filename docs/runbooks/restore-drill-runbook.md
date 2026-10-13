@@ -79,6 +79,15 @@ ktgctl backup restore-drill --artifact-id <id> --base-db kor_travel_geo --jobs 4
 - 항상 `new_database` 모드 — `replace_current`(라이브 서빙 DB 교체)는 드릴에서 쓰지 않는다.
 - 성공/실패/예외 어느 경로든 `finally`에서 throwaway DB drop을 시도한다(drop 실패는 결과를 가리지 않고 `cleanup_ok=false`로 보고).
 
+## 0029 이전 백업 (T-325, ADR-069 구현 기록 14)
+
+`ops.dataset_snapshots.data_fingerprint`(Alembic `0029_t325a_data_fingerprint`)가 없는 백업을 서빙에 올릴 때:
+
+- **hot-swap**: preflight가 restore DB의 `alembic_version`이 serving DB와 다르면 rename 전에 거부한다. restore DB에
+  `KTG_PG_DSN=<restore DB DSN> alembic upgrade head`를 먼저 돌린다(`allow_version_mismatch`는 마지막 수단).
+- **replace_current 복원**: 열 없이 릴리스를 기록하고 `notes`에 `data_fingerprint_failed: schema_missing`을 남긴다
+  (`data_token` 없음 = 소비자 판정 불가). `alembic upgrade head` 뒤 `ktgctl serving fingerprint-active`로 복구한다.
+
 ## 연계
 
 - 라이브 round-trip(backup→restore→reconcile) 통합 검증: **T-244**.
