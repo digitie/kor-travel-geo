@@ -103,8 +103,9 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGELOG의 UI 항목). 모두 `feature branch + CI green` 뒤 머지.
 
 - [ ] **T-325a** — 데이터 지문·`data_token`·캐시 무효화·backfill CLI (규모 M) — **구현·검증 완료(draft PR #573)**;
-  남은 것: 머지·배포 → backfill(수용 기준 (4)). prod dry-run 실측(수용 기준 (3))은 2026-10-13 수행 — 성공 57.4 s(warm)·
-  103.4 s(page cache 15%), 50% 기준(300 s) 통과(ADR-069 구현 기록 2).
+  남은 것: 머지·배포 → backfill(수용 기준 (4)). prod dry-run 실측(수용 기준 (3))은 2026-10-13 수행 — 조용할 때 57.4 s·
+  103.4 s(50% = 300 s 안), IO 경합 중 485.8 s(81%, 성공). **소유자 결정(2026-10-13): 경합 시 fail-open 수용, 지렛대 추가 없음**
+  — 50% 기준은 조용한 시간 측정에 적용, 재검토 조건·운영 규칙은 ADR-069 구현 기록 "재실측" 문단.
 
   `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_data_fingerprint`, 직전 head
   `0028_t319_source_month_manifest`; `infra/sql.py` DDL + `sql/ddl/001_schema.sql` 사본) +

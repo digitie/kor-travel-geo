@@ -65,7 +65,11 @@ from kortravelgeo.infra.data_fingerprint import (
     compute_data_fingerprint,
     fingerprint_for_activation,
 )
-from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
+from kortravelgeo.infra.metrics import (
+    record_data_fingerprint_failure,
+    sql_fingerprint,
+    sql_operation,
+)
 from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
@@ -3206,6 +3210,13 @@ SELECT serving_release_id, dataset_snapshot_id
     if fingerprint_error is not None:
         suffix = f"data_fingerprint_failed: {fingerprint_error}"
         notes = f"{notes}; {suffix}" if notes else suffix
+        _LOGGER.warning(
+            "activation %s recorded without data_fingerprint (%s); repair with "
+            "`ktgctl serving fingerprint-active` once IO contention subsides",
+            release_kind,
+            fingerprint_error,
+        )
+        record_data_fingerprint_failure(error_code=fingerprint_error)
 
     # T-291e: self-complete rows whose own source_set carries no category/kind keys of its
     # own (form C — hot-swap/rollback metadata payloads) by resolving the lineage walk ONCE

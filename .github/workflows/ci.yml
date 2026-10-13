@@ -81,6 +81,25 @@ jobs:
         run: |
           ktgctl init-db
           alembic stamp head
+      - name: Run the head migration both ways (0029 really executes)
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+          python - <<'PY'
+          import asyncio
+          from sqlalchemy import text
+          from kortravelgeo.infra.engine import make_async_engine
+          async def main():
+              engine = make_async_engine()
+              async with engine.connect() as conn:
+                  found = await conn.scalar(text(
+                      "SELECT count(*) FROM information_schema.columns"
+                      " WHERE table_schema = 'ops' AND table_name = 'dataset_snapshots'"
+                      "   AND column_name = 'data_fingerprint'"))
+              await engine.dispose()
+              assert found == 1, found
+          asyncio.run(main())
+          PY
       - name: Integration suites
         run: |
           pytest -q -p no:cacheprovider -rs --junitxml=integration-junit.xml \
@@ -93,14 +112,28 @@ jobs:
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
-          suite = ET.parse("integration-junit.xml").getroot()
-          suite = suite if suite.tag == "testsuite" else suite.find("testsuite")
-          tests, skipped = int(suite.get("tests")), int(suite.get("skipped"))
-          failed = int(suite.get("failures")) + int(suite.get("errors"))
-          print(f"collected={tests} skipped={skipped} failed={failed}")
-          assert tests >= 35, f"only {tests} integration tests collected"
+          from collections import Counter
+          root = ET.parse("integration-junit.xml").getroot()
+          cases = list(root.iter("testcase"))
+          ran = Counter(
+              c.get("classname").rsplit(".", 1)[-1]
+              for c in cases
+              if c.find("skipped") is None
+          )
+          skipped = sum(1 for c in cases if c.find("skipped") is not None)
+          bad = sum(1 for c in cases if c.find("failure") is not None or c.find("error") is not None)
+          print(dict(ran), f"skipped={skipped} failed={bad}")
+          # Per-file floors: a whole module silently dropping out cannot hide behind the others.
+          floors = {
+              "test_t325_data_fingerprint": 30,
+              "test_serving_release_lineage_race": 2,
+              "test_dataset_version_projection": 3,
+              "test_backup_restore_hot_swap_roundtrip": 3,
+          }
+          for module, floor in floors.items():
+              assert ran[module] >= floor, f"{module}: {ran[module]} ran, expected >= {floor}"
           assert skipped == 0, f"{skipped} integration tests skipped"
-          assert failed == 0
+          assert bad == 0
           PY
 
   # The Dagster image installs the main lib together with kor-travel-geo-dagster in one resolve

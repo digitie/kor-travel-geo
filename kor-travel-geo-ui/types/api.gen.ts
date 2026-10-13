@@ -5097,6 +5097,11 @@ export interface components {
          */
         RestoreHotSwapExecuteRequest: {
             /**
+             * Allow Schema Revision Mismatch
+             * @default false
+             */
+            allow_schema_revision_mismatch: boolean;
+            /**
              * Allow Version Mismatch
              * @default false
              */

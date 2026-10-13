@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-13 (T-325 #573 적대 리뷰 1·2차 반영 + prod 재실측 + 소유자 결정, by claude)
+
+PR #573(draft)에 리뷰 두 차례를 반영했다(정본은 ADR-069 구현 기록 9~18). 위 T-325a+b 항목의 "50% 기준 통과"는 조용할 때 측정
+기준이며, 아래 재실측으로 경합 시에는 넘는다.
+
+**1차(head `b559d3e`, HIGH 3).** H1 — 스캔 snapshot이 lock보다 이르므로 스캔 전 활성 release를 읽고 lock 뒤 바뀌었으면 NULL +
+`superseded_during_scan`(NULL을 받는 쪽은 앞선 활성화를 대체하는 늦은 활성화 자신; 다음 활성화·backfill이 고침). H2 — `geo_cache`
+키에 `version_token`; 스탬프를 라우터에서 `AsyncAddressClient`로 옮겨 키와 응답 `dataset`이 같은 값(활성화 DELETE는 최적화가 됨).
+H3 — `record_mv_refresh_release`가 `publication_guard`(load_jobs FOR UPDATE + lock_timeout 5s) 전에 스캔. M1 — v1 전용
+`zip_repo` 표 둘을 빼 9표, lint가 `infra/*_repo.py` 전부 스캔. M2 — 스캔 전 `pg_attribute` 대조(`schema_drift:<표>`). M3' — 0029
+이전 DB 읽기·쓰기 내성(`schema_missing`), hot-swap Alembic revision preflight. M5 — 스탬프 조회 실패 1초 캐시. M6 — CI
+`integration-postgis`(postgis 16-3.5 서비스, 37건, skip 0 강제).
+
+**2차(head `4a8d7f03`, HIGH 없음).** M4 개정 — hot-swap·rollback은 restore DB(또는 이전 DB)의 활성 snapshot 지문을 **상속**하고,
+없을 때만 HOT_SWAP lock 안·rename 전에 2분 예산으로 스캔(대개 fail-open + backfill). Alembic preflight 우회 플래그를
+`allow_schema_revision_mismatch`로 분리. 스탬프 없으면 결과 캐시 읽기·쓰기 생략. lint의 v2 메서드 집합을 네 진입점에서 AST로 유도.
+fail-open 경고 로그 + `ktg_data_fingerprint_failures_total{reason}`. CI는 파일별 하한 + `alembic downgrade -1 && upgrade head`.
+빈틈 테스트: 실제 클라이언트 search·regions 스탬프, geocode 한 번 읽기(키=스탬프), 상속/스캔 위치/fail-open(hot-swap 왕복),
+0029 이전 repository 읽기. 라이브 hot-swap 왕복이 pre-rename 엔진의 `search_path` 누락(`UndefinedFunction`)을 잡았다.
+
+**재실측(9표 + 열 대조, 13:47Z).** 485.8 s 성공, drift 없음 — 단 n150 load 10~20·IO pressure 70~95%(다른 세션 작업). 조용할 때
+57/103 s. **소유자 결정**: 경합 시 fail-open 수용, 지렛대 추가 없음(활성화가 90일 2회로 드묾, 600 s 초과만 fail-open, NULL 비용은
+지연뿐, 남은 지렛대는 감지력을 깎음). 운영 규칙·재검토 조건은 ADR-069 "재실측" 문단.
+
+**검증.** n150 unit 전체·ruff·mypy·lint-imports·OpenAPI check 초록; throwaway PostGIS 통합 35 + hot-swap 왕복 3(API 이미지
+컨테이너, pg_dump 16.15); 일부러 빨갛게 — 1차 21개 변형 + 2차 M4 3개(상속 무시·rename 뒤 스캔·rollback 시도 미전달)와 M3' 엄격
+읽기, 스탬프 단위 2개 전부 빨강. CI 5 job 초록.
+
 ## 2026-10-13 (T-325a+b 구현 — 데이터셋 `data_token` + v2 `dataset` 필드, ADR-069 accepted, by claude)
 
 소유자가 ADR-069 추천안 4개를 모두 승인(서빙 내용 지문·fail-open·geometry 요약 지문·활성화마다 `geo_cache` 전체 삭제)해
@@ -26,7 +54,9 @@ snapshot이 그대로일 때만 씀), Alembic `0029_t325a_data_fingerprint`. T-3
 
 **prod 실측(n150, 읽기 전용, `systemd-run` unit, 배포 API 이미지 + PR 소스 마운트, DSN은 API 컨테이너 env에서 이름으로).**
 대상 heap+toast 6.98 GB. 1회 `to_jsonb` 600 s timeout → fail-open; 2회(명시 열) 204 s에 `out of shared memory`(53200) → fail-open;
-3회 57.4 s(warm); 4회 103.4 s(시작 시 page cache 상주 15%, 지문 3회와 동일 = 결정성). 50%(300 s) 기준 통과. 2회를 죽인 것은
+3회 57.4 s(warm); 4회 103.4 s(시작 시 page cache 상주 15%, 지문 3회와 동일 = 결정성). 50%(300 s) 기준 통과
+[정정 — 같은 날 아래 항목: 리뷰 반영 뒤 재실측 485.8 s(IO 경합 중)로 경합 시에는 넘는다; 소유자가 경합 시 fail-open을 수용].
+2회를 죽인 것은
 공용 PG lock table 고갈 — Map `feature-write` advisory lock이 2026-10-12 09Z부터 시간당 약 120건 `out of shared memory`를 낸다
 (geo 문제 아님, Map/Manager에 전달 필요; 지속되면 geo 활성화 지문도 가끔 fail-open).
 

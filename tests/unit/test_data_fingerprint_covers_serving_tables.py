@@ -14,8 +14,10 @@ lower-case ``from tl_x`` in SQL is invisible to this lint — keep SQL keywords 
 
 from __future__ import annotations
 
+import ast
 import inspect
 import re
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -39,21 +41,39 @@ NON_V2_REPO_MODULES: dict[str, tuple[str, str]] = {
     "zip_repo": ("ZipRepository", "v1 /v1/address/zipcode only (v2 zip comes from the MV)"),
 }
 
-#: AsyncAddressClient methods that build the four v2 lookup answers.
-V2_CLIENT_METHODS = (
-    "geocode",
-    "_geocode_v2",
-    "_geocode_v1",
-    "_geocode_supplemental_road_candidates",
-    "_geocode_road_or_region_candidates",
-    "_with_geocode_geometries",
-    "_enrich_candidates_with_geometry",
-    "reverse",
-    "_reverse_geocode_v1",
-    "search",
-    "_search_v1",
-    "regions_within_radius",
-)
+#: The four v2 lookup entry points; everything they reach through ``self.<method>`` is derived.
+V2_ENTRY_POINTS = ("geocode", "reverse", "search", "regions_within_radius")
+
+
+def v2_call_closure(class_source: str, entry_points: tuple[str, ...] = V2_ENTRY_POINTS) -> dict[
+    str, str
+]:
+    """Method name -> source for every method reachable from ``entry_points`` via ``self.X``."""
+    tree = ast.parse(textwrap.dedent(class_source))
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef))
+    methods = {
+        node.name: node
+        for node in cls.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    seen: set[str] = set()
+    todo = [name for name in entry_points if name in methods]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        for node in ast.walk(methods[name]):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "self"
+                and node.attr in methods
+            ):
+                todo.append(node.attr)
+    dedented = textwrap.dedent(class_source)
+    return {name: ast.get_source_segment(dedented, methods[name]) or "" for name in seen}
+
 
 _IDENT = r"[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?"
 _FROM_CLAUSE_RE = re.compile(
@@ -124,14 +144,37 @@ def test_non_v2_repo_allowlist_is_real_and_unused_by_v2_methods() -> None:
 
     present = {path.stem for path in _INFRA.glob("*_repo.py")}
     assert set(NON_V2_REPO_MODULES) <= present, "stale non-v2 repo entry"
-    v2_source = "\n".join(
-        inspect.getsource(getattr(AsyncAddressClient, name)) for name in V2_CLIENT_METHODS
-    )
+    closure = v2_call_closure(inspect.getsource(AsyncAddressClient))
+    # not vacuous: the walk reaches the cached v1 helpers and the search/geometry paths
+    assert {"_geocode_v1", "_reverse_geocode_v1", "_search_v1", "_geocode_v2"} <= set(closure)
+    v2_source = "\n".join(closure.values())
     for module, (class_name, reason) in NON_V2_REPO_MODULES.items():
         assert reason.strip()
         if module == "admin_repo":
             continue  # v2 reads the release stamp through dataset_ref(), not answer data
         assert class_name not in v2_source, f"{class_name} is used on a v2 path: scan {module}"
+
+
+def test_v2_call_closure_finds_a_repo_used_two_hops_down() -> None:
+    fake = """
+class Client:
+    async def geocode(self):
+        return await self._helper()
+
+    async def _helper(self):
+        return await self._deeper()
+
+    async def _deeper(self):
+        return ZipRepository(self.engine)
+
+    async def zipcode(self):
+        return PoboxRepository(self.engine)
+"""
+    closure = v2_call_closure(fake)
+    assert set(closure) == {"geocode", "_helper", "_deeper"}
+    joined = "\n".join(closure.values())
+    assert "ZipRepository" in joined
+    assert "PoboxRepository" not in joined
 
 
 def test_fingerprint_table_specs_are_unique_and_named() -> None:

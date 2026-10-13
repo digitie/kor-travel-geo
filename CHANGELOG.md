@@ -25,8 +25,10 @@
 - **`geo_cache` 키에 활성 릴리스(`version_token`)가 들어간다(T-325, ADR-069 구현 기록 10).** 활성화 직후 in-flight
   요청이 옛 답을 늦게 써도 새 릴리스에서는 닿지 않는다. 배포 직후 기존 캐시 행은 모두 miss다.
 - **hot-swap preflight가 restore DB의 Alembic revision 불일치를 거부한다(T-325, ADR-069 구현 기록 14).** 0029 이전
-  백업은 restore DB에 `alembic upgrade head` 뒤 swap한다(`allow_version_mismatch`로 우회 가능). hot-swap·rollback은
-  rename 전에 서빙될 DB를 2분 예산으로 지문한다.
+  백업은 restore DB에 `alembic upgrade head` 뒤 swap한다(새 요청 필드 `allow_schema_revision_mismatch`로만 우회).
+  hot-swap·rollback은 서빙될 DB의 활성 snapshot 지문을 상속하고, 없을 때만 rename 전에 2분 예산으로 스캔한다(넘으면 fail-open
+  → `ktgctl serving fingerprint-active`). 지문 없이 기록된 활성화는 경고 로그와 `ktg_data_fingerprint_failures_total{reason}`로
+  드러난다. 활성 릴리스 스탬프가 없으면 결과 캐시를 읽지도 쓰지도 않는다.
 - **활성 릴리스마다 `geo_cache`(geocode·reverse 결과 캐시)를 비운다(T-325a, ADR-069 D6).** 기록과 같은 transaction에서
   지운다 — 지금까지는 `refresh_mv`만 비워서, MV refresh 없이 릴리스를 만드는 standalone 적재(SPPN 구역·우편번호·
   건물 SHP 등) 뒤에는 최대 30일 동안 옛 답이 캐시에서 나갔다. 활성화 직후 첫 조회는 캐시 miss다.

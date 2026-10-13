@@ -8289,6 +8289,11 @@
         "additionalProperties": false,
         "description": "T-241 request to actually execute the ADR-036 rename hot-swap.\n\nRequires an active ``ops.maintenance_windows(kind='restore')`` whose confirmation\nequals ``typed_confirmation`` (= ``HOT_SWAP <current> FROM <restore>``). The swap runs\nunder the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).",
         "properties": {
+          "allow_schema_revision_mismatch": {
+            "default": false,
+            "title": "Allow Schema Revision Mismatch",
+            "type": "boolean"
+          },
           "allow_version_mismatch": {
             "default": false,
             "title": "Allow Version Mismatch",

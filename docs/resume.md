@@ -6,11 +6,14 @@
 
 - 🔶 **T-325a+b — 데이터셋 `data_token` + v2 `dataset` 필드 구현(PR-1)** (branch `feat/t325-data-token`, **draft PR #573**,
   미머지) — ADR-069 **accepted**(2026-10-13 소유자 승인, 추천안 4개). 구현에서 달라진 점은 ADR "구현 기록" 절(지문 열 명시
-  목록 = D1 지렛대 1, revision id `0029_t325a_data_fingerprint`, reverse 캐시 케이스는 `tl_sppn_makarea`). prod dry-run 실측
-  57.4 s(warm)·103.4 s(page cache 15%) — 50%(300 s) 기준 통과; 공용 PG lock table 고갈(Map `feature-write`) 때 한 번 fail-open.
-  상세 `journal.md` 2026-10-13 T-325a+b. **다음 한 작업**: PR #573 리뷰·CI green → 머지(소유자) → 배포(Alembic 0029) →
-  `ktgctl serving fingerprint-active`(backfill, `--dry-run` 없이) → `/v2/dataset/version`의 `current.data_token` 비NULL·
-  `geo_cache` 0행 확인 → 소비자(Map ADR-109·concierge ADR-49) 활성화 검증 → **T-325c**(UI 배지·api-reference 문서).
+  목록 = D1 지렛대 1, revision id `0029_t325a_data_fingerprint`, reverse 캐시 케이스는 `tl_sppn_makarea`; 적대 리뷰 1·2차 반영
+  — 9표, 낡은 지문 폐기, 캐시 키 release, guard 밖 스캔, hot-swap 지문 상속·Alembic preflight, CI `integration-postgis`).
+  prod dry-run: 조용할 때 57.4/103.4 s, IO 경합 중 485.8 s(성공) — **소유자 결정(2026-10-13): 경합 시 fail-open 수용, 지렛대 추가
+  없음**(재검토 조건·운영 규칙은 ADR-069 "재실측" 문단). 상세 `journal.md` 2026-10-13 T-325 두 항목.
+  **다음 한 작업 — 2단계 롤아웃**: (1) **#570 먼저** 머지·배포; (2) 그 뒤 **#573** 머지(소유자) → 배포: Alembic `upgrade head`(0029)
+  → **세 이미지 모두 재빌드**(API·Dagster·UI — 활성화 헬퍼가 API·Dagster 양쪽에서 돈다; UI는 `gen:types` 산출물) →
+  IO 경합이 가라앉은 때 `ktgctl serving fingerprint-active`(backfill, `--dry-run` 없이) → `/v2/dataset/version`의
+  `current.data_token` 비NULL 확인 → 소비자(Map ADR-109·concierge ADR-49) 활성화 검증 → **T-325c**(UI 배지·api-reference 문서).
 
 - 📝 **T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 설계 확정(문서만, Track 2)** (branch
   `docs/adr-070-odroid-host-full-load`) — [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md) proposed(미구현;

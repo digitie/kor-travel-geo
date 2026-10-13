@@ -194,6 +194,11 @@ DB_QUERY_CANCELLATIONS = _counter(
     "SQL queries cancelled by asyncio cancellation or PostgreSQL user cancellation.",
     ("operation", "query_fingerprint"),
 )
+DATA_FINGERPRINT_FAILURES = _counter(
+    "ktg_data_fingerprint_failures_total",
+    "Activations recorded without a data fingerprint (ADR-069 fail-open), by reason.",
+    ("reason",),
+)
 SOURCE_JANITOR_RUNS = _counter(
     "ktg_source_janitor_runs_total",
     "Upload-session janitor passes by outcome (ran or skipped on lock conflict).",
@@ -457,6 +462,12 @@ def record_db_query(*, statement: str, elapsed_s: float, status: str) -> None:
             operation=operation,
             query_fingerprint=fingerprint,
         ).inc()
+
+
+def record_data_fingerprint_failure(*, error_code: str) -> None:
+    """Count one fail-open activation; the label is the code's class (``timeout``,
+    ``schema_drift``, ``superseded_during_scan``, ``schema_missing``, ``exception``)."""
+    DATA_FINGERPRINT_FAILURES.labels(reason=error_code.split(":", 1)[0]).inc()
 
 
 def record_source_janitor_run(*, outcome: str) -> None:

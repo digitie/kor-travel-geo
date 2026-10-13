@@ -20,25 +20,28 @@ Run it with, e.g.:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from kortravelgeo.core.dataset_version import derive_data_token
 from kortravelgeo.dto.admin import (
     MaintenanceWindowCreate,
     RestoreHotSwapExecuteRequest,
     RestoreHotSwapRollbackRequest,
 )
 from kortravelgeo.exceptions import InvalidInputError
-from kortravelgeo.infra.admin_repo import AdminRepository
+from kortravelgeo.infra import hotswap as hotswap_module
+from kortravelgeo.infra.admin_repo import AdminRepository, _insert_dataset_snapshot_and_release
 from kortravelgeo.infra.concurrency import (
     AdvisoryLockKey,
     AdvisoryLockNamespace,
     ConcurrentExecutionError,
     cross_process_lock,
 )
+from kortravelgeo.infra.data_fingerprint import DataFingerprintResult
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.hotswap import (
     execute_hot_swap_rollback,
@@ -67,6 +70,25 @@ async def _open_window(engine, confirmation: str, reason: str) -> None:
     )
 
 
+async def _seed_active_release(h: Any, database: str, *, fingerprint: str) -> None:
+    """Give ``database`` an active release whose snapshot carries ``fingerprint`` (as a
+    restored backup of a T-325 database would)."""
+    engine = make_async_engine(h.settings, pg_dsn=_dsn_for_database(h.source_dsn, database))
+    try:
+        async with engine.begin() as conn:
+            await _insert_dataset_snapshot_and_release(
+                conn,
+                snapshot_state="released",
+                release_state="active",
+                release_kind="manual_rebuild",
+                source_set={},
+                row_counts={},
+                data_fingerprint=fingerprint,
+            )
+    finally:
+        await engine.dispose()
+
+
 async def _set_alembic_revision(source_dsn: str, database: str, revision: str | None) -> None:
     """Give ``database`` an alembic_version row, or drop the table (harness DBs have none)."""
     engine = create_async_engine(_dsn_for_database(source_dsn, database))
@@ -83,7 +105,9 @@ async def _set_alembic_revision(source_dsn: str, database: str, revision: str | 
 
 
 @pytest.mark.asyncio
-async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
+async def test_hot_swap_then_rollback_round_trip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     skip_reason = missing_requirement()
     if skip_reason:
         pytest.skip(skip_reason)
@@ -110,6 +134,21 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
                 )
             assert await database_exists(h.source_dsn, h.restore_database) is True
             await _set_alembic_revision(h.source_dsn, h.restore_database, None)
+
+            # T-325 (M4): the restored DB's own active snapshot already carries a fingerprint —
+            # the swap must inherit it, not rescan. The previous (original) DB carries none, so
+            # the rollback must scan it, before the rename (under its pre-rename name), and fail
+            # open when the scan fails.
+            await _seed_active_release(h, h.restore_database, fingerprint="a" * 32)
+            scanned: list[str] = []
+
+            async def spy_scan(conn: Any, **_: Any) -> DataFingerprintResult:
+                scanned.append(str(await conn.scalar(text("SELECT current_database()"))))
+                return DataFingerprintResult(
+                    fingerprint=None, table_hashes={}, elapsed_s=0.0, error_code="timeout"
+                )
+
+            monkeypatch.setattr(hotswap_module, "compute_data_fingerprint", spy_scan)
             swap = await execute_restore_hot_swap(
                 engine,
                 h.settings,
@@ -133,8 +172,9 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
             active = await AdminRepository(engine).list_serving_releases(limit=5, state="active")
             assert active and active[0].release_kind == "restore"
             assert active[0].serving_release_id == swap.serving_release_id
-            # T-325 (M4): fingerprinted before the rename and carried into the release record.
-            assert active[0].data_token is not None, active[0].notes
+            # T-325 (M4): inherited from the restored DB's snapshot, no scan.
+            assert active[0].data_token == derive_data_token("a" * 32), active[0].notes
+            assert scanned == []
             swap_audits = await AdminRepository(engine).list_audit_events(
                 action="serving_release.hot_swap"
             )
@@ -163,7 +203,11 @@ async def test_hot_swap_then_rollback_round_trip(tmp_path: Path) -> None:
             rb_active = await AdminRepository(engine).list_serving_releases(limit=5, state="active")
             assert rb_active and rb_active[0].release_kind == "rollback"
             assert rb_active[0].serving_release_id == rollback.serving_release_id
-            assert rb_active[0].data_token is not None, rb_active[0].notes
+            # nothing to inherit on the original DB: scanned under its pre-rename name, failed open
+            assert scanned == [h.previous_alias]
+            assert rb_active[0].data_token is None
+            assert rb_active[0].notes is not None
+            assert rb_active[0].notes.endswith("data_fingerprint_failed: timeout")
             rb_audits = await AdminRepository(engine).list_audit_events(
                 action="serving_release.hot_swap_rollback"
             )

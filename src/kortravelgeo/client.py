@@ -566,7 +566,10 @@ class AsyncAddressClient:
         if isinstance(dataset, _Unset):
             dataset = await self.dataset_ref()
         cache_key = self._geocode_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset)
-        if self._use_result_cache(fallback=fallback):
+        # No release stamp (no active release, or the ledger read failed): the answer cannot be
+        # keyed to a release, so the result cache is skipped both ways (ADR-069 구현 기록 10).
+        use_cache = self._use_result_cache(fallback=fallback) and dataset is not None
+        if use_cache:
             cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
             if cached is not None:
                 return _cached_geocode_response(GeocodeResponse.model_validate(cached))
@@ -575,7 +578,7 @@ class AsyncAddressClient:
             inp,
             region_hint=region_hint,
         )
-        if self._use_result_cache(fallback=fallback):
+        if use_cache:
             await self._store_geocode_cache(cache_key, response)
         if fallback != "api" or response.status != "NOT_FOUND" or region_hint is not None:
             return response
@@ -624,7 +627,8 @@ class AsyncAddressClient:
         if isinstance(dataset, _Unset):
             dataset = await self.dataset_ref()
         cache_key = self._reverse_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset)
-        if self._use_result_cache(fallback="local_only"):
+        use_cache = self._use_result_cache(fallback="local_only") and dataset is not None
+        if use_cache:
             cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
             if cached is not None:
                 return _cached_reverse_response(ReverseResponse.model_validate(cached))
@@ -633,7 +637,7 @@ class AsyncAddressClient:
             inp,
             region_hint=region_hint,
         )
-        if self._use_result_cache(fallback="local_only"):
+        if use_cache:
             await self._store_reverse_cache(cache_key, response)
         return response
 

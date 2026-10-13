@@ -878,3 +878,23 @@ async def test_a_pre_0029_snapshot_table_is_tolerated(engine: AsyncEngine) -> No
     assert release.data_token is None
     assert release.notes == "data_fingerprint_failed: schema_missing"
     assert row is not None and row["data_fingerprint"] is None
+
+
+async def test_pre_0029_reads_through_the_repository_are_tolerated(engine: AsyncEngine) -> None:
+    """M3': the column is really gone (committed), as in a restored pre-0029 database: the
+    stamp lookup, the external version entry and the admin release list still answer."""
+    await _activate(engine)
+    try:
+        await _exec(engine, "ALTER TABLE ops.dataset_snapshots DROP COLUMN data_fingerprint")
+        repo = AdminRepository(engine)
+        ref = await repo.current_dataset_ref()
+        assert ref is not None and ref[1] is None
+        current = await repo.current_dataset_version()
+        assert current is not None and current.data_token is None
+        releases = await repo.list_serving_releases(limit=3)
+        assert releases and releases[0].data_token is None
+    finally:
+        await _exec(
+            engine,
+            "ALTER TABLE ops.dataset_snapshots ADD COLUMN IF NOT EXISTS data_fingerprint TEXT",
+        )

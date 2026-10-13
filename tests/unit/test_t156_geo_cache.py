@@ -17,6 +17,7 @@ from kortravelgeo.dto.geocode import (
     GeocodeResult,
 )
 from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
+from kortravelgeo.dto.v2 import DatasetRef
 from kortravelgeo.infra.cache import GeoCacheRepository, make_cache_key
 from kortravelgeo.settings import Settings
 
@@ -63,6 +64,20 @@ def _reset_fake_cache(
     FakeGeoCacheRepository.set_error = set_error
     FakeGeoCacheRepository.gets = []
     FakeGeoCacheRepository.sets = []
+
+
+_STAMP = DatasetRef(version_token="dv1-" + "a" * 32, data_token="dd1-" + "b" * 32)
+
+
+@pytest.fixture(autouse=True)
+def _active_release_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests use fake engines; give the client a release stamp so the result cache —
+    keyed by release since T-325 — is in play (ADR-069 구현 기록 10)."""
+
+    async def stamp(self: AsyncAddressClient) -> DatasetRef | None:
+        return _STAMP
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", stamp)
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -270,5 +285,29 @@ async def test_cache_disabled_bypasses_geo_cache(
     response = await client._geocode_v1("서울특별시 강남구 테헤란로 152")
 
     assert response.status == "OK"
+    assert FakeGeoCacheRepository.gets == []
+    assert FakeGeoCacheRepository.sets == []
+
+
+@pytest.mark.asyncio
+async def test_no_release_stamp_skips_the_result_cache_both_ways(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a stamp the answer cannot be keyed to a release: neither read nor write."""
+    _reset_fake_cache(client_module._geocode_cache_payload(_geocode_response()))
+    monkeypatch.setattr(client_module, "GeoCacheRepository", FakeGeoCacheRepository)
+
+    async def no_stamp(self: AsyncAddressClient) -> DatasetRef | None:
+        return None
+
+    async def fake_core(*_args: Any, **_kwargs: Any) -> GeocodeResponse:
+        return _geocode_response()
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", no_stamp)
+    monkeypatch.setattr(client_module, "core_geocode", fake_core)
+    client = AsyncAddressClient(engine=object(), settings=_settings())  # type: ignore[arg-type]
+
+    await client._geocode_v1("서울특별시 강남구 테헤란로 152")
+
     assert FakeGeoCacheRepository.gets == []
     assert FakeGeoCacheRepository.sets == []

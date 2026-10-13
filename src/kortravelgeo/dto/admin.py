@@ -208,6 +208,9 @@ class RestoreHotSwapExecuteRequest(FrozenModel):
     maintenance_database: str = Field(default="postgres", min_length=1, max_length=63)
     run_smoke_test: bool = True
     allow_version_mismatch: bool = False
+    # T-325 (ADR-069 구현 기록 14): serve a restore DB whose Alembic revision differs from the
+    # serving DB's. Separate from the PostgreSQL/PostGIS version override on purpose.
+    allow_schema_revision_mismatch: bool = False
 
 
 class RestoreHotSwapResult(FrozenModel):

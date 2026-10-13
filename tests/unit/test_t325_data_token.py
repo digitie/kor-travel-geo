@@ -512,3 +512,82 @@ def test_openapi_publishes_dataset_on_the_four_lookup_responses() -> None:
         assert "dataset" not in components[name].get("required", [])
     assert set(components["DatasetRef"]["properties"]) == {"version_token", "data_token"}
     assert "data_token" in components["DatasetVersionEntry"]["properties"]
+
+
+@pytest.mark.asyncio
+async def test_real_client_search_and_regions_carry_the_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.dto.search import SearchInput, SearchResponse
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    ref = DatasetRef(version_token=_VERSION, data_token=_DATA)
+
+    async def fake_ref(self: AsyncAddressClient) -> DatasetRef | None:
+        return ref
+
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        from kortravelgeo.dto.common import ServiceMeta
+
+        return SearchResponse(
+            service=ServiceMeta(name="kor-travel-geo", operation="search"),
+            status="NOT_FOUND",
+            input=SearchInput(query=query),
+        )
+
+    async def fake_regions(self: GeometryRepository, **_: Any) -> dict[str, Any]:
+        return {}
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", fake_ref)
+    monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
+    monkeypatch.setattr(GeometryRepository, "regions_within_radius", fake_regions)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    assert (await client.search(query="테헤란로")).dataset == ref
+    assert (await client.regions_within_radius(lon=127.0, lat=37.5)).dataset == ref
+
+
+@pytest.mark.asyncio
+async def test_geocode_keys_the_cache_and_stamps_with_one_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The stamp is read once per request and that same value reaches the v1 cache path."""
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.dto.common import ServiceMeta
+    from kortravelgeo.dto.geocode import GeocodeInput, GeocodeResponse
+
+    refs = [
+        DatasetRef(version_token=_VERSION, data_token=_DATA),
+        DatasetRef(version_token=derive_version_token("00000000-0000-0000-0000-000000000009")),
+    ]
+    reads: list[DatasetRef] = []
+    seen: list[Any] = []
+
+    async def rotating_ref(self: AsyncAddressClient) -> DatasetRef | None:
+        reads.append(refs[len(reads) % 2])
+        return reads[-1]
+
+    async def fake_geocode_v1(
+        self: AsyncAddressClient, address: str, **kwargs: Any
+    ) -> GeocodeResponse:
+        seen.append(kwargs.get("dataset"))
+        return GeocodeResponse(
+            service=ServiceMeta(name="kor-travel-geo", operation="geocode"),
+            status="NOT_FOUND",
+            input=GeocodeInput(address=address),
+        )
+
+    async def no_fallback(self: AsyncAddressClient, inp: Any, address: str) -> Any:
+        return GeocodeV2Response(status="NOT_FOUND", input=inp)
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", rotating_ref)
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode_v1)
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_road_or_region_candidates", no_fallback)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(road_address="서울특별시 중구 세종대로 110")
+
+    assert len(reads) == 1
+    assert seen == [reads[0]]
+    assert response.dataset == reads[0]
