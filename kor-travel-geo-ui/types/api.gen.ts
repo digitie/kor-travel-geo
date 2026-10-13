@@ -3583,6 +3583,21 @@ export interface components {
             since_found?: boolean | null;
             status: components["schemas"]["Status"];
         };
+        /**
+         * DatasetRef
+         * @description The local dataset an answer was computed from (ADR-069 D7).
+         *
+         *     ``data_token`` is the change signal — compare it for equality; when it is absent the
+         *     consumer cannot judge whether data changed. ``version_token`` identifies the release and
+         *     is for observation only. Even when a candidate came from an external provider
+         *     (``candidates[].source`` is ``vworld``/``juso``), this is the version of the local dataset.
+         */
+        DatasetRef: {
+            /** Data Token */
+            data_token?: string | null;
+            /** Version Token */
+            version_token: string;
+        };
         /** DatasetSnapshot */
         DatasetSnapshot: {
             /** Alembic Revision */
@@ -3649,6 +3664,8 @@ export interface components {
              * @enum {string}
              */
             change_type: "full" | "delta";
+            /** Data Token */
+            data_token?: string | null;
             /** Reference Months */
             reference_months?: {
                 [key: string]: string;
@@ -4167,6 +4184,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
+            dataset?: components["schemas"]["DatasetRef"] | null;
             input: components["schemas"]["GeocodeV2Input-Output"];
             /** Query Id */
             query_id?: string;
@@ -4885,6 +4903,7 @@ export interface components {
         /** RegionsWithinRadiusResponse */
         RegionsWithinRadiusResponse: {
             center: components["schemas"]["RegionWithinRadiusCenter"];
+            dataset?: components["schemas"]["DatasetRef"] | null;
             /**
              * Emd
              * @default []
@@ -5077,6 +5096,11 @@ export interface components {
          *     under the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).
          */
         RestoreHotSwapExecuteRequest: {
+            /**
+             * Allow Schema Revision Mismatch
+             * @default false
+             */
+            allow_schema_revision_mismatch: boolean;
             /**
              * Allow Version Mismatch
              * @default false
@@ -5449,6 +5473,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
+            dataset?: components["schemas"]["DatasetRef"] | null;
             input: components["schemas"]["ReverseV2Input-Output"];
             /** Query Id */
             query_id?: string;
@@ -5784,6 +5809,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
+            dataset?: components["schemas"]["DatasetRef"] | null;
             input: components["schemas"]["SearchV2Input-Output"];
             /** Query Id */
             query_id?: string;
@@ -5826,6 +5852,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Data Token */
+            data_token?: string | null;
             /** Dataset Snapshot Id */
             dataset_snapshot_id: string;
             /** Mv Hash */

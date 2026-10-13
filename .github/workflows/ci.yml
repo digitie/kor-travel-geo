@@ -38,6 +38,104 @@ jobs:
           TEMP: /tmp
         run: pytest -q
 
+  # Opt-in PostGIS integration suites (T-325 review M6): the data_token fingerprint/cache/lock
+  # tests, the activation lineage race, the dataset-version projection and the live hot-swap
+  # round trip. They skip without KTG_TEST_PG_DSN, so this job provides one and then fails if
+  # anything was skipped or too few tests were collected (a silent skip is not coverage).
+  integration-postgis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kor_travel_geo_ci_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      KTG_PG_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/kor_travel_geo_ci_test
+      KTG_TEST_PG_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/kor_travel_geo_ci_test
+      TMPDIR: /tmp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install GDAL, PostgreSQL 16 client tools, zstd
+        timeout-minutes: 12
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Dpkg::Lock::Timeout=120 install -y --no-install-recommends \
+            gdal-bin libgdal-dev postgresql-client-16 zstd
+          pg_dump --version
+      - name: Install backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "gdal==$(gdal-config --version)"
+          python -m pip install -e ".[api,loaders,dev]"
+      - name: Bootstrap the scratch database (init-db + alembic stamp head)
+        run: |
+          ktgctl init-db
+          alembic stamp head
+      - name: Run the head migration both ways (0029 really executes)
+        run: |
+          alembic downgrade -1
+          alembic upgrade head
+          python - <<'PY'
+          import asyncio
+          from sqlalchemy import text
+          from kortravelgeo.infra.engine import make_async_engine
+          async def main():
+              engine = make_async_engine()
+              async with engine.connect() as conn:
+                  found = await conn.scalar(text(
+                      "SELECT count(*) FROM information_schema.columns"
+                      " WHERE table_schema = 'ops' AND table_name = 'dataset_snapshots'"
+                      "   AND column_name = 'data_fingerprint'"))
+              await engine.dispose()
+              assert found == 1, found
+          asyncio.run(main())
+          PY
+      - name: Integration suites
+        run: |
+          pytest -q -p no:cacheprovider -rs --junitxml=integration-junit.xml \
+            tests/integration/test_t325_data_fingerprint.py \
+            tests/integration/test_serving_release_lineage_race.py \
+            tests/integration/test_dataset_version_projection.py \
+            tests/integration/test_backup_restore_hot_swap_roundtrip.py
+      - name: Require real coverage (no skips, enough tests)
+        if: always()
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from collections import Counter
+          root = ET.parse("integration-junit.xml").getroot()
+          cases = list(root.iter("testcase"))
+          ran = Counter(
+              c.get("classname").rsplit(".", 1)[-1]
+              for c in cases
+              if c.find("skipped") is None
+          )
+          skipped = sum(1 for c in cases if c.find("skipped") is not None)
+          bad = sum(1 for c in cases if c.find("failure") is not None or c.find("error") is not None)
+          print(dict(ran), f"skipped={skipped} failed={bad}")
+          # Per-file floors: a whole module silently dropping out cannot hide behind the others.
+          floors = {
+              "test_t325_data_fingerprint": 30,
+              "test_serving_release_lineage_race": 2,
+              "test_dataset_version_projection": 3,
+              "test_backup_restore_hot_swap_roundtrip": 3,
+          }
+          for module, floor in floors.items():
+              assert ran[module] >= floor, f"{module}: {ran[module]} ran, expected >= {floor}"
+          assert skipped == 0, f"{skipped} integration tests skipped"
+          assert bad == 0
+          PY
+
   # The Dagster image installs the main lib together with kor-travel-geo-dagster in one resolve
   # (SQLAlchemy 2.1 since T-322 lifted the Dagster package's <2.1 pin). This job tests that
   # resolve: the main lib, the Dagster package, and a real Postgres-backed Dagster instance

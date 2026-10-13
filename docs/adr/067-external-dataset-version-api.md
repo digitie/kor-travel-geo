@@ -1,6 +1,6 @@
 # ADR-067: 데이터셋 버전 외부 공개는 serving release 파생 opaque 토큰 + 최소 공개 원칙으로 한다
 
-- 상태: accepted, amended by [ADR-069](069-dataset-data-token.md) (proposed, 2026-10-13)
+- 상태: accepted, amended by [ADR-069](069-dataset-data-token.md) (accepted 2026-10-13)
 - 날짜: 2026-08-26
 - 결정자: 사용자 요청, claude 설계
 - 관련: ADR-004(raw SQL repository)·ADR-017(batch DAG/MV swap)·ADR-033(ops 스키마)·
@@ -71,6 +71,10 @@ version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32
 계약의 전부는 다음 한 문장이다: **토큰이 같으면 서빙 데이터셋이 바뀌지 않았다(D0 성립 전제).
 역은 보증하지 않는다**(동일 데이터 재적재도 새 토큰 = 허용된 과잉 감지). 토큰은 불투명
 값으로, 동등 비교만 허용하고 파싱·정렬은 계약 위반이다.
+
+> **amend (ADR-069, accepted 2026-10-13).** 이 문장은 `version_token`에 대해 그대로 유효하다. "바뀌었는가"
+> 판정은 이제 서빙 내용 지문에서 파생한 `data_token`(`dd1-`)의 동등성으로 하고, `version_token`은 관측용이다
+> (ADR-069 D8). `data_token`은 역도 성립한다(같은 데이터 ⇒ 같은 토큰).
 
 기각한 대안:
 
@@ -211,7 +215,8 @@ releases 표가 이미 release 목록을 렌더하므로, 그 응답 DTO(`Servin
    fingerprinting 재료.
 5. 백업 정보 외부 노출 일체 — admin 전용.
 6. MV 내용 해시 — 전 행 스캔 비용 대비, release grain 토큰이 이미 (D0 성립 시) 거짓 음성 없는
-   신호.
+   신호. **→ ADR-069(accepted 2026-10-13)가 뒤집었다**: 소비자의 과잉 재처리 비용 때문에 서빙 표
+   내용 지문 기반 `data_token`을 additive로 더한다(`version_token` 의미는 그대로).
 7. v1 표면·healthz/readyz 버전 노출 — v1 동결(ADR-038), readyz는 keyless.
 8. Python 라이브러리 공개 메서드 — REST 전용(ADR-039).
 9. 키 스코프·per-key rate limit — 전용 admission scope(D3) + TTL 캐시 + 키 회수로 시작.

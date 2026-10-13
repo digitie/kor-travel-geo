@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 import pytest
 
 import kortravelgeo.client as client_module
+import kortravelgeo.infra.cache as cache_module
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import Point, ServiceMeta
@@ -16,6 +17,7 @@ from kortravelgeo.dto.geocode import (
     GeocodeResult,
 )
 from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
+from kortravelgeo.dto.v2 import DatasetRef
 from kortravelgeo.infra.cache import GeoCacheRepository, make_cache_key
 from kortravelgeo.settings import Settings
 
@@ -62,6 +64,20 @@ def _reset_fake_cache(
     FakeGeoCacheRepository.set_error = set_error
     FakeGeoCacheRepository.gets = []
     FakeGeoCacheRepository.sets = []
+
+
+_STAMP = DatasetRef(version_token="dv1-" + "a" * 32, data_token="dd1-" + "b" * 32)
+
+
+@pytest.fixture(autouse=True)
+def _active_release_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests use fake engines; give the client a release stamp so the result cache —
+    keyed by release since T-325 — is in play (ADR-069 구현 기록 10)."""
+
+    async def stamp(self: AsyncAddressClient) -> DatasetRef | None:
+        return _STAMP
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", stamp)
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -129,12 +145,16 @@ def test_geo_cache_repository_sql_contract() -> None:
     get_source = inspect.getsource(GeoCacheRepository.get_json)
     set_source = inspect.getsource(GeoCacheRepository.set_json)
     clear_source = inspect.getsource(GeoCacheRepository.clear)
+    clear_on_source = inspect.getsource(GeoCacheRepository.clear_on)
 
     assert "hit_count = hit_count + 1" in get_source
     assert "expires_at > now()" in get_source
     assert "ON CONFLICT (cache_key) DO UPDATE" in set_source
     assert "JSONB" in set_source
-    assert "DELETE FROM geo_cache" in clear_source
+    # T-325a (ADR-069 D6): one wipe statement shared by clear() and the in-transaction clear_on()
+    assert "self.clear_on(conn)" in clear_source
+    assert "text(_CLEAR_SQL)" in clear_on_source
+    assert cache_module._CLEAR_SQL == "DELETE FROM geo_cache"
 
 
 @pytest.mark.asyncio
@@ -265,5 +285,29 @@ async def test_cache_disabled_bypasses_geo_cache(
     response = await client._geocode_v1("서울특별시 강남구 테헤란로 152")
 
     assert response.status == "OK"
+    assert FakeGeoCacheRepository.gets == []
+    assert FakeGeoCacheRepository.sets == []
+
+
+@pytest.mark.asyncio
+async def test_no_release_stamp_skips_the_result_cache_both_ways(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a stamp the answer cannot be keyed to a release: neither read nor write."""
+    _reset_fake_cache(client_module._geocode_cache_payload(_geocode_response()))
+    monkeypatch.setattr(client_module, "GeoCacheRepository", FakeGeoCacheRepository)
+
+    async def no_stamp(self: AsyncAddressClient) -> DatasetRef | None:
+        return None
+
+    async def fake_core(*_args: Any, **_kwargs: Any) -> GeocodeResponse:
+        return _geocode_response()
+
+    monkeypatch.setattr(AsyncAddressClient, "dataset_ref", no_stamp)
+    monkeypatch.setattr(client_module, "core_geocode", fake_core)
+    client = AsyncAddressClient(engine=object(), settings=_settings())  # type: ignore[arg-type]
+
+    await client._geocode_v1("서울특별시 강남구 테헤란로 152")
+
     assert FakeGeoCacheRepository.gets == []
     assert FakeGeoCacheRepository.sets == []

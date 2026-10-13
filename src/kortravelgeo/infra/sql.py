@@ -541,7 +541,8 @@ CREATE TABLE IF NOT EXISTS ops.dataset_snapshots (
   source_match_set_id         UUID,
   created_by_job_id           TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  validated_at                TIMESTAMPTZ
+  validated_at                TIMESTAMPTZ,
+  data_fingerprint            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ops.serving_releases (

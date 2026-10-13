@@ -3837,6 +3837,34 @@
         "title": "DatasetHistoryResponse",
         "type": "object"
       },
+      "DatasetRef": {
+        "additionalProperties": false,
+        "description": "The local dataset an answer was computed from (ADR-069 D7).\n\n``data_token`` is the change signal — compare it for equality; when it is absent the\nconsumer cannot judge whether data changed. ``version_token`` identifies the release and\nis for observation only. Even when a candidate came from an external provider\n(``candidates[].source`` is ``vworld``/``juso``), this is the version of the local dataset.",
+        "properties": {
+          "data_token": {
+            "anyOf": [
+              {
+                "pattern": "^dd1-[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Token"
+          },
+          "version_token": {
+            "pattern": "^dv1-[0-9a-f]{32}$",
+            "title": "Version Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_token"
+        ],
+        "title": "DatasetRef",
+        "type": "object"
+      },
       "DatasetSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -4026,6 +4054,18 @@
             ],
             "title": "Change Type",
             "type": "string"
+          },
+          "data_token": {
+            "anyOf": [
+              {
+                "pattern": "^dd1-[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Token"
           },
           "reference_months": {
             "anyOf": [
@@ -5577,6 +5617,16 @@
             },
             "title": "Candidates",
             "type": "array"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "input": {
             "$ref": "#/components/schemas/GeocodeV2Input-Output"
@@ -7744,6 +7794,16 @@
           "center": {
             "$ref": "#/components/schemas/RegionWithinRadiusCenter"
           },
+          "dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "emd": {
             "default": [],
             "items": {
@@ -8229,6 +8289,11 @@
         "additionalProperties": false,
         "description": "T-241 request to actually execute the ADR-036 rename hot-swap.\n\nRequires an active ``ops.maintenance_windows(kind='restore')`` whose confirmation\nequals ``typed_confirmation`` (= ``HOT_SWAP <current> FROM <restore>``). The swap runs\nunder the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).",
         "properties": {
+          "allow_schema_revision_mismatch": {
+            "default": false,
+            "title": "Allow Schema Revision Mismatch",
+            "type": "boolean"
+          },
           "allow_version_mismatch": {
             "default": false,
             "title": "Allow Version Mismatch",
@@ -9020,6 +9085,16 @@
             },
             "title": "Candidates",
             "type": "array"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "input": {
             "$ref": "#/components/schemas/ReverseV2Input-Output"
@@ -9896,6 +9971,16 @@
             "title": "Candidates",
             "type": "array"
           },
+          "dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "input": {
             "$ref": "#/components/schemas/SearchV2Input-Output"
           },
@@ -10015,6 +10100,18 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "data_token": {
+            "anyOf": [
+              {
+                "pattern": "^dd1-[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Token"
           },
           "dataset_snapshot_id": {
             "title": "Dataset Snapshot Id",

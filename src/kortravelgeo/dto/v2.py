@@ -36,6 +36,27 @@ RegionWithinRadiusLevel = Literal["sido", "sigungu", "emd"]
 RegionWithinRadiusRelation = Literal["contains", "overlaps"]
 
 
+#: dv1- + 32 lowercase hex chars (kortravelgeo.core.dataset_version.VERSION_TOKEN_RE) — dto
+#: cannot import core (layered architecture), so the pattern is duplicated here deliberately.
+_VERSION_TOKEN_PATTERN = r"^dv1-[0-9a-f]{32}$"
+#: dd1- + 32 lowercase hex chars (core.dataset_version.DATA_TOKEN_RE), duplicated for the
+#: same reason (ADR-069 D1).
+_DATA_TOKEN_PATTERN = r"^dd1-[0-9a-f]{32}$"
+
+
+class DatasetRef(FrozenModel):
+    """The local dataset an answer was computed from (ADR-069 D7).
+
+    ``data_token`` is the change signal — compare it for equality; when it is absent the
+    consumer cannot judge whether data changed. ``version_token`` identifies the release and
+    is for observation only. Even when a candidate came from an external provider
+    (``candidates[].source`` is ``vworld``/``juso``), this is the version of the local dataset.
+    """
+
+    version_token: str = Field(pattern=_VERSION_TOKEN_PATTERN)
+    data_token: str | None = Field(default=None, pattern=_DATA_TOKEN_PATTERN)
+
+
 class BBoxV2(FrozenModel):
     """EPSG:4326 bounding box in external `(lon, lat)` order."""
 
@@ -159,6 +180,8 @@ class GeocodeV2Response(FrozenModel):
     input: GeocodeV2Input
     candidates: tuple[CandidateV2, ...] = ()
     region_hint_applied: RegionHint | None = None
+    # ADR-069 D7: the local dataset behind this answer; omitted when no release is active.
+    dataset: DatasetRef | None = None
 
 
 class ReverseV2Input(FrozenModel):
@@ -196,6 +219,8 @@ class ReverseV2Response(FrozenModel):
     input: ReverseV2Input
     candidates: tuple[CandidateV2, ...] = ()
     region_hint_applied: RegionHint | None = None
+    # ADR-069 D7: the local dataset behind this answer; omitted when no release is active.
+    dataset: DatasetRef | None = None
 
 
 class SearchV2Input(Page):
@@ -227,6 +252,8 @@ class SearchV2Response(FrozenModel):
     candidates: tuple[CandidateV2, ...] = ()
     total: int = Field(default=0, ge=0)
     region_hint_applied: RegionHint | None = None
+    # ADR-069 D7: the local dataset behind this answer; omitted when no release is active.
+    dataset: DatasetRef | None = None
 
 
 class RegionWithinRadiusCenter(FrozenModel):
@@ -285,11 +312,8 @@ class RegionsWithinRadiusResponse(FrozenModel):
     sido: tuple[RegionWithinRadiusItem, ...] = ()
     sigungu: tuple[RegionWithinRadiusItem, ...] = ()
     emd: tuple[RegionWithinRadiusItem, ...] = ()
-
-
-#: dv1- + 32 lowercase hex chars (kortravelgeo.core.dataset_version.VERSION_TOKEN_RE) — dto
-#: cannot import core (layered architecture), so the pattern is duplicated here deliberately.
-_VERSION_TOKEN_PATTERN = r"^dv1-[0-9a-f]{32}$"
+    # ADR-069 D7: the local dataset behind this answer; omitted when no release is active.
+    dataset: DatasetRef | None = None
 
 
 class DatasetVersionEntry(FrozenModel):
@@ -309,6 +333,9 @@ class DatasetVersionEntry(FrozenModel):
     # strips None, so the caller passes None explicitly whenever reference_months is absent
     # (admin_repo._dataset_version_entry), never a default here.
     reference_months_mixed: bool | None = None
+    # T-325a (ADR-069 D8): serving-content token. Equal ⇒ same data; omitted for a release
+    # without a fingerprint, which a consumer reads as "cannot judge" (not "changed").
+    data_token: str | None = Field(default=None, pattern=_DATA_TOKEN_PATTERN)
 
 
 class DatasetVersionInput(FrozenModel):

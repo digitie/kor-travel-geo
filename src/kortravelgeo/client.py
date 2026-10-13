@@ -122,6 +122,7 @@ from .dto.source import (
 from .dto.v2 import (
     BBoxV2,
     CandidateV2,
+    DatasetRef,
     GeocodeV2Input,
     GeocodeV2Response,
     RegionsWithinRadiusInput,
@@ -137,6 +138,7 @@ from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
 from .infra.cache import GeoCacheRepository, make_cache_key
+from .infra.dataset_ref import DatasetRefCache
 from .infra.db_capabilities import db_lifecycle_capabilities, require_db_lifecycle
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
@@ -201,6 +203,31 @@ def _cached_reverse_response(response: ReverseResponse) -> ReverseResponse:
     )
 
 
+class _Unset:
+    """Sentinel: "the caller did not resolve the dataset stamp; read it here"."""
+
+
+_UNSET = _Unset()
+
+
+def _with_dataset[
+    R: (GeocodeV2Response, ReverseV2Response, SearchV2Response, RegionsWithinRadiusResponse)
+](response: R, dataset: DatasetRef | None) -> R:
+    """Attach the active release's dataset stamp (ADR-069 D7) to a frozen v2 response."""
+    if dataset is None:
+        return response
+    return response.model_copy(update={"dataset": dataset})
+
+
+def _cache_release_key(dataset: DatasetRef | None) -> str | None:
+    """The release component of a ``geo_cache`` key (ADR-069 구현 기록 — H2).
+
+    The answer cache is keyed by the release whose data it was computed from, so a row written
+    late by an in-flight request (after the activation-time DELETE) is unreachable once the
+    stamp moves on; the DELETE is then only an optimisation."""
+    return None if dataset is None else dataset.version_token
+
+
 class AsyncAddressClient:
     """Async-only client facade for address geocoding operations."""
 
@@ -217,6 +244,18 @@ class AsyncAddressClient:
         self.engine: AsyncEngine | None = engine
         self._owns_engine = engine is None
         self.closed = True
+        self._dataset_ref_cache = DatasetRefCache()
+
+    async def dataset_ref(self) -> DatasetRef | None:
+        """The active release's ``{version_token, data_token}`` (process cache, TTL 10 s).
+
+        ``None`` when no release is active or the ledger read failed — the v2 responses then
+        omit ``dataset`` rather than failing (ADR-069 D7)."""
+
+        async def load() -> tuple[str, str | None] | None:
+            return await AdminRepository(self._engine()).current_dataset_ref()
+
+        return await self._dataset_ref_cache.get(load)
 
     async def __aenter__(self) -> Self:
         if self.engine is None:
@@ -257,6 +296,37 @@ class AsyncAddressClient:
         fallback: Literal["none", "api"] = "none",
         include_geometry: bool = False,
     ) -> GeocodeV2Response:
+        dataset = await self.dataset_ref()
+        response = await self._geocode_v2(
+            query,
+            road_address=road_address,
+            jibun_address=jibun_address,
+            keyword=keyword,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+            bbox=bbox,
+            limit=limit,
+            fallback=fallback,
+            include_geometry=include_geometry,
+            dataset=dataset,
+        )
+        return _with_dataset(response, dataset)
+
+    async def _geocode_v2(
+        self,
+        query: str | None,
+        *,
+        road_address: str | None,
+        jibun_address: str | None,
+        keyword: str | None,
+        sig_cd: str | None,
+        bjd_cd: str | None,
+        bbox: BBoxV2 | None,
+        limit: int,
+        fallback: Literal["none", "api"],
+        include_geometry: bool,
+        dataset: DatasetRef | None,
+    ) -> GeocodeV2Response:
         inp = GeocodeV2Input(
             query=query,
             road_address=road_address,
@@ -292,6 +362,7 @@ class AsyncAddressClient:
                 fallback="api" if fallback == "api" else "local_only",
                 sig_cd=sig_cd,
                 bjd_cd=bjd_cd,
+                dataset=dataset,
             )
         except InvalidAddressError:
             return await self._geocode_road_or_region_candidates(inp, address)
@@ -481,6 +552,7 @@ class AsyncAddressClient:
         fallback: FallbackMode = "local_only",
         sig_cd: str | None = None,
         bjd_cd: str | None = None,
+        dataset: DatasetRef | _Unset | None = _UNSET,
     ) -> GeocodeResponse:
         inp = GeocodeInput(
             address=address,
@@ -491,8 +563,13 @@ class AsyncAddressClient:
             fallback=fallback,
         )
         region_hint = self._region_hint(sig_cd, bjd_cd)
-        cache_key = self._geocode_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd)
-        if self._use_result_cache(fallback=fallback):
+        if isinstance(dataset, _Unset):
+            dataset = await self.dataset_ref()
+        cache_key = self._geocode_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset)
+        # No release stamp (no active release, or the ledger read failed): the answer cannot be
+        # keyed to a release, so the result cache is skipped both ways (ADR-069 구현 기록 10).
+        use_cache = self._use_result_cache(fallback=fallback) and dataset is not None
+        if use_cache:
             cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
             if cached is not None:
                 return _cached_geocode_response(GeocodeResponse.model_validate(cached))
@@ -501,7 +578,7 @@ class AsyncAddressClient:
             inp,
             region_hint=region_hint,
         )
-        if self._use_result_cache(fallback=fallback):
+        if use_cache:
             await self._store_geocode_cache(cache_key, response)
         if fallback != "api" or response.status != "NOT_FOUND" or region_hint is not None:
             return response
@@ -534,6 +611,7 @@ class AsyncAddressClient:
         radius_m: int | None = None,
         sig_cd: str | None = None,
         bjd_cd: str | None = None,
+        dataset: DatasetRef | _Unset | None = _UNSET,
     ) -> ReverseResponse:
         from .dto.common import Point
 
@@ -546,8 +624,11 @@ class AsyncAddressClient:
             radius_m=radius_m or self.settings.api_default_radius_m,
         )
         region_hint = self._region_hint(sig_cd, bjd_cd)
-        cache_key = self._reverse_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd)
-        if self._use_result_cache(fallback="local_only"):
+        if isinstance(dataset, _Unset):
+            dataset = await self.dataset_ref()
+        cache_key = self._reverse_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset)
+        use_cache = self._use_result_cache(fallback="local_only") and dataset is not None
+        if use_cache:
             cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
             if cached is not None:
                 return _cached_reverse_response(ReverseResponse.model_validate(cached))
@@ -556,7 +637,7 @@ class AsyncAddressClient:
             inp,
             region_hint=region_hint,
         )
-        if self._use_result_cache(fallback="local_only"):
+        if use_cache:
             await self._store_reverse_cache(cache_key, response)
         return response
 
@@ -573,6 +654,7 @@ class AsyncAddressClient:
         *,
         sig_cd: str | None,
         bjd_cd: str | None,
+        dataset: DatasetRef | None = None,
     ) -> str:
         return make_cache_key(
             "geocode",
@@ -585,6 +667,7 @@ class AsyncAddressClient:
                 "fallback": inp.fallback,
                 "sig_cd": sig_cd,
                 "bjd_cd": bjd_cd,
+                "release": _cache_release_key(dataset),
             },
         )
 
@@ -594,6 +677,7 @@ class AsyncAddressClient:
         *,
         sig_cd: str | None,
         bjd_cd: str | None,
+        dataset: DatasetRef | None = None,
     ) -> str:
         return make_cache_key(
             "reverse",
@@ -607,6 +691,7 @@ class AsyncAddressClient:
                 "radius_m": inp.radius_m,
                 "sig_cd": sig_cd,
                 "bjd_cd": bjd_cd,
+                "release": _cache_release_key(dataset),
             },
         )
 
@@ -670,6 +755,7 @@ class AsyncAddressClient:
             bjd_cd=bjd_cd,
             include_geometry=include_geometry,
         )
+        dataset = await self.dataset_ref()
         response = await self._reverse_geocode_v1(
             lon,
             lat,
@@ -678,14 +764,15 @@ class AsyncAddressClient:
             radius_m=inp.radius_m,
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
+            dataset=dataset,
         )
         result = reverse_v2_from_v1(inp, response)
         enriched = await self._enrich_candidates_with_geometry(
             result.candidates, include_geometry=inp.include_geometry
         )
-        if enriched is result.candidates:
-            return result
-        return result.model_copy(update={"candidates": enriched})
+        if enriched is not result.candidates:
+            result = result.model_copy(update={"candidates": enriched})
+        return _with_dataset(result, dataset)
 
     async def search(
         self,
@@ -711,6 +798,7 @@ class AsyncAddressClient:
             bbox=bbox,
             include_geometry=include_geometry,
         )
+        dataset = await self.dataset_ref()
         response = await self._search_v1(
             query,
             type="place" if type == "category" else type,
@@ -723,9 +811,9 @@ class AsyncAddressClient:
         enriched = await self._enrich_candidates_with_geometry(
             result.candidates, include_geometry=inp.include_geometry
         )
-        if enriched is result.candidates:
-            return result
-        return result.model_copy(update={"candidates": enriched})
+        if enriched is not result.candidates:
+            result = result.model_copy(update={"candidates": enriched})
+        return _with_dataset(result, dataset)
 
     async def regions_within_radius(
         self,
@@ -741,6 +829,7 @@ class AsyncAddressClient:
             radius_km=radius_km,
             levels=levels,
         )
+        dataset = await self.dataset_ref()
         regions = await GeometryRepository(self._engine()).regions_within_radius(
             lon=inp.lon,
             lat=inp.lat,
@@ -756,6 +845,7 @@ class AsyncAddressClient:
             sido=regions.get("sido", empty),
             sigungu=regions.get("sigungu", empty),
             emd=regions.get("emd", empty),
+            dataset=dataset,
         )
 
     async def _search_v1(

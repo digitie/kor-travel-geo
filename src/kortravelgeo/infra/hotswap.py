@@ -34,6 +34,12 @@ from kortravelgeo.infra.concurrency import (
     AdvisoryLockNamespace,
     cross_process_lock,
 )
+from kortravelgeo.infra.data_fingerprint import (
+    DataFingerprintResult,
+    FingerprintAttempt,
+    compute_data_fingerprint,
+)
+from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
@@ -173,6 +179,96 @@ def _hot_swap_blockers(
         if previous_alias in existing_databases:
             blockers.append(f"previous alias already exists in cluster: {previous_alias}")
     return blockers
+
+
+#: Budget for the fallback scan when the database about to be served carries no fingerprint of
+#: its own (e.g. a pre-0029 backup). Hot-swap and rollback run inside a synchronous admin request
+#: behind a 300 s UI proxy, so a cold scan is capped and a timeout fails open (NULL + notes) for
+#: ``ktgctl serving fingerprint-active`` to repair (ADR-069 구현 기록 15).
+HOT_SWAP_FINGERPRINT_TIMEOUT = "2min"
+
+_INHERITABLE_FINGERPRINT_SQL = """
+SELECT sr.serving_release_id::text AS serving_release_id,
+       to_jsonb(ds) ->> 'data_fingerprint' AS data_fingerprint
+  FROM ops.serving_releases sr
+  JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)
+ WHERE sr.state = 'active'
+ ORDER BY sr.activated_at DESC NULLS LAST, sr.created_at DESC
+ LIMIT 1
+"""
+
+
+async def _alembic_revision_for_dsn(dsn: str) -> str | None:
+    engine = create_async_engine(dsn)
+    try:
+        async with engine.connect() as conn:
+            if await conn.scalar(text("SELECT to_regclass('public.alembic_version')")) is None:
+                return None
+            value = await conn.scalar(text("SELECT version_num FROM alembic_version"))
+    finally:
+        await engine.dispose()
+    return None if value is None else str(value)
+
+
+def alembic_revision_mismatch_blocker(
+    *, current_revision: str | None, target_revision: str | None
+) -> str | None:
+    """Refuse to serve a database whose schema revision differs from the one being served.
+
+    A restored backup taken before a migration (e.g. pre-0029, without
+    ``ops.dataset_snapshots.data_fingerprint``) would otherwise be swapped in and break on the
+    first ledger write or read. Upgrade the restore database (``alembic upgrade head`` against
+    it) before the swap, or override with ``allow_schema_revision_mismatch``."""
+    if current_revision == target_revision:
+        return None
+    return (
+        f"alembic revision mismatch: serving={current_revision or 'none'} "
+        f"restore={target_revision or 'none'} — run `alembic upgrade head` on the restore "
+        "database first"
+    )
+
+
+async def _fingerprint_database_before_rename(settings: Settings, dsn: str) -> FingerprintAttempt:
+    """The fingerprint the database about to be served will carry (ADR-069 구현 기록 15).
+
+    **Inherited first.** The hash is an order-independent sum over rows, so a dump/restore keeps
+    it: a restored database's own active snapshot (and, for a rollback, the previous database's
+    last active snapshot) already holds the fingerprint of exactly this data. Only when that is
+    missing (a pre-0029 backup, a release that failed open) is the database scanned — capped at
+    :data:`HOT_SWAP_FINGERPRINT_TIMEOUT`, failing open for the backfill CLI. Runs while the
+    database is not yet serving, before the rename, under the caller's HOT_SWAP lock. The app
+    engine factory gives the scan the same ``search_path`` (``x_extension`` = PostGIS)."""
+    engine = make_async_engine(settings, pg_dsn=dsn)
+    try:
+        async with engine.begin() as conn:
+            row = (await conn.execute(text(_INHERITABLE_FINGERPRINT_SQL))).mappings().first()
+            if row is not None and row["data_fingerprint"]:
+                return FingerprintAttempt(
+                    result=DataFingerprintResult(
+                        fingerprint=str(row["data_fingerprint"]),
+                        table_hashes={},
+                        elapsed_s=0.0,
+                    ),
+                    active_release_id_before=str(row["serving_release_id"]),
+                )
+            before = None if row is None else str(row["serving_release_id"])
+            result = await compute_data_fingerprint(
+                conn, statement_timeout=HOT_SWAP_FINGERPRINT_TIMEOUT
+            )
+            return FingerprintAttempt(result=result, active_release_id_before=before)
+    except Exception as exc:  # the swap must not fail on its fingerprint (fail-open, D5)
+        _LOGGER.warning("pre-rename fingerprint failed", exc_info=True)
+        return FingerprintAttempt(
+            result=DataFingerprintResult(
+                fingerprint=None,
+                table_hashes={},
+                elapsed_s=0.0,
+                error_code=f"exception:{type(exc).__name__}",
+            ),
+            active_release_id_before=None,
+        )
+    finally:
+        await engine.dispose()
 
 
 def _current_database(settings: Settings) -> str:
@@ -386,6 +482,18 @@ async def execute_restore_hot_swap(
         )
         raise InvalidInputError(msg)
 
+    restore_dsn = _dsn_for_database(settings.pg_dsn, plan.restore_database)
+    revision_block = alembic_revision_mismatch_blocker(
+        current_revision=await _alembic_revision_for_dsn(settings.pg_dsn),
+        target_revision=await _alembic_revision_for_dsn(restore_dsn),
+    )
+    if revision_block is not None and not req.allow_schema_revision_mismatch:
+        msg = (
+            "hot-swap schema mismatch (set allow_schema_revision_mismatch to override): "
+            f"{revision_block}"
+        )
+        raise InvalidInputError(msg)
+
     pre_swap_release_id = await _active_serving_release_id(engine)
     current = plan.current_database
     restore = plan.restore_database
@@ -425,6 +533,7 @@ async def execute_restore_hot_swap(
         # the lock → the concurrent second call fails fast without touching any database.
         async with cross_process_lock(maintenance_engine, lock_key):
             await audit("serving_release.hot_swap", "started", dict(base_payload), resource_id=None)
+            fingerprint_attempt = await _fingerprint_database_before_rename(settings, restore_dsn)
             try:
                 await _execute_swap_with_undo(
                     maintenance_engine, current=current, restore=restore, previous=previous
@@ -482,6 +591,7 @@ async def execute_restore_hot_swap(
                 previous_alias=previous,
                 pre_swap_release_id=pre_swap_release_id,
                 maintenance_window_id=window.maintenance_window_id,
+                fingerprint_attempt=fingerprint_attempt,
             )
             await audit(
                 "serving_release.hot_swap",
@@ -634,6 +744,9 @@ async def execute_hot_swap_rollback(
     try:
         async with cross_process_lock(maintenance_engine, lock_key):
             await audit("started", dict(base_payload), resource_id=None)
+            fingerprint_attempt = await _fingerprint_database_before_rename(
+                settings, _dsn_for_database(settings.pg_dsn, previous)
+            )
             try:
                 # Reuse the forward primitive in the rollback direction: rename current→restore,
                 # then previous→current (with the same partial-failure undo).
@@ -669,6 +782,7 @@ async def execute_hot_swap_rollback(
                 previous_alias=previous,
                 pre_rollback_release_id=pre_rollback_release_id,
                 maintenance_window_id=window.maintenance_window_id,
+                fingerprint_attempt=fingerprint_attempt,
             )
             await audit(
                 "succeeded",

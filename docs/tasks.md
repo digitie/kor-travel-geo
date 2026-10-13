@@ -17,8 +17,8 @@
 
 - [ ] **T-326a~c** — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 proposed, Track 2;
   소유자 결정 대기) — 아래 "T-326" 섹션.
-- [ ] **T-325a~c** — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 proposed,
-  소유자 승인 대기) — 아래 "T-325" 섹션.
+- [ ] **T-325a~c** — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 accepted 2026-10-13;
+  a+b = draft PR #573 구현·검증 완료, 머지·배포·backfill 대기; c 남음) — 아래 "T-325" 섹션.
 - [ ] **T-324** — 공유 Dagster plane geo 선행 작업 잔여(머지 후 `ktdctl ensure geo` 재빌드 확인) —
   아래 "T-324" 섹션.
 
@@ -89,10 +89,11 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 성능 수용은 [`docs/t177h-benchmark-acceptance.md`](t177h-benchmark-acceptance.md)가
 정본이다.
 
-### T-325 — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 proposed, 미구현)
+### T-325 — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 accepted, a+b PR #573)
 
-결정 [ADR-069](adr/069-dataset-data-token.md)(소유자 승인 대기 **4개** — 설계 §12 #1·#2·#18 + §4a #11 캐시 전체 삭제;
-승인 시 ADR 상태를 `accepted`로, T-325a PR에서 한 줄; 그것이 T-325a 착수 조건), 배경 설계 요약
+결정 [ADR-069](adr/069-dataset-data-token.md)(2026-10-13 소유자 승인 — 4개 모두 추천안; 구현에서 달라진 점은 ADR
+"구현 기록" 절: 지문 열 명시 목록(D1 지렛대 1), revision id `0029_t325a_data_fingerprint`, reverse 캐시 케이스는
+`tl_sppn_makarea`), 배경 설계 요약
 [t291-dataset-version-external-api.md §7](t291-dataset-version-external-api.md).
 소비자 측 작업은 Map(ADR-109)·concierge(ADR-49) 각 저장소가 추적한다(코드 머지는 geo와 병렬 가능, 활성화 검증만 geo
 배포 뒤). 의존: a → b → c. PR 묶음: **PR-1 = a+b**
@@ -101,9 +102,12 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 없다, ADR-069 컨텍스트 7 — **+ `CHANGELOG.md`·journal·resume**, 사용자 가시 변경이라 AGENTS.md 작업 후 체크리스트가
 PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGELOG의 UI 항목). 모두 `feature branch + CI green` 뒤 머지.
 
-- [ ] **T-325a** — 데이터 지문·`data_token`·캐시 무효화·backfill CLI (규모 M)
+- [ ] **T-325a** — 데이터 지문·`data_token`·캐시 무효화·backfill CLI (규모 M) — **구현·검증 완료(draft PR #573)**;
+  남은 것: 머지·배포 → backfill(수용 기준 (4)). prod dry-run 실측(수용 기준 (3))은 2026-10-13 수행 — 조용할 때 57.4 s·
+  103.4 s(50% = 300 s 안), IO 경합 중 485.8 s(81%, 성공). **소유자 결정(2026-10-13): 경합 시 fail-open 수용, 지렛대 추가 없음**
+  — 50% 기준은 조용한 시간 측정에 적용, 재검토 조건·운영 규칙은 ADR-069 구현 기록 "재실측" 문단.
 
-  `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_dataset_data_fingerprint`, 직전 head
+  `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_data_fingerprint`, 직전 head
   `0028_t319_source_month_manifest`; `infra/sql.py` DDL + `sql/ddl/001_schema.sql` 사본) +
   `DATA_FINGERPRINT_TABLES`/`DATA_FINGERPRINT_SQL`(ADR-069 D2·D3 — surrogate key·적재 메타 제외) +
   `_insert_dataset_snapshot_and_release`가 `data_fingerprint` 인자 None이고 active면 지문 계산(`mv_hash`와 같은 규칙;
@@ -112,7 +116,7 @@ PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGE
   `GeoCacheRepository.clear_on(conn)`(D4~D6) + `derive_data_token`(`core/dataset_version.py`) +
   `DatasetVersionEntry.data_token`·admin `ServingRelease.data_token` + `ktgctl serving fingerprint-active [--dry-run]`(D9 —
   `--dry-run`은 헬퍼와 같은 `DATA_FINGERPRINT_SQL`·같은 10 min timeout).
-  - 수정 파일: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `alembic/versions/0029_t325a_dataset_data_fingerprint.py`(신규),
+  - 수정 파일: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `alembic/versions/0029_t325a_data_fingerprint.py`(신규),
     `src/kortravelgeo/infra/admin_repo.py`, `src/kortravelgeo/infra/cache.py`, `src/kortravelgeo/core/dataset_version.py`,
     `src/kortravelgeo/dto/v2.py`, `src/kortravelgeo/dto/admin.py`, `src/kortravelgeo/cli/main.py`,
     `tests/unit/test_data_fingerprint_covers_serving_tables.py`(신규), 통합 테스트, **`openapi.json`**(재export),
@@ -142,7 +146,8 @@ PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGE
     `postload.py` diff 0. (7) `python scripts/export_openapi.py --check`·UI `gen:types` diff 0 초록(PR-1 CI 게이트).
     (8) 지문 SELECT가 `pg_advisory_xact_lock` 앞에서 실행됨을 단언(지문 SQL 지연 주입 + 동시 두 번째 활성화 호출이
     지문 시간 동안 lock 대기 없이 진행 — 통합 테스트).
-- [ ] **T-325b** — v2 응답 최상위 `dataset{version_token, data_token}` (규모 S, T-325a 뒤)
+- [ ] **T-325b** — v2 응답 최상위 `dataset{version_token, data_token}` (규모 S, T-325a 뒤) — **구현 완료(PR #573에
+  함께)**; 수용 기준 (3) reverse p50 회귀 측정은 미수행(PR 본문 미검증 항목).
 
   `DatasetRef` DTO + 네 응답 클래스(`GeocodeV2Response`·`ReverseV2Response`·`SearchV2Response`·
   `RegionsWithinRadiusResponse`)에 `dataset: DatasetRef | None = None` + `api/dataset_ref.py` TTL 10 s 의존성 +

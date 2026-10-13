@@ -1230,6 +1230,51 @@ def serving_hot_swap_plan(
     asyncio.run(run())
 
 
+@serving_app.command("fingerprint-active")
+def serving_fingerprint_active(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Read-only: run the fingerprint query and report timing; store and clear nothing.",
+    ),
+) -> None:
+    """Compute the active release's data fingerprint (ADR-069 D9).
+
+    Without --dry-run, stores it on the active snapshot and clears geo_cache (one-time backfill
+    for the release that was active before T-325a). --dry-run runs the same SQL under the same
+    10 min timeout in a READ ONLY transaction and prints the elapsed time and per-table hashes.
+    """
+
+    from kortravelgeo.core.dataset_version import derive_data_token
+
+    async def run() -> int:
+        async with AsyncAddressClient() as client:
+            result = await AdminRepository(client._engine()).fingerprint_active_release(
+                dry_run=dry_run
+            )
+        if result is None:
+            typer.echo(json.dumps({"dry_run": dry_run, "active_release": False}))
+            return 1
+        typer.echo(
+            json.dumps(
+                {
+                    "dry_run": dry_run,
+                    "active_release": True,
+                    "elapsed_s": round(result.elapsed_s, 3),
+                    "error_code": result.error_code,
+                    "data_fingerprint": result.fingerprint,
+                    "data_token": derive_data_token(result.fingerprint),
+                    "stored": not dry_run and result.fingerprint is not None,
+                    "table_hashes": dict(result.table_hashes),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0 if result.fingerprint is not None else 1
+
+    raise typer.Exit(asyncio.run(run()))
+
+
 def _sido_dirs(root: Path) -> tuple[Path, ...]:
     if not root.exists():
         typer.echo(f"path does not exist: {root}", err=True)
