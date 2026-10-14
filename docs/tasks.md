@@ -158,7 +158,7 @@ PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGE
     (3) reverse p50 회귀 < 5% — `scripts/benchmark_api_latency.py` reverse 케이스, PR 베이스 commit 대비 같은
     로컬 환경; (4) 외부 fallback(vworld·juso) 응답에도 로컬 토큰 + `candidates[].source≠local`; (5) 캐시 hit 응답에도 현재
     토큰; (6) `export_openapi.py --check`·`gen:types` diff 0 초록.
-- [ ] **T-325c** — admin UI 화면·api-reference 문서·CHANGELOG (규모 S, T-325b 뒤)
+- [ ] **T-325c** — admin UI 화면·api-reference 문서·CHANGELOG (규모 S, T-325b 뒤). **진행 중(2026-10-14):** 표·상세·규약 문서·회귀 구현. 두 리뷰와 운영 live UI/backfill 확인은 후속으로 완료 체크하지 않는다.
 
   OpsPanel releases 표에 `data_token` 열("데이터 동일"·"지문 없음" 배지, `notes` 접미 툴팁, 연속 2회 지문 없음
   배너) + `DatasetVersionDetailDialog` live preview + 문서. (OpenAPI 재export·`gen:types`·API CHANGELOG 항목은 PR-1에서

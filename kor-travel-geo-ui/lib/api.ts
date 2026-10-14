@@ -556,6 +556,7 @@ export type DatasetSnapshot = {
 
 export type ServingRelease = {
   serving_release_id: string;
+  previous_serving_release_id?: string | null;
   dataset_snapshot_id: string;
   state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
   release_kind: "full_load" | "daily_delta" | "restore" | "manual_rebuild" | "rollback";
@@ -566,6 +567,8 @@ export type ServingRelease = {
   // T-291d additive fields — the same public projection POST /v2/dataset/version exposes
   // externally, surfaced here read-only for admin observation (ADR-067).
   version_token?: string | null;
+  data_token?: string | null;
+  notes?: string | null;
   change_type?: "full" | "delta" | null;
   reference_months?: Record<string, string> | null;
   reference_months_mixed?: boolean | null;

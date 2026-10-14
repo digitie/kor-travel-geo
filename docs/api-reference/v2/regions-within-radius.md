@@ -17,6 +17,18 @@
 
 `levels`는 입력 순서를 유지하되 중복은 제거한다. 빈 배열은 허용하지 않는다.
 
+## 응답 데이터셋 지문
+
+최상위 선택 필드 `dataset`은 이 응답을 만든 로컬 데이터셋의 `version_token`과 `data_token`을 제공합니다.
+활성 릴리스가 없거나 스탬프를 읽지 못하면 `dataset`이 생략되며 지문이 없으면 `data_token`이 생략됩니다.
+외부 출처 후보가 섞여도 로컬 데이터셋 기준입니다. 소비자는 `data_token` 동등성으로만 비교하고,
+없으면 판정 불가로 처리합니다. `version_token`은 관측용이며 다른 릴리스라도 데이터는 같을 수 있습니다.
+운영 반영과 기존 활성 릴리스 backfill 여부는 별도 확인합니다.
+
+```json
+{"dataset":{"version_token":"dv1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","data_token":"dd1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+```
+
 ## 출력
 
 다른 v2 응답과 같은 공통 header `{status, query_id, input}` 위에 결과를 둔다(T-268, ADR-060 §1):

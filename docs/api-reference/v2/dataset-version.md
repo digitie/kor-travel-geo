@@ -8,18 +8,18 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
 
 모든 응답에 `Cache-Control: no-store`가 붙는다([v2 공통 규약](README.md) 참조). 권장 폴링 주기는 **60초 이상**이다.
 
-## 계약 4항
+## 계약 4항 (ADR-069 소비자 규약 반영)
 
-1. `version_token`은 불투명 값이다 — **동등 비교만 허용**하고 파싱·정렬은 계약 위반이다.
-2. 토큰이 같으면 서빙 데이터셋이 바뀌지 않았다. **역은 보증하지 않는다** — 동일 데이터를
-   재적재해도 새 토큰이 발급될 수 있다(허용된 과잉 감지, 거짓 음성보다 안전한 방향).
-3. `reference_months`는 도출에 실패하면 응답에서 생략될 수 있으며(생략 시 토큰만이 신뢰
-   신호), 비단조다(복원 후 과거 월로 역행 가능).
-4. 이력 보존은 **보증하지 않는다** — hot-swap 복원 시 백업 시점 이후 이력이 소멸할 수 있다.
+1. `version_token`과 `data_token`은 불투명 값이다. 파싱·정렬하지 않는다.
+2. 소비자의 데이터 비교는 `data_token` 동등성으로만 한다. 같으면 데이터 동일, 다르면 변경이며
+   지문이 없으면 판정 불가다. `version_token`은 릴리스 관측용이고 동일 데이터 재적재에도 바뀔 수 있다.
+3. `reference_months`는 도출에 실패하면 생략될 수 있고 비단조다(복원 후 과거 월로 역행 가능).
+   기준월이 없어도 지문이 있으면 비교할 수 있으며 지문까지 없으면 판정 불가다.
+4. 이력 보존은 보증하지 않는다. hot-swap 복원 시 백업 시점 이후 이력이 소멸할 수 있다.
 
 ## `POST /v2/dataset/version`
 
-폴링 대상 endpoint다. `known_version`을 함께 보내면 변경 여부를 판정해 응답한다.
+폴링 대상 endpoint다. `known_version`을 함께 보내면 릴리스 관측상 변경 여부를 응답한다. 데이터 동일성은 별도 `data_token`으로 비교한다.
 
 ### 입력
 
@@ -39,6 +39,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   "known_version_found": false,
   "current": {
     "version_token": "dv1-9f31c8ab02de47f6a1b5c033e8d21c70",
+    "data_token": "dd1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "activated_at": "2026-08-20T03:12:45+09:00",
     "change_type": "full",
     "reference_months": {
@@ -56,8 +57,8 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   조회만 하는 호출이다.
 - `changed`: `known_version`이 현재 토큰과 다르면 `true`.
 - `known_version_found`: 그 토큰이 현재 원장(활성+비활성 이력 포함)에 남아 있으면 `true`.
-  `false`면 이력이 리셋됐다는 뜻(복원 등)이며 **전체 재동기화** 규약이다.
-- `change_type`: `"full"`(전체 재동기화 필요) 또는 `"delta"`(증분 갱신 가능) 2종뿐이다.
+  `false`면 해당 릴리스 이력을 찾지 못했다는 뜻이다(복원 등). 데이터 변경이나 재동기화 여부를 이 값만으로 판정하지 않는다.
+- `change_type`: `"full"` 또는 `"delta"` 릴리스 이력 종류다. 소비자의 데이터 동일성 신호는 `data_token`이다.
 - `reference_months`: 원천별 `YYYYMM` map. 키 어휘는 `juso`/`parcel_link`/`locsum`/`navi`/
   `shp`/`roadaddr_entrance`/`sppn_makarea`/`pobox`로 고정이다(`pobox`는 현재 어떤 writer도
   방출하지 않는 예약 키). 값이 없는 필드는 REST 응답에서 생략된다(`null` 아님).
@@ -83,7 +84,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   "input": { "limit": 20 },
   "since_found": true,
   "entries": [
-    { "version_token": "dv1-9f31…", "activated_at": "2026-08-20T03:12:45+09:00",
+    { "version_token": "dv1-9f31…", "data_token": "dd1-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "activated_at": "2026-08-20T03:12:45+09:00",
       "change_type": "full",
       "reference_months": { "juso": "202607" }, "reference_months_mixed": false },
     { "version_token": "dv1-77aa…", "activated_at": "2026-07-19T02:41:03+09:00",
@@ -100,20 +101,13 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
 - `next_cursor`: 다음 페이지가 있을 때만 포함. 마지막 페이지면 생략.
 - entry 모델은 `/v2/dataset/version`의 `current`와 동일하다.
 
-## 소비자 프로토콜
+## 소비자 프로토콜 (ADR-069 accepted)
 
-1. `known_version`을 포함해 폴링(≥60초). `changed:false` → 무동작.
-2. `changed:true, known_version_found:true` → `history`를 `since_version`으로 소급, 각
-   entry의 `change_type`별로 갱신(`delta`=증분, `full`=전체) 후 새 토큰을 저장.
-3. `changed:true, known_version_found:false` → 전체 재동기화 후 새 토큰 저장.
-4. 저장한 토큰은 불투명 값으로만 취급한다 — 위 "계약 4항" 참조.
+코드에는 `data_token` 계약이 구현됐습니다. 운영 배포와 기존 활성 릴리스의 지문 backfill은 별도 확인합니다.
+소비자는 `data_token` 동등성으로만 데이터 변경을 판정하고 없으면 판정 불가입니다.
+`version_token`과 `change_type`은 관측·이력용이며 `known_version`에는 계속 `version_token`을 보냅니다.
 
-### 예정(ADR-069 proposed, 미구현) — `data_token` 소비자 규약
-
-> 아래는 [ADR-069](../../adr/069-dataset-data-token.md)가 수용·구현(T-325a~c)되면 적용되는 규약이다.
-> **현재 응답에는 `data_token`이 없다.** 위 "소비자 프로토콜"이 지금의 규약이다.
-
-- entry(`/v2/dataset/version`의 `current`·`/v2/dataset/history`의 `entries[]`)에 `data_token: string`이 **additive**로 더해진다 — 형식
+- entry(`/v2/dataset/version`의 `current`·`/v2/dataset/history`의 `entries[]`)에 `data_token: string`이 **additive**로 포함된다 — 형식
   `^dd1-[0-9a-f]{32}$`, 활성화 시점의 서빙 데이터 내용 지문에서 파생한 불투명 값. 지문을 계산하지
   못한 릴리스는 필드를 **생략**한다(`null` 아님).
 - 의미 분리: `version_token`은 릴리스 식별(동일 데이터 재빌드·restore에도 바뀜), `data_token`은
@@ -127,7 +121,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   값으로 감지한다. 서버가 값을 어떻게 붙이는지(캐시 hit·갱신 지연)는 ADR-069 D7이 정본이다.
 - 폴링 주기 ≥60초는 그대로다.
 
-예정 entry 예시:
+entry 예시:
 
 ```json
 {

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 관리 UI 서빙 릴리스 표·상세에서 데이터 지문과 실제 이전 릴리스의 동일성, 지문 누락을 표시한다. 현재와 이전 활성화의 지문이 모두 없으면 판정 불가 경고를 표시한다(T-325c).
 - **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 9표
   (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
   `tl_sprd_manage`; v1 우편번호 전용 `postal_bulk_delivery`·`tl_kodis_bas`는 제외)의 내용 지문을 `ops.dataset_snapshots.data_fingerprint`
