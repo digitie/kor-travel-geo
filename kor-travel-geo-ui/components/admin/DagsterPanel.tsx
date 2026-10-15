@@ -184,7 +184,7 @@ function RunDetailPanel({
       ) : null}
 
       {!selectedRunId ? (
-        <p className="wizard-hint">최근 run이 없습니다.</p>
+        <p className="wizard-hint">실행을 선택하면 상세를 확인할 수 있습니다.</p>
       ) : isPending ? (
         <Skeleton className="h-48 w-full" />
       ) : detail ? (

@@ -222,6 +222,7 @@ describe("DagsterPanel", () => {
 
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(apiMocks.requestJson.mock.calls.filter(([path]) => String(path).startsWith("/ops/dagster/runs/"))).toHaveLength(0);
+    expect(screen.getByText("실행을 선택하면 상세를 확인할 수 있습니다.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "실행 상세: db_backup_job, run_1" }));
     await waitFor(() =>
       expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1", expect.objectContaining({ signal: expect.any(AbortSignal) }))
@@ -271,7 +272,8 @@ describe("DagsterPanel", () => {
 
     expect((await screen.findAllByText(/Dagster 상태: unavailable/)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Dagster webserver 연결 실패/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("최근 run이 없습니다.").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "실행 상세: db_backup_job, run_1" })).not.toBeInTheDocument();
+    expect(screen.getByText("실행을 선택하면 상세를 확인할 수 있습니다.")).toBeInTheDocument();
     expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/summary", expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
