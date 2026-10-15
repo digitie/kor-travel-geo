@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — 로컬 ARM64 UI 빌드의 worker 예산 제한(Codex)
+
+- CPU2·2GiB BuildKit에서 Next가 page data worker 15개를 만들고 메모리 1.988~1.991GiB에
+  닿는 것을 관측했다. 오래된 7eef build의 본인 CLI 하나만 SIGINT로 종료했고 exit130·
+  elapsed627.889초를 보존했다. OOM이나 성공으로 분류하지 않는다.
+- 설치 Next16.2.12의 공식 config type/schema/default 소스를 확인하고 experimental.cpus=2를
+  설정했다. 실제 production config loader가 2를 읽으며 기존 strict mode·alias/fallback은 유지한다.
+  API/Dagster 튜닝이나 Dockerfile·의존성 변경은 없다. 최적값 확정 대신 관측 예산에 맞춘 제한이다.
+- 최종 SHA에서 같은 자원 한도의 ARM64 재빌드와 worker/메모리 실측을 진행한다.
+  [근거와 한계](reviews/2026-10-15-local-arm64-build-budget.md)에 RSS/cgroup 구분을 기록했다.
+
 ## 2026-10-15 — 적대 리뷰의 모호한 DB 진단 분류 경계 보강(Codex)
 
 - 구조화된 driver primary 메시지가 없을 때 str(orig)의 무관한 DETAIL 문구를 statement

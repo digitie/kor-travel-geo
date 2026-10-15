@@ -14,6 +14,8 @@ const allowedDevOrigins = (process.env.KTG_UI_ALLOWED_DEV_ORIGINS ?? "")
 const nextConfig = {
   reactStrictMode: true,
   allowedDevOrigins,
+  // CPU2·2GiB 빌드에서 host CPU 수로 15개 worker가 생기는 메모리 포화를 방지한다.
+  experimental: { cpus: 2 },
   turbopack: {
     resolveAlias: {
       "vworld-map-core": `${vworldPackagesImportPath}/vworld-map-core/src/index.ts`,

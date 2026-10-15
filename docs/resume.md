@@ -2,6 +2,10 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+- 진행(2026-10-15, Codex): ARM64 UI build에서 host CPU 기반 15worker·2GiB 포화를 관측해
+  Next experimental.cpus=2로 실제 CPU 예산에 맞췄다. production config loader로 설정을 확인했다.
+  최종 SHA의 동일 자원 빌드·worker/메모리 실측과 이미지 검증은 후속이다.
+
 - 진행(2026-10-15, Codex): Dagster 상세·콘솔은 명시 선택/열기로 조회하고 종료 실행의
   자동 상세 polling과 장애 직후 retry를 줄였다. 활성 상태·다음 주기 복구·수동 갱신은
   유지한다. 해당 atom frontend 261 PASS/type/lint PASS. 지오코딩 UI와 통합한 최종 검증,

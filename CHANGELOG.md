@@ -29,6 +29,7 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+- UI production build의 page 작업자를 2개로 제한해 제한된 builder의 메모리 포화를 줄인다.
 - v2 보조 geometry는 같은 요청의 동일 building 조회와 miss를 공유하고 기존 geometry 재조회를
   생략한다. 요청을 넘는 cache나 pool·SQL·동시성 설정 변경은 없다.
 - 보조 도형 timeout은 구조화된 driver primary 메시지로만 확인하며, 진단이 없거나 무관한
