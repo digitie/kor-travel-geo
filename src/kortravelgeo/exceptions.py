@@ -86,6 +86,10 @@ class DatabaseTimeoutError(DatabaseError):
     http_status = 504
 
 
+class GeometryTimeoutError(DatabaseTimeoutError):
+    """geometry 보조 SQL의 확인된 statement timeout. 사용자 취소와는 구별한다."""
+
+
 class ExternalApiError(KorTravelGeoError):
     code = "E0501"
     http_status = 502

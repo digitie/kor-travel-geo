@@ -116,3 +116,14 @@ ADR-060에서 확정하되, 권고 순서는 다음과 같다(낮은 위험·높
 4. **좌표 출력 lon/lat**(§6) — `CandidateV2.point` `{x,y}`→`{lon,lat}`(`PointV2`). **✅(T-268)**
 
 ①(T-266/T-267)은 non-breaking으로 먼저, breaking 묶음 ②③④는 **T-268에서 일괄 적용**했다(v2 미배포 중 사용자 지시로 배포 전 정리; ADR-062). v2 error envelope 범위는 API 검증/도메인 에러에 한정하고 교차-cutting 인프라 게이트(GeoIP 403)는 공유 legacy 형태를 유지한다.
+
+## 보조 geometry의 부분 실패
+
+좌표가 확보된 뒤 선택적 geometry SQL만 확인된 statement timeout으로 실패하면 후보의
+point·주소·confidence를 유지하고 `geometry_error: {code: "statement_timeout", retryable: true}`를
+싣는다. 응답 자체의 `status: "OK"`와 geometry 부분 실패를 함께 확인한다. 다음 요청은 새로
+조회하므로 복구 뒤 다시 요청할 수 있다. 자동 재시도는 하지 않는다.
+
+point가 없거나 primary 조회 실패, 사용자 취소, SQL programming 오류이면 기존 오류 응답이다.
+geometry를 조회하지 않았거나 모두 정상 조회되면 geometry_error를 생략한다. 보조 도로 후보 조회 timeout도
+같은 경고를 명시할 수 있다. v1 호환 응답은 바꾸지 않는다([ADR-071](../../adr/071-optional-geometry-timeout-and-request-lifetime.md)).

@@ -3,7 +3,8 @@
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
 - 진행(2026-10-15, Codex): geocoding 보조 geometry의 요청 내부 중복 조회를 제거했다.
-  새 회귀 OLD 3 FAIL → 관련 NEW 146 PASS. 후속은 확인된 보조 timeout의 명시적 경고·point 보존,
+  새 회귀 OLD 3 FAIL → 관련 NEW 146 PASS. 확인된 보조 statement timeout의 typed 경고·point 보존,
+  일반 예외 전파·유한 geometry 관측과 OpenAPI/TS를 구현했다(ADR-071). 후속은 관리 UI의 경고·
   UI/BFF/API 취소와 stale 응답 격리, 같은 예제 운영 비교 측정이다. 운영 배포 완료는 아니다.
 
 - 진행(2026-10-15): T-324·T-325a~c 완료(원장 정리, `tasks-done.md`). geo 스택은 odroid로 이전됨 — 풀로드가 아니라 n150 백업 복원(ADR-070 지름길 (a)), 소비자 전환 완료, ADR-070 **accepted**(2026-10-15 소유자: 복원으로 갈음·이전 확정·소비자별 키·Track 1 첫 토큰=기준선·GeoIP off). **다음 한 작업**: 운영자가 schedule 재가동 전 odroid에서 standalone `mv_refresh` 1회 실측해 소요(초) 전달 → ADR-070 D4 상한 결정·코드(`recovery.py`·`test_definitions.py`) → 그 뒤 geo schedule·sensor 재가동; 병행으로 T-326c 점검(n150 geo-api 소비자 0 확인 후 정지, 키 경로 2xx, p50/p95, Track 1 계획 건수 0 확인)과 T-325 잔여 검증(UI live). 상세 `tasks.md` T-325 잔여·T-326, journal 2026-10-15.

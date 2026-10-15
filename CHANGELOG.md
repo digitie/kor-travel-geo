@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- v2 후보에 optional `geometry_error`를 추가한다. point 확보 후 확인된 보조 geometry statement
+  timeout이면 좌표를 보존하고 부분 실패를 명시한다. 다른 오류·사용자 취소는 성공으로 바꾸지 않는다.
 - 관리 UI 서빙 릴리스 표·상세에서 데이터 지문과 실제 이전 릴리스의 동일성, 지문 누락을 표시한다. 현재와 이전 활성화의 지문이 모두 없으면 판정 불가 경고를 표시한다(T-325c).
 - **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 9표
   (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·

@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — 좌표 성공과 보조 geometry statement timeout 격리(Codex)
+
+- 확인된 geometry SQL statement timeout만 GeometryTimeoutError로 구별한다. 유효 point가 이미
+  있으면 v2 geometry_error를 명시하고 point·주소·confidence를 보존한다. primary 실패·사용자 취소·
+  lock/connect·programming 오류는 성공으로 바꾸지 않는다. 기존 supplemental road의 broad catch도 좁혔다.
+- 같은 요청의 timeout도 중복 재조회하지 않고 다음 요청은 새로 조회한다. 실제 ASGI 회귀로 부분
+  응답·원문 오류 비노출·다음 요청의 복구를 검증했다. OpenAPI와 TypeScript를 함께 재생성했다.
+- OLD 회귀는 보조 처리 5 FAIL/24 PASS였다. 초안의 road fake engine에 begin이 없어 생긴 별도
+  실패는 테스트 대역을 보완한 뒤 제외했다. 광범위 catch·point guard 삭제·사용자 취소 오분류·
+  관측 누락·경고 누락·raw label의 돌연변이 6종도 각각 다른 회귀로 거부했다.
+- geometry checkout+SQL 경계 histogram을 추가해 유한 kind/outcome만 기록한다. SQL timer와 달리
+  connection 획득도 포함하며 CPU/lock/I/O 시간을 분해한 것으로 해석하지 않는다.
+- 운영 비교 기준에서는 같은 Admin 예제가 geometry off 200/1169ms, on 504/E0504/6239ms였다.
+  단발 관측이며 E0504만으로 SQL 원인을 단정하지 않는다. 운영 제품은 아직 이 변경으로 배포하지 않았다.
+  관리 UI 경고·취소/stale 격리와 두 독립 리뷰/live E2E는 후속 단계다.
+
 ## 2026-10-15 — geometry 보조 조회의 요청 내부 중복 제거(Codex)
 
 - 같은 building lookup 인자 네 개가 같은 후보는 요청 안에서 결과와 miss를 공유한다. 다음 요청에

@@ -240,6 +240,12 @@ DB_QUERY_DURATION = _histogram(
     ("operation", "query_fingerprint", "status"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
+GEOMETRY_LOOKUP_DURATION = _histogram(
+    "ktg_geometry_lookup_duration_seconds",
+    "Geometry connection acquisition and SQL duration, including optional failures.",
+    ("kind", "outcome"),
+    (0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0),
+)
 # T-310: DB-backed gauges (cache/load_jobs/source registry/pg_stat_statements) are refreshed
 # by an API lifespan task, never on the scrape path. A failed refresh keeps the last-good
 # gauge values and is counted here instead of failing the scrape.
@@ -462,6 +468,15 @@ def record_db_query(*, statement: str, elapsed_s: float, status: str) -> None:
             operation=operation,
             query_fingerprint=fingerprint,
         ).inc()
+
+
+def record_geometry_lookup(*, kind: str, outcome: str, elapsed_s: float) -> None:
+    """주소·식별자·오류 원문은 label로 받지 않는다. SQL timer와 달리 checkout도 포함한다."""
+    GEOMETRY_LOOKUP_DURATION.labels(
+        kind=kind if kind in {"building", "region", "road"} else "other",
+        outcome=outcome if outcome in {"success", "statement_timeout", "cancelled", "error"}
+        else "other",
+    ).observe(max(0.0, elapsed_s))
 
 
 def record_data_fingerprint_failure(*, error_code: str) -> None:
