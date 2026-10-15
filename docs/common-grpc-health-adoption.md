@@ -38,7 +38,7 @@ live 성공을 실행 정지 복구 성공으로 확대하지 않는다. unhealt
 
 기존 Common pin 73e3ff8b9398e533806d2d1a8435292570169de3에서 새 pin으로
 비교한 기존 __init__.py, dagster.py, deadline.py는 byte 동일하다.
-http.py, scheduling.py, 두 health 모듈은 이후 추가된 API다.
+http.py, scheduling.py와 상태 조회 모듈은 이후 추가된 API다.
 기존 pin에는 http/scheduling이 없었으므로 기존 다섯 파일이 모두 있었다고 기술하지 않는다.
 코어 필수 의존성은 추가되지 않고 새 gRPC 의존성은 선택 extra로만 노출된다.
 
@@ -51,11 +51,22 @@ frontend/NPM pin은 이번 작업의 변경 대상이 아니다.
 별도로 판단한다. 재시작 때 누락 시각을 한꺼번에 실행하는 catch-up 폭주를 만들지 않는다.
 현재 변경만으로 CPU나 지연이 개선되었다고 주장하지 않는다.
 
-## 검증 계획
+## 검증 결과
 
-선언의 정확 pin/extra 및 API 본체의 선택 의존성 경계를 회귀로 고정한다.
-실제 설치된 Common을 사용한 격리 subprocess에서 무거운 import 금지,
-합성 loopback SERVING/비정상 응답·닫힌 포트·quiet CLI를 확인한다.
-회귀가 이전 선언을 거절하는 RED와 새 선언을 허용하는 GREEN을 모두 보존한다.
-전체 Python 정적/회귀와 frontend gate 결과는 실행 후 이 문서에 기록한다.
-실제 DB·운영 UI·ARM64 빌드·배포·성능 비교는 후속이다.
+- 이전 pin/extra 및 설치본에 신규 회귀를 실행해 2 FAIL을 확인했다.
+- 새 Common을 실제 VCS pin으로 격리 venv에 설치한 뒤 새 회귀 8 PASS를 확인했다.
+  합성 loopback gRPC의 표준 DagsterApi SERVING/NOT_SERVING, 닫힌 포트,
+  선택 grpc 부재, quiet stdout/stderr, Dagster/SQLAlchemy/Geo의 불필요한 import 차단,
+  Geo 본체의 Dagster/gRPC 미수입을 검증했다. 실제 운영 서버 호출은 없다.
+- 전체 Python 1,907 PASS/141 SKIP, Dagster 구성요소 129 PASS.
+  실제 DB를 제공하지 않았으므로 실제 PostgreSQL 회귀의 통과를 주장하지 않는다.
+- 전체 Ruff, mypy, 실제 lint-imports entrypoint 통과(계층 계약 1 KEPT).
+- frontend 타입 생성·lint·type-check·269 tests·production build 통과.
+  빌드 로그에서 기존 worker2를 확인했다. frontend 소스와 NPM pin은 수정하지 않았다.
+- 기존 이미지 constraints의 실제 설치 버전 회귀를 유지했다. Dagster 1.13.24와
+  선택 gRPC 의존성의 버전 pin을 변경하지 않았다.
+
+새 회귀의 최초 Ruff 길이 오류와 도구 PATH 오류는 보존 후 수정했다.
+lint-imports의 초기 python -m 호출은 검사 결과를 내지 않아 통과 근거로 제외하고,
+실제 CLI entrypoint를 다시 실행했다. 위 결과는 작성자 로컬 검증이며 독립 적대 리뷰,
+실제 DB·운영 UI·ARM64 빌드·배포·성능 비교의 대체 증거가 아니다.

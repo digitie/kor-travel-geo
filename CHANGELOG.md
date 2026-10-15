@@ -32,6 +32,9 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+- Dagster 구성요소가 Common의 선택 gRPC 상태 조회 CLI를 설치하도록 준비한다.
+  live는 순수 생존 확인이며 정의/worker/DB readiness·자동 복구를 보장하지 않는다.
+  실제 Manager 선언 적용과 운영 효과 검증은 후속이다.
 - UI production build의 page 작업자를 2개로 제한해 제한된 builder의 메모리 포화를 줄인다.
 - v2 보조 geometry는 같은 요청의 동일 building 조회와 miss를 공유하고 기존 geometry 재조회를
   생략한다. 요청을 넘는 cache나 pool·SQL·동시성 설정 변경은 없다.
