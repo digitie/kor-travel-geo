@@ -386,7 +386,8 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
 2. **결과 수치**: `mv_geocode_target`·`tl_juso_text` `count(*)` = 6,416,637 / 6,416,637(복원 원본 = n150 운영이므로 동일; T-290l
    참고값과 같다). 활성 릴리스는 n150의 것 그대로(`e0db4ff8…`, 2026-09-28 `manual_rebuild`, `mv_refresh strategy=swap`) — 복원은
    새 릴리스를 만들지 않았다. `ops.serving_releases`에는 n150 이력의 `pending`/`restore`(활성화 시각 NULL) 2행도 함께 왔다.
-3. **D2 키**: 예측대로 복원이 `ops.public_api_keys`를 보존했다 — active 2건(`kor-travel-map` 2026-08-08, `pinvi-api` 2026-10-14).
+3. **D2 키**: 예측대로 복원이 `ops.public_api_keys`를 보존했다 — 08:27Z 기준 active 2건(`kor-travel-map` 2026-08-08, `pinvi-api`
+   2026-10-14), ≈09:00Z `kor-travel-concierge` 발급 뒤 **3건**.
    Map 키 재발급 없이 키 경로가 이어졌고, PinVi 전용 키는 (나) 소비자별 발급의 첫 사례다. **concierge**는 그때까지 VWorld 형식
    키를 보내 odroid geo에서 401이었고(DB에 키가 있어 VWorld 폴백이 꺼진 상태 — D2 함정 그대로), 2026-10-15 ≈09:00Z 전용 키
    `kor-travel-concierge`를 발급해 odroid에서 정상 응답(운영자 확인). 이로써 active 3건 = 소비자별 1개.
@@ -409,7 +410,9 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
    토큰은 저장만 하고 재해석·재계획하지 않는다(재해석은 저장값과 새 값이 둘 다 있고 다를 때만). 열 제약 odroid에 전량
    재지오코딩이 몰리는 것을 막기 위함. ADR-069 D8 amendment·`docs/api-reference/v2/dataset-version.md`·`llm-summary.md`에도 같은
    문구; 소비자 쪽 구현은 Map ADR-109·concierge 몫. T-326c는 실제 계획 건수 **0**을 확인한다.
-9. **아직 서 있지 않은 전제**: n150 geo-api·geo-ui는 아직 Up(T-326c의 "n150 geo-api stop 상태에서" 검증 전제 미충족).
+9. **아직 서 있지 않은 전제**: n150 geo-api·geo-ui는 아직 Up(T-326c의 "n150 geo-api stop 상태에서" 검증 전제 미충족). 정지는
+   **Manager T-MGR-01b 뒤**여야 한다 — n150 Manager compose에 `map → geo` `depends_on` 간선이 남아 있는 동안은 n150에서 `ensure map`을
+   돌릴 때마다 n150 geo 컨테이너가 되살아난다.
 
 **소유자 결정(2026-10-15)** — 상태 `accepted`: (1) §14-8 dump 복원 (a)로 갈음, 풀로드는 다음 재적재 때(그때 D3-2 소스 bind·
 D3 절차를 쓴다); (2) §14-12 odroid 이전 확정 — D6 게이트 대신 사후 메모리 관찰(T-326a ⓐ'); (3) §14-21 (나) 소비자별 키 1개씩;
