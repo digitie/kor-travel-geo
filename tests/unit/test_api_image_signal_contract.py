@@ -40,8 +40,10 @@ def test_api_cmd_exec_preserves_pid_sigterm_and_host_port(
         "    Path(os.environ['KTG_SIGNAL_PROBE_STOP']).write_text('SIGTERM')\n"
         "    raise SystemExit(0)\n"
         "signal.signal(signal.SIGTERM, stop)\n"
-        "Path(os.environ['KTG_SIGNAL_PROBE_READY']).write_text("
-        "json.dumps({'pid': os.getpid(), 'argv': sys.argv[1:]}))\n"
+        "ready = Path(os.environ['KTG_SIGNAL_PROBE_READY'])\n"
+        "pending = ready.with_suffix('.tmp')\n"
+        "pending.write_text(json.dumps({'pid': os.getpid(), 'argv': sys.argv[1:]}))\n"
+        "pending.replace(ready)\n"
         "while True: time.sleep(1)\n"
     )
     executable.chmod(0o700)
