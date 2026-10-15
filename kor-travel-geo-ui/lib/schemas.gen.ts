@@ -84,6 +84,7 @@ export const apiSchemaNames = [
   "GeocodeV2Input-Input",
   "GeocodeV2Input-Output",
   "GeocodeV2Response",
+  "GeometryErrorV2",
   "GeometryV2",
   "GroupValidationResult",
   "HTTPValidationError",

@@ -39,6 +39,7 @@ export function useDagsterSummaryQuery() {
       }
       return response;
     },
+    retry: false,
     refetchInterval: 30_000
   });
 }
@@ -48,7 +49,11 @@ export function useDagsterRunDetailQuery(runId: string | null) {
     queryKey: ["dagster", "run", runId],
     queryFn: ({ signal }) => requestJson<DagsterRunDetailResponse>(dagsterPaths.runDetail(runId ?? ""), { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }),
     enabled: Boolean(runId),
-    refetchInterval: 15_000
+    retry: false,
+    refetchInterval: query => {
+      const status = query.state.data?.data.run?.status;
+      return status && ["SUCCESS", "FAILURE", "CANCELED"].includes(status) ? false : 15_000;
+    }
   });
 }
 
@@ -56,6 +61,7 @@ export function useDagsterRunFailuresQuery() {
   return useQuery({
     queryKey: ["dagster", "run-failures"],
     queryFn: ({ signal }) => requestJson<DagsterRunFailuresResponse>(dagsterPaths.runFailures, { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }),
+    retry: false,
     refetchInterval: 30_000
   });
 }

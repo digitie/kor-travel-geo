@@ -2,6 +2,123 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — 종료 회귀 대역의 준비 marker 원자 게시(Codex)
+
+- exec 회귀 대역의 준비 JSON을 임시 파일 작성 후 replace로 게시한다. reader가 파일 생성과
+  본문 쓰기 사이의 빈 내용을 읽는 시험 자체의 경합을 방지한다. 실제 제품/API CMD는 2099와 같다.
+- 종료 계약/기존 배포 회귀 8 PASS, 해당 시험 ruff·diff PASS. 운영 호출은 없다.
+
+## 2026-10-15 — API shell의 종료 신호 전달 경계 보강(Codex)
+
+- 실제 Dockerfile CMD를 본인 Linux 임시 session에서 실행해 shell 아래 별도 API 대역 PID를
+  확인했다. 기본/명시 host·port 두 회귀가 OLD 2 FAIL이었고 exec 추가 후 직접 PID/SIGTERM
+  handler·exit0과 인수 보존을 확인했다. 다른 Docker·운영 프로세스에 신호를 보내지 않았다.
+- API CMD의 exec 한 단어만 추가했다. pip/의존성/환경/timeout/동시성 튜닝은 바꾸지 않는다.
+  초기 신규 시험 ruff의 import 순서/suppress 제안은 수정했다. 실제 Uvicorn 운영 drain과
+  새 이미지 배포 검증은 후속이며 로컬 대역 시험을 운영 성공으로 세지 않는다.
+- 실행 중인 c324 ARM64 context는 변경하지 않았다. 새 HEAD API와 CS/UI 최종 label을
+  순차 export/검증하며 두 독립 reviewer가 이 종료 계약 delta를 다시 검토한다.
+- 새 종료 회귀+기존 deploy_app 8 PASS, backend unit 전체 1,903 PASS/41.47초, 전체 ruff PASS.
+  PG DSN 없이 unit만 실행했으므로 실제 PG integration은 NOT_RUN이다.
+
+## 2026-10-15 — ARM64 GDAL 컴파일의 실제 OOM과 빌드 동시성 제한(Codex)
+
+- UI 최종 8614 재빌드는 CPU2·2GiB에서 270.843초에 완료했고 worker2를 확인했다.
+  샘플 cgroup 최대는 여전히 2GiB이므로 전체 peak 메모리 감소로 표시하지 않는다.
+- API는 GDAL C++ 병렬 컴파일 중 cc1plus Killed와 cgroup oom/oom_kill 각1로 실패했다.
+  원래 실패 로그를 보존했다. 공식 GDAL의 parallel=True 기본과 setuptools 사용자 설정
+  덮어쓰기를 확인하고 실제 소형 extension 2개에서 compiler 동시2→1·양쪽 성공을 검증했다.
+- API/CS의 해당 pip 빌드 동안만 임시 HOME에서 parallel=1을 사용하고 같은 RUN에서 제거한다.
+  버전/constraints/base/런타임 동작은 보존한다. 새 SHA ARM64 빌드·검증·독립 리뷰가 남았고
+  운영 변경은 하지 않았다. [관측과 범위](reviews/2026-10-15-local-arm64-build-budget.md).
+
+## 2026-10-15 — 로컬 ARM64 UI 빌드의 worker 예산 제한(Codex)
+
+- CPU2·2GiB BuildKit에서 Next가 page data worker 15개를 만들고 메모리 1.988~1.991GiB에
+  닿는 것을 관측했다. 오래된 7eef build의 본인 CLI 하나만 SIGINT로 종료했고 exit130·
+  elapsed627.889초를 보존했다. OOM이나 성공으로 분류하지 않는다.
+- 설치 Next16.2.12의 공식 config type/schema/default 소스를 확인하고 experimental.cpus=2를
+  설정했다. 실제 production config loader가 2를 읽으며 기존 strict mode·alias/fallback은 유지한다.
+  API/Dagster 튜닝이나 Dockerfile·의존성 변경은 없다. 최적값 확정 대신 관측 예산에 맞춘 제한이다.
+- 최종 SHA에서 같은 자원 한도의 ARM64 재빌드와 worker/메모리 실측을 진행한다.
+  [근거와 한계](reviews/2026-10-15-local-arm64-build-budget.md)에 RSS/cgroup 구분을 기록했다.
+
+## 2026-10-15 — 적대 리뷰의 모호한 DB 진단 분류 경계 보강(Codex)
+
+- 구조화된 driver primary 메시지가 없을 때 str(orig)의 무관한 DETAIL 문구를 statement
+  timeout으로 오인하는 반례를 재현했다. SQLSTATE 57014도 사용자 취소와 공유하므로 primary가
+  없거나 비문자열이면 원 DB 오류를 전파한다. 확인된 primary statement timeout만 기존처럼
+  point·typed geometry_error로 격리하며, 사용자 취소·ProgrammingError는 성공으로 바꾸지 않는다.
+- 기존 7eef geometry source에 새 회귀를 적용해 10 FAIL/4 PASS를 확인했다. 세 보조 조회와
+  diag 누락·primary 누락/비문자열·사용자 취소 primary, client의 모호한 오류 전파를 포함한다.
+  변경 뒤 관련 188 PASS, 전체 ruff·mypy 167파일 PASS. DTO·OpenAPI·SQL·timeout·튜닝 변경은 없다.
+- 최종 backend unit 전체 1,901 PASS(36.84초). PG DSN 없이 실행했으며 실제 PG integration은
+  NOT_RUN이다. 검증 때문에 운영·보존 DB를 변경하지 않았다.
+- 이전 SHA의 로컬 ARM64 UI 빌드는 최종 배포 증거로 사용하지 않는다. 최종 SHA로 API/CS와
+  UI를 다시 빌드하며 운영 build/load/restart는 아직 실행하지 않았다.
+
+## 2026-10-15 — Dagster 상세·콘솔의 명시 조회와 종료 실행 polling 중단(Codex)
+
+- Common DagsterOperations의 기존 controlled selection을 사용하며 첫 run의 상세를 자동
+  선택하지 않는다. 내장 콘솔도 열기 버튼으로 시작하고 닫으면 iframe을 제거한다.
+- 성공·실패·취소가 확정된 상세는 자동 polling을 멈추고 수동 갱신은 유지한다. 활성·미확인
+  상세는 기존 15초, 요약·실패 목록은 기존 30초에 다시 조회한다. 장애 직후의 자동 retry를
+  제거해 겹친 요청을 줄이고 다음 주기·수동 갱신으로 복구한다. 기존 시간·본문 상한은 유지한다.
+- 기존 코드에 새 회귀를 적용해 7 FAIL/7 PASS를 확인했다. 초기 선택 검증의 effect 대기를
+  보강한 별도 OLD 재현도 1 FAIL/3 PASS였다. 변경 후 관련 14 PASS, 해당 atom 전체 frontend
+  261 PASS, type/lint PASS다. 지오코딩 UI atom과 최종 통합 검증·live E2E는 별도로 수행한다.
+- 실제 상태 조회의 단발 timeout과 tick 필드 분리, 3쌍 교차 비교를 수행했다. exhaustive
+  status 필터를 제거하면 현재 데이터에서는 빨랐지만 Dagster bulk 경로의 전체 이력 rank
+  비용과 timestamp 동률의 상한 차이가 있어 채택하지 않았다. 기존 3건 제한 조회를 유지한다.
+- CodeGraph MCP가 WSL 프로젝트 경로를 읽지 못해 Linux CLI sync → status → context로
+  호출자·Common 연결·상세 hook·콘솔의 영향을 확인했다. 제품 DB/스키마·query·timeout 변경은 없다.
+- 상세와 제한은 [검증 기록](reviews/2026-10-15-dagster-monitor-demand.md)에 적었다.
+
+## 2026-10-15 — 관리 지오코딩 부분 실패 표시와 요청 취소(Codex)
+
+- typed geometry_error는 응답 JSON뿐 아니라 주소 요약의 경고로 표시한다. 주소 문자열이
+  없는 후보도 경고를 숨기지 않으며 확인된 좌표와 확보한 도형은 유지한다. 다음 실행의 정상
+  응답에는 경고가 사라진다. primary HTTP 오류는 기존 오류로 표시하고 부분 성공으로 바꾸지 않는다.
+- geocode 실행은 caller AbortSignal을 기존 공개 JSON helper/BFF/API 경계에 전달한다.
+  취소 버튼·새 제출·화면 이탈이 이전 요청을 취소하고 버전을 무효화한다. 취소를 무시한 늦은
+  응답·실패·finally가 다음 실행 결과나 loading 상태를 덮지 않는다. 자동 재시도는 추가하지 않는다.
+- OLD의 새 UI 회귀는 5 FAIL/1 PASS였고 NEW 관련 26 PASS·전체 261 PASS였다.
+  최초 테스트 hook이 mock 함수를 반환해 생긴 부수 timeout은 hook 반환을 제거한 뒤 제외했다.
+  경고·signal 전달·stale guard·unmount abort 삭제의 돌연변이 4종도 모두 거부했다.
+- type/lint·기본 Turbopack production build PASS. 최초 build는 외부 node_modules symlink의
+  filesystem root 제약으로 실패했고, 본인 ext4 검증 디렉터리에 동일 lock의 의존성을 복사해
+  통과했다. 공유 의존성이나 제품 설정은 바꾸지 않았다. react-doctor offline은 오류 0·기존
+  경고 14·score 90이며 baseline과 경고 파일/rule/fingerprint가 전부 같다. 새 경고는 없다.
+- backend unit 전체 1,887 PASS(47.74초). 테스트 PG DSN 없이 실행했으며 실제 PostgreSQL
+  integration은 이번 실행 범위에서 NOT_RUN이다. 운영 DB나 보존 DB를 시험에 사용하지 않았다.
+- 이 기록은 운영 배포·독립 리뷰 두 건·live E2E 통과를 뜻하지 않는다. 같은 Admin 예제의
+  배포 전후 실측과 사용자 취소·부분 실패·재실행 검증은 후속 게이트다.
+
+## 2026-10-15 — 좌표 성공과 보조 geometry statement timeout 격리(Codex)
+
+- 확인된 geometry SQL statement timeout만 GeometryTimeoutError로 구별한다. 유효 point가 이미
+  있으면 v2 geometry_error를 명시하고 point·주소·confidence를 보존한다. primary 실패·사용자 취소·
+  lock/connect·programming 오류는 성공으로 바꾸지 않는다. 기존 supplemental road의 broad catch도 좁혔다.
+- 같은 요청의 timeout도 중복 재조회하지 않고 다음 요청은 새로 조회한다. 실제 ASGI 회귀로 부분
+  응답·원문 오류 비노출·다음 요청의 복구를 검증했다. OpenAPI와 TypeScript를 함께 재생성했다.
+- OLD 회귀는 보조 처리 5 FAIL/24 PASS였다. 초안의 road fake engine에 begin이 없어 생긴 별도
+  실패는 테스트 대역을 보완한 뒤 제외했다. 광범위 catch·point guard 삭제·사용자 취소 오분류·
+  관측 누락·경고 누락·raw label의 돌연변이 6종도 각각 다른 회귀로 거부했다.
+- geometry checkout+SQL 경계 histogram을 추가해 유한 kind/outcome만 기록한다. SQL timer와 달리
+  connection 획득도 포함하며 CPU/lock/I/O 시간을 분해한 것으로 해석하지 않는다.
+- 운영 비교 기준에서는 같은 Admin 예제가 geometry off 200/1169ms, on 504/E0504/6239ms였다.
+  단발 관측이며 E0504만으로 SQL 원인을 단정하지 않는다. 운영 제품은 아직 이 변경으로 배포하지 않았다.
+  관리 UI 경고·취소/stale 격리와 두 독립 리뷰/live E2E는 후속 단계다.
+
+## 2026-10-15 — geometry 보조 조회의 요청 내부 중복 제거(Codex)
+
+- 같은 building lookup 인자 네 개가 같은 후보는 요청 안에서 결과와 miss를 공유한다. 다음 요청에
+  남기는 전역 cache는 없으며 이미 확보한 geometry는 다시 읽지 않는다. 엔진·pool·SQL·튜닝값은 유지한다.
+- 새 회귀를 원본에 실행해 중복 조회/기존 geometry 재조회 3 FAIL을 확인했고, 수정 후 관련 v2와
+  요청 수명 회귀 146 PASS를 확인했다. 서로 다른 lookup 인자·요청 간 비공유·geometry 미선택도 검사했다.
+- 운영 속도 개선률을 측정한 것은 아니다. 같은 Admin 예제의 비교 측정과 geometry timeout 격리,
+  요청 취소 UI, 독립 리뷰·live E2E·배포는 후속 단계다.
+
 ## 2026-10-15 — ADR-070 accepted + Track 1 기준선 규칙 + GeoIP off(소유자 결정, 문서만, by claude)
 
 같은 날 소유자 결정을 PR #575에 반영했다(코드 변경 없음).

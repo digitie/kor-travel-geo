@@ -1554,6 +1554,16 @@
               }
             ]
           },
+          "geometry_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeometryErrorV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "match_kind": {
             "enum": [
               "road",
@@ -5654,6 +5664,26 @@
           "input"
         ],
         "title": "GeocodeV2Response",
+        "type": "object"
+      },
+      "GeometryErrorV2": {
+        "additionalProperties": false,
+        "description": "좌표는 확보했지만 보조 geometry SQL이 제한 시간에 끝나지 않은 부분 실패.",
+        "properties": {
+          "code": {
+            "const": "statement_timeout",
+            "default": "statement_timeout",
+            "title": "Code",
+            "type": "string"
+          },
+          "retryable": {
+            "const": true,
+            "default": true,
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "title": "GeometryErrorV2",
         "type": "object"
       },
       "GeometryV2": {

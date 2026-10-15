@@ -2708,6 +2708,7 @@ export interface components {
             /** Distance M */
             distance_m?: number | null;
             geometry?: components["schemas"]["GeometryV2"] | null;
+            geometry_error?: components["schemas"]["GeometryErrorV2"] | null;
             /**
              * Match Kind
              * @enum {string}
@@ -4190,6 +4191,24 @@ export interface components {
             query_id?: string;
             region_hint_applied?: components["schemas"]["RegionHint"] | null;
             status: components["schemas"]["Status"];
+        };
+        /**
+         * GeometryErrorV2
+         * @description 좌표는 확보했지만 보조 geometry SQL이 제한 시간에 끝나지 않은 부분 실패.
+         */
+        GeometryErrorV2: {
+            /**
+             * Code
+             * @default statement_timeout
+             * @constant
+             */
+            code: "statement_timeout";
+            /**
+             * Retryable
+             * @default true
+             * @constant
+             */
+            retryable: true;
         };
         /** GeometryV2 */
         GeometryV2: {

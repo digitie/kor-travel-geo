@@ -123,6 +123,13 @@ class GeometryV2(FrozenModel):
     source_table: str | None = None
 
 
+class GeometryErrorV2(FrozenModel):
+    """좌표는 확보했지만 보조 geometry SQL이 제한 시간에 끝나지 않은 부분 실패."""
+
+    code: Literal["statement_timeout"] = "statement_timeout"
+    retryable: Literal[True] = True
+
+
 class CandidateV2(FrozenModel):
     confidence: float = Field(ge=0.0, le=1.0)
     match_kind: V2MatchKind
@@ -132,6 +139,7 @@ class CandidateV2(FrozenModel):
     distance_m: float | None = Field(default=None, ge=0.0)
     bbox: BBoxV2 | None = None
     geometry: GeometryV2 | None = None
+    geometry_error: GeometryErrorV2 | None = None
     region: RegionV2 | None = None
     place: PlaceV2 | None = None
     source: V2Source = Field(

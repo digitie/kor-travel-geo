@@ -50,7 +50,7 @@ from kortravelgeo.dto.v2 import (
     SearchV2Input,
     SearchV2Response,
 )
-from kortravelgeo.exceptions import InvalidAddressError
+from kortravelgeo.exceptions import GeometryTimeoutError, InvalidAddressError
 from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
@@ -351,7 +351,7 @@ def test_merge_geocode_v2_responses_dedupes_same_building_across_differing_match
 
 
 @pytest.mark.asyncio
-async def test_async_client_geocode_keeps_primary_when_supplemental_lookup_fails(
+async def test_async_client_geocode_does_not_hide_supplemental_programming_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from kortravelgeo.infra.geometry_repo import GeometryRepository
@@ -367,12 +367,91 @@ async def test_async_client_geocode_keeps_primary_when_supplemental_lookup_fails
     monkeypatch.setattr(GeometryRepository, "road_geometries", fail_road_geometries)
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
 
-    response = await client.geocode(query="테헤란로", limit=3)
+    with pytest.raises(RuntimeError, match="geometry repository unavailable"):
+        await client.geocode(query="테헤란로", limit=3)
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary_ok", [True, False])
+async def test_supplemental_timeout_is_partial_only_with_a_primary_point(
+    monkeypatch: pytest.MonkeyPatch, primary_ok: bool,
+) -> None:
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def primary(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        response = _v1_geocode_response(GeocodeInput(address=address))
+        return response if primary_ok else response.model_copy(update={"result": None})
+
+    async def timeout(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        raise GeometryTimeoutError("statement timeout")
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", primary)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", timeout)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    if not primary_ok:
+        with pytest.raises(GeometryTimeoutError):
+            await client.geocode(query="테헤란로", limit=3)
+        return
+    response = await client.geocode(query="테헤란로", limit=3)
     assert response.status == "OK"
-    assert len(response.candidates) == 1
-    assert response.candidates[0].address is not None
-    assert response.candidates[0].address.full == "서울특별시 강남구 테헤란로 152"
+    assert response.candidates[0].point == PointV2(lon=127.036, lat=37.501)
+    assert response.candidates[0].geometry_error is not None
+
+
+@pytest.mark.asyncio
+async def test_primary_timeout_is_not_partial_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def timeout(self: AsyncAddressClient, *_: Any, **__: Any) -> GeocodeResponse:
+        raise GeometryTimeoutError("primary error")
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", timeout)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    with pytest.raises(GeometryTimeoutError, match="primary error"):
+        await client.geocode(road_address="서울특별시 강남구 테헤란로 152", include_geometry=True)
+
+
+@pytest.mark.asyncio
+async def test_v2_optional_timeout_is_explicit_and_retry_can_recover(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.core.protocols import GeometryLookup
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def primary(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    calls = 0
+
+    async def lookup(self: GeometryRepository, **_: Any) -> GeometryLookup:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise GeometryTimeoutError("private driver/SQL detail")
+        return GeometryLookup(kind="building", geometry=GeometryV2(
+            kind="building", geojson={"type": "Polygon", "coordinates": []},
+        ))
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", primary)
+    monkeypatch.setattr(GeometryRepository, "building_geometry", lookup)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: client
+    app.dependency_overrides[require_public_api_key] = lambda: None
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
+        body = {"road_address": "서울특별시 강남구 테헤란로 152", "include_geometry": True}
+        first = await http_client.post("/v2/geocode", json=body)
+        recovered = await http_client.post("/v2/geocode", json=body)
+        disabled = await http_client.post("/v2/geocode", json={**body, "include_geometry": False})
+    assert first.status_code == 200
+    point = first.json()["candidates"][0]
+    assert point["point"] == {"lon": 127.036, "lat": 37.501}
+    assert point["geometry_error"] == {"code": "statement_timeout", "retryable": True}
+    assert "private" not in first.text and "geometry" not in point
+    assert recovered.status_code == 200
+    assert "geometry_error" not in recovered.json()["candidates"][0]
+    assert recovered.json()["candidates"][0]["geometry"]["kind"] == "building"
+    assert "geometry_error" not in disabled.json()["candidates"][0]
+    assert calls == 2
 
 
 @pytest.mark.asyncio

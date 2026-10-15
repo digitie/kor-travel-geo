@@ -2,6 +2,33 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+- 진행(2026-10-15, Codex): API CMD에 exec를 추가해 shell을 API로 교체한다.
+  실제 CMD 로컬 대역에서 OLD 2 FAIL→직접 PID/SIGTERM·기본/명시 host/port 회귀를 검증했다.
+  c324 ARM64 context는 보존하고 새 HEAD의 API/CS/UI 최종 label export·2인 리뷰·운영 drain은 후속이다.
+
+- 진행(2026-10-15, Codex): UI8614 ARM64 빌드는 worker2·270.843초 완료했다.
+  API는 GDAL 병렬 C++ 컴파일 중 실제 OOM으로 실패해 보존했다. 소형 실제 compile 동시2→1
+  검증 후 API/CS의 해당 pip 빌드에만 임시 setuptools parallel=1을 적용했다.
+  최종 SHA의 API/CS 재빌드·archive 검증과 새 Dockerfile delta의 독립 리뷰가 남았다.
+
+- 진행(2026-10-15, Codex): ARM64 UI build에서 host CPU 기반 15worker·2GiB 포화를 관측해
+  Next experimental.cpus=2로 실제 CPU 예산에 맞췄다. production config loader로 설정을 확인했다.
+  최종 SHA의 동일 자원 빌드·worker/메모리 실측과 이미지 검증은 후속이다.
+
+- 진행(2026-10-15, Codex): Dagster 상세·콘솔은 명시 선택/열기로 조회하고 종료 실행의
+  자동 상세 polling과 장애 직후 retry를 줄였다. 활성 상태·다음 주기 복구·수동 갱신은
+  유지한다. 해당 atom frontend 261 PASS/type/lint PASS. 지오코딩 UI와 통합한 최종 검증,
+  독립 리뷰 2인·배포·live E2E가 남아 있으며 운영 timeout 해결로 확대해 표시하지 않는다.
+
+- 진행(2026-10-15, Codex): geocoding 보조 geometry의 요청 내부 중복 조회를 제거했다.
+  새 회귀 OLD 3 FAIL → 관련 NEW 146 PASS. 확인된 보조 statement timeout의 typed 경고·point 보존,
+  일반 예외 전파·유한 geometry 관측과 OpenAPI/TS를 구현했다(ADR-071). 관리 UI는 부분 도형
+  경고와 좌표를 함께 표시하고 취소·새 제출·이탈의 signal/버전으로 늦은 응답을 격리한다.
+  UI OLD 5 FAIL/1 PASS → NEW 전체 261 PASS, type/lint/build PASS. 독립 리뷰·같은 예제의
+  운영 비교 측정·live E2E와 배포는 아직 후속이며 운영 완료로 표시하지 않는다.
+  적대 리뷰의 무관한 DETAIL 오분류를 OLD 10 FAIL/4 PASS로 재현하고 구조화 primary가
+  불명확하면 원 오류를 전파하도록 좁혔다. 관련 188 PASS이며 최종 SHA 재리뷰/이미지 검증이 남았다.
+
 - 진행(2026-10-15): T-324·T-325a~c 완료(원장 정리, `tasks-done.md`). geo 스택은 odroid로 이전됨 — 풀로드가 아니라 n150 백업 복원(ADR-070 지름길 (a)), 소비자 전환 완료, ADR-070 **accepted**(2026-10-15 소유자: 복원으로 갈음·이전 확정·소비자별 키·Track 1 첫 토큰=기준선·GeoIP off). **다음 한 작업**: 운영자가 schedule 재가동 전 odroid에서 standalone `mv_refresh` 1회 실측해 소요(초) 전달 → ADR-070 D4 상한 결정·코드(`recovery.py`·`test_definitions.py`) → 그 뒤 geo schedule·sensor 재가동; 병행으로 T-326c 점검(n150 geo-api 소비자 0 확인 후 정지, 키 경로 2xx, p50/p95, Track 1 계획 건수 0 확인)과 T-325 잔여 검증(UI live). 상세 `tasks.md` T-325 잔여·T-326, journal 2026-10-15.
 
 ## 현재 진척도 (2026-10-13 갱신, by claude)

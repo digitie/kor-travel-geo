@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- API shell CMD가 exec로 Uvicorn에 직접 종료 신호를 전달하도록 하고 host/port 확장을 보존한다.
+- ARM64 GDAL wheel 빌드의 실제 2GiB OOM에 대응해 API/CS의 해당 pip 빌드만 직렬 컴파일한다.
+  임시 setuptools 설정은 같은 layer에서 제거하며 런타임 동시성과 의존성 버전은 유지한다.
+- Dagster 상세와 내장 콘솔을 사용자가 열 때 조회한다. 종료 실행은 자동 상세 조회를
+  멈추고, 조회 장애는 다음 주기 또는 수동 갱신으로 복구하며 즉시 재시도 요청을 줄인다.
+- 관리 지오코딩 화면에서 보조 도형 timeout 경고와 좌표를 함께 표시한다. 실행 취소와
+  새 제출·화면 이탈의 요청 취소/늦은 응답 격리를 추가하고 사용자가 다시 실행해 복구할 수 있다.
+- v2 후보에 optional `geometry_error`를 추가한다. point 확보 후 확인된 보조 geometry statement
+  timeout이면 좌표를 보존하고 부분 실패를 명시한다. 다른 오류·사용자 취소는 성공으로 바꾸지 않는다.
 - 관리 UI 서빙 릴리스 표·상세에서 데이터 지문과 실제 이전 릴리스의 동일성, 지문 누락을 표시한다. 현재와 이전 활성화의 지문이 모두 없으면 판정 불가 경고를 표시한다(T-325c).
 - **데이터셋 `data_token` — 서빙 내용 지문(T-325a, ADR-069).** 활성 릴리스마다 v2 응답을 만드는 9표
   (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
@@ -23,6 +32,11 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+- UI production build의 page 작업자를 2개로 제한해 제한된 builder의 메모리 포화를 줄인다.
+- v2 보조 geometry는 같은 요청의 동일 building 조회와 miss를 공유하고 기존 geometry 재조회를
+  생략한다. 요청을 넘는 cache나 pool·SQL·동시성 설정 변경은 없다.
+- 보조 도형 timeout은 구조화된 driver primary 메시지로만 확인하며, 진단이 없거나 무관한
+  DETAIL에 timeout 문구가 있는 DB 오류를 부분 성공으로 바꾸지 않는다.
 - **`geo_cache` 키에 활성 릴리스(`version_token`)가 들어간다(T-325, ADR-069 구현 기록 10).** 활성화 직후 in-flight
   요청이 옛 답을 늦게 써도 새 릴리스에서는 닿지 않는다. 배포 직후 기존 캐시 행은 모두 miss다.
 - **hot-swap preflight가 restore DB의 Alembic revision 불일치를 거부한다(T-325, ADR-069 구현 기록 14).** 0029 이전

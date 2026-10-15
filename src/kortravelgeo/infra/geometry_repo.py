@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-from collections.abc import Mapping
-from typing import Any, cast
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
+from time import perf_counter
+from typing import Any, Literal, cast
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql.elements import TextClause
 
 from kortravelgeo.core.protocols import GeometryLookup
@@ -22,6 +26,9 @@ from kortravelgeo.dto.v2 import (
     RegionWithinRadiusRelation,
     V2GeometryKind,
 )
+from kortravelgeo.exceptions import GeometryTimeoutError
+
+from .metrics import record_geometry_lookup
 
 _BUILDING_DETAIL_RE = re.compile(r"^(?P<underground>지하\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?$")
 
@@ -381,6 +388,39 @@ class GeometryRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
+    @asynccontextmanager
+    async def _lookup_connection(
+        self, kind: Literal["building", "region", "road"], *, transaction: bool = False,
+    ) -> AsyncIterator[AsyncConnection]:
+        started = perf_counter()
+        outcome = "success"
+        try:
+            context = self.engine.begin() if transaction else self.engine.connect()
+            async with context as conn:
+                yield conn
+        except DBAPIError as exc:
+            orig = exc.orig
+            sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+            primary = getattr(getattr(orig, "diag", None), "message_primary", None)
+            # 57014는 사용자 취소도 공유한다. DETAIL/CONTEXT가 섞인 str(orig)는 근거가 아니다.
+            if (
+                sqlstate == "57014"
+                and isinstance(primary, str)
+                and "statement timeout" in primary.lower()
+            ):
+                outcome = "statement_timeout"
+                raise GeometryTimeoutError("보조 geometry 조회 제한 시간이 초과됐습니다.") from exc
+            outcome = "error"
+            raise
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            record_geometry_lookup(kind=kind, outcome=outcome, elapsed_s=perf_counter() - started)
+
     async def building_geometry(
         self,
         *,
@@ -402,7 +442,7 @@ class GeometryRepository:
             "buld_slno": parsed_detail[1] if parsed_detail else 0,
             "buld_se_cd": parsed_detail[2] if parsed_detail else None,
         }
-        async with self.engine.connect() as conn:
+        async with self._lookup_connection("building") as conn:
             row = (await conn.execute(_BUILDING_GEOMETRY_SQL, params)).mappings().first()
         return (
             _map_geometry_lookup(dict(row), source_table="tl_spbd_buld_polygon")
@@ -419,7 +459,7 @@ class GeometryRepository:
         query, code = _region_query(sig_cd=sig_cd, bjd_cd=bjd_cd)
         if query is None or code is None:
             return None
-        async with self.engine.connect() as conn:
+        async with self._lookup_connection("region") as conn:
             row = (await conn.execute(query, {"code": code})).mappings().first()
         return (
             _map_geometry_lookup(dict(row), source_table=_region_source_table(code))
@@ -439,7 +479,7 @@ class GeometryRepository:
             "limit": limit,
             **region_params(region_hint),
         }
-        async with self.engine.begin() as conn:
+        async with self._lookup_connection("road", transaction=True) as conn:
             await conn.execute(_ROAD_GEOMETRY_PLAN_SETTINGS_SQL)
             rows = (await conn.execute(_road_geometry_sql(query), params)).mappings().all()
         return [

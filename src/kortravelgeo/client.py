@@ -15,6 +15,7 @@ from .core.consistency_definitions import CASE_DEFINITIONS
 from .core.geocoder import geocode as core_geocode
 from .core.normalize import parse_address
 from .core.poboxer import pobox as core_pobox
+from .core.protocols import GeometryLookup
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.source_categories import CATEGORY_CATALOG, serving_usage_for
@@ -125,6 +126,7 @@ from .dto.v2 import (
     DatasetRef,
     GeocodeV2Input,
     GeocodeV2Response,
+    GeometryErrorV2,
     RegionsWithinRadiusInput,
     RegionsWithinRadiusResponse,
     RegionWithinRadiusItem,
@@ -135,7 +137,7 @@ from .dto.v2 import (
     SearchV2Response,
 )
 from .dto.zipcode import ZipcodeResponse
-from .exceptions import InvalidAddressError, NotFoundError
+from .exceptions import GeometryTimeoutError, InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
 from .infra.cache import GeoCacheRepository, make_cache_key
 from .infra.dataset_ref import DatasetRefCache
@@ -374,12 +376,15 @@ class AsyncAddressClient:
                     supplemental = await self._geocode_supplemental_road_candidates(
                         inp, address
                     )
-                except Exception:
-                    _LOGGER.warning(
-                        "supplemental road candidate lookup failed; "
-                        "returning primary geocode response",
-                        exc_info=True,
-                    )
+                except GeometryTimeoutError:
+                    if not converted.candidates or any(
+                        c.point is None for c in converted.candidates
+                    ):
+                        raise
+                    converted = converted.model_copy(update={"candidates": tuple(
+                        c.model_copy(update={"geometry_error": GeometryErrorV2()})
+                        for c in converted.candidates
+                    )})
                 else:
                     if supplemental.status == "OK":
                         return merge_geocode_v2_responses(inp, converted, supplemental)
@@ -511,31 +516,52 @@ class AsyncAddressClient:
         if not include_geometry or not candidates:
             return candidates
         geometry_repo = GeometryRepository(self._engine())
+        # 요청 한 번의 동일 SQL만 공유한다. miss도 공유하고 다음 요청에는 보관하지 않는다.
+        building_results: dict[
+            tuple[str | None, ...], GeometryLookup | GeometryErrorV2 | None
+        ] = {}
         enriched: list[CandidateV2] = []
         for candidate in candidates:
-            if candidate.source != "local":
+            if candidate.source != "local" or candidate.geometry is not None:
                 enriched.append(candidate)
                 continue
-            if candidate.match_kind == "region" and candidate.region is not None:
-                geometry = await geometry_repo.region_geometry(
-                    sig_cd=candidate.region.sig_cd,
-                    bjd_cd=candidate.region.bjd_cd,
-                )
-            elif candidate.match_kind in {"road", "parcel"}:
-                geometry = await geometry_repo.building_geometry(
-                    bd_mgt_sn=_metadata_str(candidate.metadata.get("bd_mgt_sn")),
-                    rncode_full=_metadata_str(
-                        candidate.metadata.get("rncode_full")
-                        or (candidate.address.road_name_code if candidate.address else None)
-                    ),
-                    bjd_cd=_metadata_str(
-                        candidate.metadata.get("bjd_cd")
-                        or (candidate.region.bjd_cd if candidate.region else None)
-                    ),
-                    detail=_metadata_str(candidate.metadata.get("detail")),
-                )
-            else:
-                geometry = None
+            try:
+                if candidate.match_kind == "region" and candidate.region is not None:
+                    geometry = await geometry_repo.region_geometry(
+                        sig_cd=candidate.region.sig_cd,
+                        bjd_cd=candidate.region.bjd_cd,
+                    )
+                elif candidate.match_kind in {"road", "parcel"}:
+                    key = (
+                        _metadata_str(candidate.metadata.get("bd_mgt_sn")),
+                        _metadata_str(
+                            candidate.metadata.get("rncode_full")
+                            or (candidate.address.road_name_code if candidate.address else None)
+                        ),
+                        _metadata_str(
+                            candidate.metadata.get("bjd_cd")
+                            or (candidate.region.bjd_cd if candidate.region else None)
+                        ),
+                        _metadata_str(candidate.metadata.get("detail")),
+                    )
+                    if key not in building_results:
+                        try:
+                            building_results[key] = await geometry_repo.building_geometry(
+                                bd_mgt_sn=key[0], rncode_full=key[1], bjd_cd=key[2], detail=key[3],
+                            )
+                        except GeometryTimeoutError:
+                            building_results[key] = GeometryErrorV2()
+                    lookup = building_results[key]
+                    if isinstance(lookup, GeometryErrorV2):
+                        raise GeometryTimeoutError("보조 geometry 조회 제한 시간이 초과됐습니다.")
+                    geometry = lookup
+                else:
+                    geometry = None
+            except GeometryTimeoutError:
+                if candidate.point is None:
+                    raise
+                enriched.append(candidate.model_copy(update={"geometry_error": GeometryErrorV2()}))
+                continue
             enriched.append(
                 with_candidate_geometry(candidate, geometry, include_geometry=include_geometry)
             )

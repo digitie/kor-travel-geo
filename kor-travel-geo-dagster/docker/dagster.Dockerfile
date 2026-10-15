@@ -63,11 +63,17 @@ COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
 # `-c constraints-dagster.txt` (dagster-shared plan stage 0): the Dagster family and the major
 # libraries install at EXACT versions, so a rebuild cannot put this code-server above the
 # shared Dagster host's version. pyproject keeps only floors.
+# GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
+# 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN python -m pip install --upgrade pip \
     && GDAL_VERSION="$(gdal-config --version)" \
-    && python -m pip install --prefix=/install \
+    && mkdir /tmp/ktg-gdal-build-home \
+    && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
+    && HOME=/tmp/ktg-gdal-build-home python -m pip install --prefix=/install \
          -c ./kor-travel-geo-dagster/docker/constraints-dagster.txt \
-         "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster
+         "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster \
+    && rm /tmp/ktg-gdal-build-home/.pydistutils.cfg \
+    && rmdir /tmp/ktg-gdal-build-home
 
 # Fail the build on a GDAL lib/binding version skew (belt-and-suspenders; same check the API
 # image runs). osgeo is resolved from the --prefix install tree.

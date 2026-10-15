@@ -1,4 +1,5 @@
 export type CandidateAddressLike = {
+  geometry_error?: { code: string; retryable?: boolean } | null;
   address?: {
     type?: string | null;
     road_address?: string | null;
