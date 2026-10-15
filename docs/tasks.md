@@ -15,9 +15,9 @@
 
 열린 항목 인덱스(상세는 아래 섹션; 2026-10-15에 T-324·T-325a~c가 `tasks-done.md`로 갔다).
 
-- [ ] **T-326a~c** — geo 스택 odroid(192.168.1.13) 이전 (ADR-070 proposed, Track 2). **2026-10-14~15 스택 이전은
+- [ ] **T-326a~c** — geo 스택 odroid(192.168.1.13) 이전 (ADR-070 **accepted 2026-10-15**, Track 2). **2026-10-14~15 스택 이전은
   풀로드가 아니라 n150 백업 dump 복원(설계 §14-8 지름길 (a), 수동 `pg_restore`)으로 실행됐고 소비자 전환도 끝났다** —
-  남은 것은 odroid 실측·`mv_refresh` 상한 결정·사후 검증·소유자 결정 확인. 아래 "T-326" 섹션.
+  남은 것은 odroid 실측·standalone `mv_refresh` 실측 → 상한 결정·사후 검증. 아래 "T-326" 섹션.
 - [ ] **T-325 잔여 검증** — T-325a~c(#573·#574 머지·odroid 배포) 뒤 실행되지 않은 수용 기준(관리 UI live 확인·reverse
   p50) — 아래 "T-325" 섹션.
 
@@ -85,16 +85,17 @@ ADR-069 구현은 머지·배포됐다 — T-325a+b #573(`1c9187d`), T-325c #574
   시각을 journal에 남기거나, 다음 활성화(첫 `mv_refresh`) 직후 0행으로 갈음한다.
 - (보류) phase 2 — 코드 단위 인벤토리 + `POST /v2/dataset/changes`(ADR-069 후속). 소유자 결정 뒤 번호 부여.
 
-### T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 proposed, 이전은 복원 경로로 실행됨, Track 2)
+### T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 accepted 2026-10-15, 이전은 복원 경로로 실행됨, Track 2)
 
 > **2026-10-14~15 실행 상태(운영자 확인 + 2026-10-15 08:2xZ 읽기 전용 재확인, 상세 journal 2026-10-15·ADR-070 "실행 기록").**
 > 이전은 아래 계획의 풀로드(8b)가 아니라 **n150 2026-10-12 백업(`kor_travel_geo_backup_20261012T231533Z_zstd3`)을 odroid
 > `kor-travel-shared-postgres` 11000에 수동 `pg_restore --jobs=2`**(rc=0, 오류 0, 51표·153인덱스) = 설계 §14-8 지름길 (a)로 했다.
 > 그 뒤 Alembic 0028→0029, `ktgctl serving fingerprint-active`(backfill), geo-api(`1c9187d`)·geo-ui(`7d3217c`) odroid 빌드, 공개
 > URL `.13` 매핑, geo code-server는 odroid 자체 Dagster plane(2026-10-15 02:52Z, n150 cs는 02:42Z 정지), 소비자(Map·PinVi·concierge)
-> `.13` 호출 확인. **이 경로는 Manager `ensure` 밖에서 호스트 쪽으로 했다.** 따라서 accepted 게이트 3건은 **실행으로 사실상
-> 골라졌다**(§14-8 = 지름길 (a), §14-12 = 옮김, §14-21 = 복원이 키를 보존 + PinVi 전용 키 `pinvi-api` 발급 = (나)) — ADR 상태 전환은
-> 소유자 확인 뒤(ADR-070 후속 첫 항목). odroid geo schedule·sensor는 현재 **STOPPED**.
+> `.13` 호출 확인. **이 경로는 Manager `ensure` 밖에서 호스트 쪽으로 했다.** **소유자 결정(2026-10-15) — ADR-070 accepted**:
+> §14-8 = 지름길 (a) 복원으로 갈음(풀로드는 다음 재적재 때), §14-12 = 이전 확정(0.95 GiB 게이트 대신 사후 메모리 관찰), §14-21 = (나)
+> 소비자별 키(active `kor-travel-map`·`pinvi-api`·`kor-travel-concierge`), Track 1은 "첫 토큰 = 기준선"(재계획 없음), GeoIP gate는
+> 운영 `off` 유지. odroid geo schedule·sensor는 현재 **STOPPED** — standalone `mv_refresh` 실측·상한 결정 뒤 재가동.
 
 결정 [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md)(D1~D9; 소유자 결정 대기 — **accepted 게이트 3건**: 설계
 §14-8 소스 ZIP 재확보·serving DB 직접 풀로드·dump 복원 지름길, §14-12 geo 플립 여유 값(0.2 → anon ≤ 0.95 GiB) 또는 n150
@@ -118,7 +119,7 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   digest 핀이 arm64로 풀렸다(효과 확인; 그 빌드가 저장소 Dockerfile 그대로였는지는 빌드한 세션 확인 필요 — 바꿨다면 D7 재핀 절차
   대상). ⓒ의 "전환 **전** 기록"은 시점을 놓쳤다 — 대신 전환 **뒤** 값: odroid `ops.public_api_keys` active 2건(`kor-travel-map`
   2026-08-08, `pinvi-api` 2026-10-14), `mv_geocode_target`·`tl_juso_text` `count(*)` 둘 다 **6,416,637**(= T-290l 참고값, 복원 원본이
-  n150 운영이므로 동일). **ⓐ D6 anon 게이트는 측정 없이 플립됐다** — 이제 의미 있는 측정은 odroid 사후 관찰(아래 "남은 것" ⓐ').
+  n150 운영이므로 동일). **ⓐ D6 anon 게이트는 측정 없이 플립됐고 소유자가 사후 관찰로 갈음을 결정(2026-10-15)** — 아래 "남은 것" ⓐ'.
   남은 것: (1) odroid envelope 전부(미실행 — 단 odroid는 무팬 열 제약으로 CPU 1.416 GHz 캡·load ≈20이라 probe 수치에 그 조건을
   병기); ⓐ' odroid 첫 `mv_refresh`·(수동) `db_backup` 중 geo code-server cgroup v1 메모리 최대값·OOM 여부(D6의 사후 판정 — 넘으면
   `mem_limit`/memswap 정책 재검토, Manager §14-14); ⓑ PG anon(Manager 입력, odroid에서); (3) GDAL arm64 빌드 시간·메모리는 빌드한
@@ -160,11 +161,13 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   않음, `KTG_DAGSTER_URL`은 공용 plane webserver loopback, `KTG_DAGSTER_PUBLIC_URL`은 `dagster-sub.` host). 복원이 키를 보존해
   Map 키 재발급은 필요 없었다(D2). `.env.prod.example`·`docs/ports.md` 주석은 이 PR에서 정정. **남은 것**: (1) **standalone
   `mv_refresh` 1회 odroid 실측 → D4 상한 결정과 `recovery.py`·`test_definitions.py` 코드**(schedule STOPPED라 아직 한 번도 안
-  돌았다 — 첫 실행은 수동 `POST /v1/admin/maintenance/refresh-mv`로 조용한 창에; odroid는 열 제약이라 n150 ×3 가정(3.7~4.8 h)보다
-  길 수 있고 그러면 21600 s 상한에 걸려 cancel된다 — **schedule을 RUNNING으로 돌리기 전에 결정**); (2) 복원 소요(wall clock)를
-  `docs/deploy/staging-full-load.md` 표에(운영자 기록 회수); (3) ADR-070 상태 줄(소유자 확인 뒤). **풀로드 경로 자체**(소스
-  반입·`/app/data/source` 상시 bind — odroid geo 컨테이너에 그 mount가 아직 없다)는 다음 재적재 때의 일이라 이 항목에서 뺀다 —
-  소유자가 "복원으로 갈음"을 확인하면 런북 계획 절을 "운영 중 재적재" 쪽으로만 남긴다.
+  돌았다; odroid는 열 제약이라 n150 ×3 가정(3.7~4.8 h)보다 길 수 있고 그러면 21600 s 상한에 걸려 cancel된다). **다음 한 걸음(소유자
+  지시 2026-10-15)**: 운영자가 schedule 재가동 **전에** odroid에서 standalone `mv_refresh` 1회(`POST /v1/admin/maintenance/refresh-mv`,
+  조용한 창)를 돌려 wall clock(초)을 전달 → 그 숫자로 ADR-070 D4 결정((ⅱ) `round(실측 s × 1.5)` 매핑, 실측이 21600 s를 넘으면 (ⅰ)
+  `LONG_JOBS`) → `kor-travel-geo-dagster/src/kortravelgeo_dagster/recovery.py`·`tests/test_definitions.py` 기대값 + 일부러 빨갛게 →
+  journal에 숫자 → 그 뒤 schedule·sensor 재가동. (2) 복원 소요(wall clock)를 `docs/deploy/staging-full-load.md` 표에(운영자 기록 회수).
+  ADR-070 상태 줄은 이 PR에서 accepted로 끝. **풀로드 경로 자체**(소스 반입·`/app/data/source` 상시 bind — odroid geo 컨테이너에 그
+  mount가 아직 없다)는 소유자 결정대로 다음 재적재 때의 일이라 이 항목에서 뺀다.
 
   런북 "빈 호스트(odroid) 풀로드 — 계획" 절대로(순서 0 = §11.2 8a 완료 효과 검사 뒤): 소스 반입(파일 수 > 0·NVMe 장치
   프리플라이트) → `ensure geo` → **serving DB 직접** `full_load_batch`(`target_database` 없음; 라우팅 env 없음 —
@@ -201,11 +204,11 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   `kor-travel-geo-api-latest`·`-ui-latest`는 Up(code-server만 Exited); n150 geo-api access log의 24 h 소비자 peer가 0임을 먼저 숫자로
   확인 → 정지(Manager) → Map geocode e2e 키 경로 200. (2) odroid geo-api access log peer 집계 — 2026-10-15 06:2x~08:2xZ 2 h 동안
   loopback 592건·`192.168.1.14` 1건뿐(로그 형식상 IP만 셌다); Map·PinVi(`pinvi-api` 키)·concierge 각각 키 경로 2xx를 하나씩 상태코드로.
-  concierge가 어느 키를 쓰는지(활성 키는 Map·PinVi 둘뿐) 확인. (3) n150 → odroid `/v2/reverse` p50/p95(N ≥ 200, 발급 키) — ADR-070
+  concierge는 2026-10-15 ≈09:00Z 전용 키 `kor-travel-concierge` 발급 뒤 odroid에서 정상(그 전 VWorld 형식 키로 401) — 상태코드를 journal에. (3) n150 → odroid `/v2/reverse` p50/p95(N ≥ 200, 발급 키) — ADR-070
   D8 ≈2.5 h+ 추정 검증, odroid 열 제약 상태 병기. (4) **Track 1**: 복원이라 `version_token`은 n150과 같은 릴리스(`e0db4ff8…`,
   2026-09-28 `manual_rebuild`)지만 n150 DB는 Alembic 0028이라 `data_token`이 **없었고** odroid에서 처음 생겼다(NULL → `dd1-…`).
-  ADR-070 D8의 "복원이면 재계획 0"은 양쪽 토큰이 같다는 가정이었다 — 소비자 규칙(Map ADR-109·concierge ADR-49)이 "판정 불가 →
-  첫 토큰"을 어떻게 다루는지에 따라 계획 0건 또는 1건; 실제 건수를 journal에. (5) odroid Dagster: geo schedule·sensor
+  소유자 결정(2026-10-15): 첫 토큰은 **기준선**(저장만, 재계획 없음 — ADR-069 D8 amendment, 소비자 구현은 Map ADR-109·concierge) →
+  Map·concierge 센서의 실제 계획 건수 **0**과 저장된 기준선 토큰을 journal에(0이 아니면 소비자 구현 결함으로 해당 저장소에 전달). (5) odroid Dagster: geo schedule·sensor
   STOPPED → 재가동 결정(위 T-326b (1) 상한 결정 뒤); 08:26Z 공용 plane `daemon`·`webserver`가 `unhealthy`, geo-ui도 healthcheck
   5 s timeout으로 `unhealthy`(UI는 응답) — Manager 쪽 확인. (6) overlay 삭제 조건은 아래 그대로.
 

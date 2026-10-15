@@ -1,6 +1,9 @@
 # ADR-037: 외부 IP에서 호출되는 REST API는 대한민국 IP만 허용한다
 
 - 상태: accepted (문서 설계, 구현 전)
+- **운영 메모(2026-10-15, 소유자 결정)**: 게이트 구현(`KTG_GEOIP_GATE_MODE`, 앱 기본 `strict`)은 남기되 **운영(n150·odroid)은
+  `off`로 둔다** — 공개 v2는 소비자별 공개 키(ADR-064·ADR-070 D2)로 보호한다. `.env.prod.example`도 `off`. 결정 자체를 바꾸는
+  supersede가 아니라 운영 설정 기록이다(코드 변경 없음).
 - 날짜: 2026-05-27
 - 결정자: 사용자 요청, claude
 

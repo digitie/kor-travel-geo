@@ -16,8 +16,8 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
-| ADR-070 | geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다 (proposed — 2026-10-15 이전은 dump 복원(지름길 (a))으로 실행됨, 상태 전환은 소유자 확인 대기; T-326a~c; Track 2, 호스트 쪽 정본은 Manager ADR-58) | [070-odroid-host-and-empty-host-full-load.md](070-odroid-host-and-empty-host-full-load.md) |
-| ADR-069 | 데이터셋 버전에 서빙 내용 지문 기반 `data_token`을 더하고, 활성 릴리스마다 서버측 결과 캐시를 비운다 (accepted 2026-10-13 — 구현 완료: T-325a+b #573, T-325c #574; 운영 잔여 검증은 tasks.md) | [069-dataset-data-token.md](069-dataset-data-token.md) |
+| ADR-070 | geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다 (accepted 2026-10-15 — 이전은 dump 복원(지름길 (a))으로 실행, 풀로드는 다음 재적재 때, 소비자별 키, Track 1 기준선 규칙; 잔여 T-326a~c; Track 2, 호스트 쪽 정본은 Manager ADR-58) | [070-odroid-host-and-empty-host-full-load.md](070-odroid-host-and-empty-host-full-load.md) |
+| ADR-069 | 데이터셋 버전에 서빙 내용 지문 기반 `data_token`을 더하고, 활성 릴리스마다 서버측 결과 캐시를 비운다 (accepted 2026-10-13, amended 2026-10-15 기준선 규칙 — 구현 완료: T-325a+b #573, T-325c #574; 운영 잔여 검증은 tasks.md) | [069-dataset-data-token.md](069-dataset-data-token.md) |
 | ADR-068 | 공통 Dagster 복구 정책과 운영 UI 채택 | [068-common-dagster-recovery-and-ui.md](068-common-dagster-recovery-and-ui.md) |
 | ADR-001 | PostgreSQL + PostGIS를 1차 저장소로 채택한다 | [001-postgres-postgis-primary-store.md](001-postgres-postgis-primary-store.md) |
 | ADR-002 | 라이브러리 API는 async-only로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #2) |
@@ -55,7 +55,7 @@
 | ADR-034 | AI 에이전트는 고정 Git worktree + CodeGraph 인덱스를 사용한다 | [034-ai-agent-fixed-worktree-codegraph.md](034-ai-agent-fixed-worktree-codegraph.md) (superseded by ADR-041) |
 | ADR-035 | Address 코드 helper를 독립 구현하고 외부 라이브러리 의존을 끊는다 | [035-address-code-helper-independent-impl.md](035-address-code-helper-independent-impl.md) |
 | ADR-036 | DB Restore는 같은 cluster `ALTER DATABASE RENAME` hot-swap을 1차로 | [036-restore-hot-swap-alter-database-rename.md](036-restore-hot-swap-alter-database-rename.md) |
-| ADR-037 | 외부 IP REST API는 대한민국 IP만 허용한다 (GeoIP gate) | [037-geoip-gate-korea-only-rest-api.md](037-geoip-gate-korea-only-rest-api.md) |
+| ADR-037 | 외부 IP REST API는 대한민국 IP만 허용한다 (GeoIP gate; 운영은 2026-10-15 소유자 결정으로 `off`) | [037-geoip-gate-korea-only-rest-api.md](037-geoip-gate-korea-only-rest-api.md) |
 | ADR-038 | API 표면을 v1(vworld 호환)·v2(자체 통합 candidate)로 분리한다 | [038-api-v1-vworld-v2-candidate-split.md](038-api-v1-vworld-v2-candidate-split.md) |
 | ADR-039 | Python 라이브러리는 후보 목록 API만 공개하고 `_v2` 접미사를 제거한다 | [039-python-library-candidate-api-drop-v2-suffix.md](039-python-library-candidate-api-drop-v2-suffix.md) |
 | ADR-040 | ~~(삭제됨)~~ | 삭제 — PC/WSL 로컬 포트 15434/8888/13088 결정. ADR-042→045→046 거쳐 ADR-048로 완전 대체, 고유 근거 없음 |

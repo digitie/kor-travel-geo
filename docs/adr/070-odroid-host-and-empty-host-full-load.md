@@ -1,13 +1,12 @@
 # ADR-070: geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다
 
-- 상태: proposed (미구현 — 이 저장소 몫은 T-326a~c, `docs/tasks.md`). **accepted 게이트 = 소유자 결정
-  §14-8·§14-12·§14-21 세 건**(후속 절 첫 (open) 항목) — 닫히면 T-326b PR에서 한 줄로 전환. 나머지 §14-19·4·7·6은
-  추천안 수용이면 본문 변경 0이고, 달리 결정되면 accepted 뒤 amendment로 반영한다. **분기**: §14-12가 "n150 잔류"로
-  닫히거나 D6 anon 게이트 미달이면 "geo 스택은 odroid에서 돈다"는 결정 자체가 성립하지 않으므로 상태는 `rejected`
-  (D1 CIDR·D2 키 정책은 n150 잔류에도 유효 — 그 둘만 본 ADR 축소 또는 별도 짧은 ADR), T-326b/c는 닫는다.
-  **2026-10-15 갱신**: 이전은 실행됐다 — 풀로드가 아니라 n150 백업 dump의 수동 `pg_restore`(D3-6 지름길 (a))로. 그래서 accepted
-  게이트 3건은 실행으로 사실상 골라졌지만(아래 "실행 기록") **상태 전환은 소유자 확인 뒤**로 남긴다 — 그때까지 `proposed`.
-- 날짜: 2026-10-13 (실행 기록 2026-10-15)
+- 상태: **accepted (2026-10-15, 소유자)** — accepted 게이트 3건을 소유자가 닫았다(아래 "실행 기록" 끝 "소유자 결정"):
+  §14-8 = **dump 복원(D3-6 지름길 (a), 수동 `pg_restore`)으로 갈음**, D3의 serving DB 직접 풀로드는 **다음 재적재 때**로 미룸;
+  §14-12 = **odroid 이전 확정**, D6의 0.95 GiB anon 플립 게이트 대신 **사후 메모리 관찰**; §14-21 = **(나) 소비자별 공개 키**
+  (active: `kor-travel-map`·`pinvi-api`·`kor-travel-concierge`). D3·D6은 이 결정만큼 amendment(실행 기록)로 읽는다 — 본문은
+  2026-10-13 설계 기록으로 남긴다. 나머지 §14-19·4·7·6은 실행된 그대로(§14-4 = `dagster-sub.`, §14-7 = 백업 off, §14-6 = odroid 현지 빌드).
+  (옛 상태 줄: proposed — 게이트 3건 대기, n150 잔류면 `rejected`였다.)
+- 날짜: 2026-10-13 (실행 기록·accepted 2026-10-15)
 - 결정자: 사용자 요청(2026-10-13 설계 프로그램 Track 2 "geo·weather·transport를 odroid로 옮긴다"),
   claude 설계 + 적대 리뷰 3회(6명) + odroid 비root 실측(2026-10-13) 반영. 정본 설계는 저장소 밖
   (`track2-design-final.md`, 절 번호 `§n`은 그 문서)이며, 이 ADR은 geo 저장소가 지켜야 할 결정만 둔다.
@@ -388,7 +387,9 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
    참고값과 같다). 활성 릴리스는 n150의 것 그대로(`e0db4ff8…`, 2026-09-28 `manual_rebuild`, `mv_refresh strategy=swap`) — 복원은
    새 릴리스를 만들지 않았다. `ops.serving_releases`에는 n150 이력의 `pending`/`restore`(활성화 시각 NULL) 2행도 함께 왔다.
 3. **D2 키**: 예측대로 복원이 `ops.public_api_keys`를 보존했다 — active 2건(`kor-travel-map` 2026-08-08, `pinvi-api` 2026-10-14).
-   Map 키 재발급 없이 키 경로가 이어졌고, PinVi 전용 키는 (나) 소비자별 발급의 첫 사례다. concierge가 쓰는 키는 미확인.
+   Map 키 재발급 없이 키 경로가 이어졌고, PinVi 전용 키는 (나) 소비자별 발급의 첫 사례다. **concierge**는 그때까지 VWorld 형식
+   키를 보내 odroid geo에서 401이었고(DB에 키가 있어 VWorld 폴백이 꺼진 상태 — D2 함정 그대로), 2026-10-15 ≈09:00Z 전용 키
+   `kor-travel-concierge`를 발급해 odroid에서 정상 응답(운영자 확인). 이로써 active 3건 = 소비자별 1개.
    **문서 정정**: D2·T-326a·런북의 `SELECT count(*) FROM ops.public_api_keys WHERE active`는 열 이름이 틀렸다(열은
    `state TEXT`) — `WHERE state = 'active'`로 고쳤다(이 PR).
 4. **D1·D5 env 확인(odroid geo-api)**: `KTG_ADMIN_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`(`.14` 없음),
@@ -404,9 +405,14 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
    OOM 여부)로 대신한다(T-326a).
 8. **D8 수정 입력**: "dump 복원이면 서빙 내용 지문이 같아 토큰이 같으므로 재계획 0"은 **양쪽에 토큰이 있다는 가정**이었다. n150
    DB는 Alembic 0028이라 `data_token`이 없었고 odroid에서 처음 생겼다(`version_token`은 같음). 소비자 센서가 "판정 불가 → 첫 토큰"을
-   재계획으로 보는지는 소비자 ADR(Map ADR-109·concierge ADR-49) 규칙에 달렸다 — T-326c에서 실제 계획 건수를 기록한다.
+   재계획으로 보는지는 소비자 규칙에 달렸다 → **소유자 결정(2026-10-15)으로 "기준선"**: 저장된 토큰이 없던 소비자가 처음 받은
+   토큰은 저장만 하고 재해석·재계획하지 않는다(재해석은 저장값과 새 값이 둘 다 있고 다를 때만). 열 제약 odroid에 전량
+   재지오코딩이 몰리는 것을 막기 위함. ADR-069 D8 amendment·`docs/api-reference/v2/dataset-version.md`·`llm-summary.md`에도 같은
+   문구; 소비자 쪽 구현은 Map ADR-109·concierge 몫. T-326c는 실제 계획 건수 **0**을 확인한다.
 9. **아직 서 있지 않은 전제**: n150 geo-api·geo-ui는 아직 Up(T-326c의 "n150 geo-api stop 상태에서" 검증 전제 미충족).
 
-**소유자에게 확인할 것(상태 전환 조건)**: §14-8 = "복원 (a)로 갈음, 풀로드는 다음 재적재 때"인지; §14-12 = 옮김 확정(사후 메모리
-관찰을 게이트 대신으로 받는지); §14-21 = (나) 확정(concierge 키 포함). 셋이 확인되면 상태 `accepted`, D3 기본을 "다음 재적재"로
-낮추는 amendment 한 줄.
+**소유자 결정(2026-10-15)** — 상태 `accepted`: (1) §14-8 dump 복원 (a)로 갈음, 풀로드는 다음 재적재 때(그때 D3-2 소스 bind·
+D3 절차를 쓴다); (2) §14-12 odroid 이전 확정 — D6 게이트 대신 사후 메모리 관찰(T-326a ⓐ'); (3) §14-21 (나) 소비자별 키 1개씩;
+(4) Track 1 기준선 규칙(위 8); (5) GeoIP gate는 n150·odroid 모두 `off` 유지(`.env.prod.example`을 `off`로, 코드 변경 없음 —
+ADR-037의 대한민국 IP 제한은 운영에서 적용하지 않는 상태); (6) odroid schedule 재가동 전에 standalone `mv_refresh` 1회 실측
+(운영자 실행) → D4 상한 결정(T-326b 남은 항목).

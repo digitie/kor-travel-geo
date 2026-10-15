@@ -13,6 +13,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
 1. `version_token`과 `data_token`은 불투명 값이다. 파싱·정렬하지 않는다.
 2. 소비자의 데이터 비교는 `data_token` 동등성으로만 한다. 같으면 데이터 동일, 다르면 변경이며
    지문이 없으면 판정 불가다. `version_token`은 릴리스 관측용이고 동일 데이터 재적재에도 바뀔 수 있다.
+   저장된 토큰이 없던 소비자가 처음 받은 토큰은 기준선으로 저장만 한다(재해석 없음, 2026-10-15 소유자 결정 — ADR-070 실행 기록).
 3. `reference_months`는 도출에 실패하면 생략될 수 있고 비단조다(복원 후 과거 월로 역행 가능).
    기준월이 없어도 지문이 있으면 비교할 수 있으며 지문까지 없으면 판정 불가다.
 4. 이력 보존은 보증하지 않는다. hot-swap 복원 시 백업 시점 이후 이력이 소멸할 수 있다.
@@ -114,6 +115,7 @@ candidate 목록 endpoint(geocode/reverse/search)와 달리 **Python 라이브�
   서빙 데이터 식별(**데이터가 같으면 같다**, 표 집합·geometry 요약의 한계는 ADR-069 D2·D3).
 - 소비자 규약: `current.data_token`을 저장·비교한다. 같으면 무동작(재빌드), 다르면 전량 재해석 후
   새 값을 저장, 응답에 없으면 **판정 불가**로 멈추고 운영자에게 보인다(바뀐 것으로 간주하지 않는다).
+  **기준선 규칙(2026-10-15 소유자 결정)**: 소비자가 저장한 `data_token`이 **없는** 상태(한 번도 관측하지 못함 — 예: n150 geo는 Alembic 0028이라 토큰이 없었다)에서 처음 토큰을 받으면 그것은 **기준선(baseline)으로 저장만 하고 재해석·재계획하지 않는다**. 재해석은 저장된 토큰과 새 토큰이 **둘 다 있고 다를 때만**이다(열 제약 odroid에 전량 재지오코딩 폭주 방지).
   `version_token`·`change_type`은 관측·이력용으로만 쓴다. `known_version`은 그대로 `version_token`이다.
 - 네 조회 응답(`/v2/geocode`·`/v2/reverse`·`/v2/search`·`/v2/regions/within-radius`) 최상위에도
   `dataset: {version_token, data_token}`이 실린다(active 릴리스 없으면 생략; 외부 출처(`candidates[].source ∈
