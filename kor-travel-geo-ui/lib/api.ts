@@ -195,19 +195,21 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
   return (await response.json()) as T;
 }
 
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   return requestJson<T>(path, {
     method: "POST",
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal
   });
 }
 
 export async function postPublicJson<T>(
   path: string,
   body: unknown,
-  fallbackApiKey = ""
+  fallbackApiKey = "",
+  signal?: AbortSignal
 ): Promise<T> {
-  return postJson<T>(pathWithPublicApiKey(path, fallbackApiKey), body);
+  return postJson<T>(pathWithPublicApiKey(path, fallbackApiKey), body, signal);
 }
 
 export async function patchJson<T>(path: string, body: unknown): Promise<T> {

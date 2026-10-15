@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — 관리 지오코딩 부분 실패 표시와 요청 취소(Codex)
+
+- typed geometry_error는 응답 JSON뿐 아니라 주소 요약의 경고로 표시한다. 주소 문자열이
+  없는 후보도 경고를 숨기지 않으며 확인된 좌표와 확보한 도형은 유지한다. 다음 실행의 정상
+  응답에는 경고가 사라진다. primary HTTP 오류는 기존 오류로 표시하고 부분 성공으로 바꾸지 않는다.
+- geocode 실행은 caller AbortSignal을 기존 공개 JSON helper/BFF/API 경계에 전달한다.
+  취소 버튼·새 제출·화면 이탈이 이전 요청을 취소하고 버전을 무효화한다. 취소를 무시한 늦은
+  응답·실패·finally가 다음 실행 결과나 loading 상태를 덮지 않는다. 자동 재시도는 추가하지 않는다.
+- OLD의 새 UI 회귀는 5 FAIL/1 PASS였고 NEW 관련 26 PASS·전체 261 PASS였다.
+  최초 테스트 hook이 mock 함수를 반환해 생긴 부수 timeout은 hook 반환을 제거한 뒤 제외했다.
+  경고·signal 전달·stale guard·unmount abort 삭제의 돌연변이 4종도 모두 거부했다.
+- type/lint·기본 Turbopack production build PASS. 최초 build는 외부 node_modules symlink의
+  filesystem root 제약으로 실패했고, 본인 ext4 검증 디렉터리에 동일 lock의 의존성을 복사해
+  통과했다. 공유 의존성이나 제품 설정은 바꾸지 않았다. react-doctor offline은 오류 0·기존
+  경고 14·score 90이며 baseline과 경고 파일/rule/fingerprint가 전부 같다. 새 경고는 없다.
+- backend unit 전체 1,887 PASS(47.74초). 테스트 PG DSN 없이 실행했으며 실제 PostgreSQL
+  integration은 이번 실행 범위에서 NOT_RUN이다. 운영 DB나 보존 DB를 시험에 사용하지 않았다.
+- 이 기록은 운영 배포·독립 리뷰 두 건·live E2E 통과를 뜻하지 않는다. 같은 Admin 예제의
+  배포 전후 실측과 사용자 취소·부분 실패·재실행 검증은 후속 게이트다.
+
 ## 2026-10-15 — 좌표 성공과 보조 geometry statement timeout 격리(Codex)
 
 - 확인된 geometry SQL statement timeout만 GeometryTimeoutError로 구별한다. 유효 point가 이미

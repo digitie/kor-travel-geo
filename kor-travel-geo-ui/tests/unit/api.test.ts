@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   apiErrorResult,
   backendPath,
   getErrorMessage,
+  postPublicJson,
   parseApiErrorEnvelope,
   resultErrorMessage
 } from "@/lib/api";
@@ -14,6 +15,34 @@ import {
   forwardedProxyHeaders,
   liveE2EAdminIdentityFromEnv
 } from "@/lib/proxy";
+
+describe("공개 JSON 요청 취소", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("기존 공개 키와 요청 본문을 유지하며 caller signal을 fetch에 전달한다", async () => {
+    const controller = new AbortController();
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ status: "OK" })));
+    vi.stubGlobal("fetch", fetch);
+    await postPublicJson("/v2/geocode", { road_address: "예제 주소" }, "synthetic-key", controller.signal);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("/v2/geocode?key=synthetic-key");
+    expect(init.signal).toBe(controller.signal);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ road_address: "예제 주소" });
+  });
+
+  it("fetch의 취소 오류를 정상 JSON 결과로 바꾸지 않는다", async () => {
+    const controller = new AbortController();
+    const fetch = vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetch);
+    const pending = postPublicJson("/v2/geocode", {}, "", controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
 
 describe("backendPath", () => {
   it("기본 백엔드 v1 prefix를 안정적으로 붙이고 명시 v2 경로는 보존한다", () => {

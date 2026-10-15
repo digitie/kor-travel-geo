@@ -1,7 +1,7 @@
 "use client";
 
 import { LocateFixed } from "lucide-react";
-import { FormEvent, useReducer } from "react";
+import { FormEvent, useEffect, useReducer, useRef } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import type {
   Coordinate,
@@ -28,6 +28,7 @@ type GeocodeDebuggerState = {
   includeGeometry: boolean;
   result: unknown;
   loading: boolean;
+  notice: string;
 };
 
 type GeocodeDebuggerAction = {
@@ -41,14 +42,27 @@ const initialGeocodeDebuggerState: GeocodeDebuggerState = {
   fallback: "none",
   includeGeometry: true,
   result: null,
-  loading: false
+  loading: false,
+  notice: ""
 };
 
 export function GeocodeDebugger() {
   const [state, dispatch] = useReducer(geocodeDebuggerReducer, initialGeocodeDebuggerState);
   const { apiKey } = useVWorldApiKey();
-  const { address, type, fallback, includeGeometry, result, loading } = state;
+  const { address, type, fallback, includeGeometry, result, loading, notice } = state;
+  const requestVersion = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
   const errorMessage = resultErrorMessage(result);
+
+  useEffect(() => {
+    const version = requestVersion;
+    const request = activeRequest;
+    return () => {
+      ++version.current;
+      request.current?.abort();
+      request.current = null;
+    };
+  }, []);
 
   function mergeState(patch: Partial<GeocodeDebuggerState>) {
     dispatch({ type: "merge", patch });
@@ -61,7 +75,11 @@ export function GeocodeDebugger() {
       mergeState({ result: { error: parsed.error.issues[0]?.message ?? "주소 입력을 확인하세요" } });
       return;
     }
-    mergeState({ loading: true });
+    const version = ++requestVersion.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    mergeState({ loading: true, result: null, notice: "" });
     try {
       const body: GeocodeV2Input =
         parsed.data.type === "parcel"
@@ -77,23 +95,39 @@ export function GeocodeDebugger() {
               include_geometry: includeGeometry,
               limit: 10
             };
-      mergeState({ result: await postPublicJson<GeocodeV2Response>("/v2/geocode", body, apiKey) });
+      const response = await postPublicJson<GeocodeV2Response>("/v2/geocode", body, apiKey, controller.signal);
+      if (version === requestVersion.current && !controller.signal.aborted) {
+        mergeState({ result: response });
+      }
     } catch (error) {
-      mergeState({ result: apiErrorResult(error) });
+      if (version === requestVersion.current && !controller.signal.aborted) {
+        mergeState({ result: apiErrorResult(error) });
+      }
     } finally {
-      mergeState({ loading: false });
+      if (version === requestVersion.current && !controller.signal.aborted) {
+        activeRequest.current = null;
+        mergeState({ loading: false });
+      }
     }
+  }
+
+  function cancel() {
+    ++requestVersion.current;
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    mergeState({ loading: false, notice: "요청을 취소했습니다. 다시 실행할 수 있습니다." });
   }
 
   return (
     <div className="debug-map-layout">
       <div className="debug-control-stack">
         <Panel title="주소 입력">
-          <form className="form-grid" onSubmit={submit}>
+          <form aria-busy={loading} className="form-grid" onSubmit={submit}>
             <div className="field">
               <label htmlFor="address">address</label>
               <input
                 id="address"
+                disabled={loading}
                 value={address}
                 onChange={(e) => mergeState({ address: e.target.value })}
               />
@@ -103,6 +137,7 @@ export function GeocodeDebugger() {
                 <label htmlFor="type">type</label>
                 <select
                   id="type"
+                  disabled={loading}
                   value={type}
                   onChange={(e) => mergeState({ type: e.target.value })}
                 >
@@ -114,6 +149,7 @@ export function GeocodeDebugger() {
                 <label htmlFor="fallback">fallback</label>
                 <select
                   id="fallback"
+                  disabled={loading}
                   value={fallback}
                   onChange={(e) => mergeState({ fallback: e.target.value })}
                 >
@@ -125,6 +161,7 @@ export function GeocodeDebugger() {
             <label className="checkbox-row" htmlFor="include-geometry">
               <input
                 checked={includeGeometry}
+                disabled={loading}
                 id="include-geometry"
                 onChange={(e) => mergeState({ includeGeometry: e.target.checked })}
                 type="checkbox"
@@ -135,9 +172,11 @@ export function GeocodeDebugger() {
               <LocateFixed size={16} />
               실행
             </button>
+            {loading ? <button className="button" onClick={cancel} type="button">취소</button> : null}
           </form>
         </Panel>
         <Panel title="응답">
+          {notice ? <p role="status">{notice}</p> : null}
           {errorMessage ? (
             <Alert role="alert" variant="destructive">
               <AlertDescription>{errorMessage}</AlertDescription>
