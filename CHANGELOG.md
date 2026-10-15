@@ -23,6 +23,8 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+- v2 보조 geometry는 같은 요청의 동일 building 조회와 miss를 공유하고 기존 geometry 재조회를
+  생략한다. 요청을 넘는 cache나 pool·SQL·동시성 설정 변경은 없다.
 - **`geo_cache` 키에 활성 릴리스(`version_token`)가 들어간다(T-325, ADR-069 구현 기록 10).** 활성화 직후 in-flight
   요청이 옛 답을 늦게 써도 새 릴리스에서는 닿지 않는다. 배포 직후 기존 캐시 행은 모두 miss다.
 - **hot-swap preflight가 restore DB의 Alembic revision 불일치를 거부한다(T-325, ADR-069 구현 기록 14).** 0029 이전

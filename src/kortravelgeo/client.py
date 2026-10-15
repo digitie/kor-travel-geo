@@ -15,6 +15,7 @@ from .core.consistency_definitions import CASE_DEFINITIONS
 from .core.geocoder import geocode as core_geocode
 from .core.normalize import parse_address
 from .core.poboxer import pobox as core_pobox
+from .core.protocols import GeometryLookup
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.source_categories import CATEGORY_CATALOG, serving_usage_for
@@ -511,9 +512,11 @@ class AsyncAddressClient:
         if not include_geometry or not candidates:
             return candidates
         geometry_repo = GeometryRepository(self._engine())
+        # 요청 한 번의 동일 SQL만 공유한다. miss도 공유하고 다음 요청에는 보관하지 않는다.
+        building_results: dict[tuple[str | None, ...], GeometryLookup | None] = {}
         enriched: list[CandidateV2] = []
         for candidate in candidates:
-            if candidate.source != "local":
+            if candidate.source != "local" or candidate.geometry is not None:
                 enriched.append(candidate)
                 continue
             if candidate.match_kind == "region" and candidate.region is not None:
@@ -522,18 +525,23 @@ class AsyncAddressClient:
                     bjd_cd=candidate.region.bjd_cd,
                 )
             elif candidate.match_kind in {"road", "parcel"}:
-                geometry = await geometry_repo.building_geometry(
-                    bd_mgt_sn=_metadata_str(candidate.metadata.get("bd_mgt_sn")),
-                    rncode_full=_metadata_str(
+                key = (
+                    _metadata_str(candidate.metadata.get("bd_mgt_sn")),
+                    _metadata_str(
                         candidate.metadata.get("rncode_full")
                         or (candidate.address.road_name_code if candidate.address else None)
                     ),
-                    bjd_cd=_metadata_str(
+                    _metadata_str(
                         candidate.metadata.get("bjd_cd")
                         or (candidate.region.bjd_cd if candidate.region else None)
                     ),
-                    detail=_metadata_str(candidate.metadata.get("detail")),
+                    _metadata_str(candidate.metadata.get("detail")),
                 )
+                if key not in building_results:
+                    building_results[key] = await geometry_repo.building_geometry(
+                        bd_mgt_sn=key[0], rncode_full=key[1], bjd_cd=key[2], detail=key[3],
+                    )
+                geometry = building_results[key]
             else:
                 geometry = None
             enriched.append(
