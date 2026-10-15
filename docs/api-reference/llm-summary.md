@@ -14,6 +14,7 @@
 - 외부 API fallback은 명시적으로 `fallback="api"`를 지정할 때만 동작한다.
 - `/v2/dataset/version`·`/v2/dataset/history`의 소비자 데이터 비교는 `data_token` 동등성으로만 한다.
   지문이 없으면 판정 불가이며 `version_token`은 관측용이다. 불투명 토큰을 파싱·정렬하지 않는다.
+  저장된 토큰이 없던 소비자가 처음 받은 `data_token`은 기준선으로 저장만 한다(재해석은 저장값과 새 값이 둘 다 있고 다를 때만, 2026-10-15).
   이 두 endpoint는 REST 전용이고, 네 후보 조회 응답의 선택 `dataset`도 같은 지문을 제공한다.
 
 ## 엔드포인트
@@ -51,4 +52,5 @@ Kakao/Naver/Google은 live provider로 호출하지 않는다. v2는 이들 API�
 `/v2/dataset/version`의 `current`와 `/v2/dataset/history`의 `entries[]`는 선택 `data_token`을 제공합니다.
 `/v2/geocode`, `/v2/reverse`, `/v2/search`, `/v2/regions/within-radius`의 최상위 선택 `dataset`도
 `version_token`과 `data_token`을 제공합니다. 소비자 비교는 `data_token` 동등성으로만 하며 없으면 판정 불가입니다.
+처음 받은 토큰(저장값 없음)은 기준선으로 저장만 하고 재해석하지 않습니다(2026-10-15 소유자 결정).
 `version_token`은 관측용입니다. 운영 배포·backfill 확인은 별도입니다.

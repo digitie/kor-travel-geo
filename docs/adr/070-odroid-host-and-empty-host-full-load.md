@@ -1,11 +1,12 @@
 # ADR-070: geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다
 
-- 상태: proposed (미구현 — 이 저장소 몫은 T-326a~c, `docs/tasks.md`). **accepted 게이트 = 소유자 결정
-  §14-8·§14-12·§14-21 세 건**(후속 절 첫 (open) 항목) — 닫히면 T-326b PR에서 한 줄로 전환. 나머지 §14-19·4·7·6은
-  추천안 수용이면 본문 변경 0이고, 달리 결정되면 accepted 뒤 amendment로 반영한다. **분기**: §14-12가 "n150 잔류"로
-  닫히거나 D6 anon 게이트 미달이면 "geo 스택은 odroid에서 돈다"는 결정 자체가 성립하지 않으므로 상태는 `rejected`
-  (D1 CIDR·D2 키 정책은 n150 잔류에도 유효 — 그 둘만 본 ADR 축소 또는 별도 짧은 ADR), T-326b/c는 닫는다.
-- 날짜: 2026-10-13
+- 상태: **accepted (2026-10-15, 소유자)** — accepted 게이트 3건을 소유자가 닫았다(아래 "실행 기록" 끝 "소유자 결정"):
+  §14-8 = **dump 복원(D3-6 지름길 (a), 수동 `pg_restore`)으로 갈음**, D3의 serving DB 직접 풀로드는 **다음 재적재 때**로 미룸;
+  §14-12 = **odroid 이전 확정**, D6의 0.95 GiB anon 플립 게이트 대신 **사후 메모리 관찰**; §14-21 = **(나) 소비자별 공개 키**
+  (active: `kor-travel-map`·`pinvi-api`·`kor-travel-concierge`). D3·D6은 이 결정만큼 amendment(실행 기록)로 읽는다 — 본문은
+  2026-10-13 설계 기록으로 남긴다. 나머지 §14-19·4·7·6은 실행된 그대로(§14-4 = `dagster-sub.`, §14-7 = 백업 off, §14-6 = odroid 현지 빌드).
+  (옛 상태 줄: proposed — 게이트 3건 대기, n150 잔류면 `rejected`였다.)
+- 날짜: 2026-10-13 (실행 기록·accepted 2026-10-15)
 - 결정자: 사용자 요청(2026-10-13 설계 프로그램 Track 2 "geo·weather·transport를 odroid로 옮긴다"),
   claude 설계 + 적대 리뷰 3회(6명) + odroid 비root 실측(2026-10-13) 반영. 정본 설계는 저장소 밖
   (`track2-design-final.md`, 절 번호 `§n`은 그 문서)이며, 이 ADR은 geo 저장소가 지켜야 할 결정만 둔다.
@@ -163,7 +164,7 @@ fact base §E1; 런북 전제 `docs/deploy/staging-full-load.md:31-33`는 운영
   그대로 살아 Map의 현재 키가 유효하다. Map은 `kor_travel_geo_preflight_required`가 켜져 있으면 키 거부 시 API 기동 자체가
   막힌다(Map ADR-110) — 재적재 창에 Map 재시작을 겹치지 않는다.
 - **전환 전 기록 1회(T-326a (2), 소유자 §14-21 입력)** — 목적은 "면제 여부 확인"이 아니라(그것은 코드·journal로 닫혔다,
-  컨텍스트 1) **현재 값 기록**이다: n150 DB `SELECT count(*) FROM ops.public_api_keys WHERE active`(기대 ≥1)와, n150에서
+  컨텍스트 1) **현재 값 기록**이다: n150 DB `SELECT count(*) FROM ops.public_api_keys WHERE state = 'active'`(기대 ≥1)와, n150에서
   `curl --interface 192.168.1.14 'http://192.168.1.14:12501/v2/reverse?…&key=<Map .env KOR_TRAVEL_MAP_KOR_TRAVEL_GEO_API_KEY>'`의
   200/401(= **Map `.env` 키가 오늘 DB에 대해 유효한가**; curl은 actor 헤더가 없어 항상 키 경로이므로 면제 여부를 측정할 수
   없다). 대상은 전환 **전**이므로 `.14`(전환 뒤 smoke는 `.13`, 런북 6단계).
@@ -370,3 +371,51 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
   통과"·§14-21 "(가) 추천, 변경 0"은 틀렸다**(컨텍스트 1·D2 — Map ADR-110 컨텍스트 4와 같은 정정); §11.2 8b의 "full load →
   mv_refresh" 두 단계는 batch 한 run(D3-5)이고 "mv_refresh 소요 < 태그 상한의 70 %"는 standalone 1회 기준으로.
 - (open) GDAL arm64 빌드 시간·메모리 실측; T-290l scratch 풀로드의 n150 wall clock 회수(컨텍스트, `load_jobs`/run store).
+
+## 실행 기록 (2026-10-14~15)
+
+결정 본문(D1~D9)은 바꾸지 않고, 실제로 일어난 일과 그것이 결정에 주는 입력만 날짜와 함께 둔다. 출처: 운영자 확인(2026-10-14~15)
++ 2026-10-15 08:2xZ odroid·n150 읽기 전용 재확인(DB는 geo-api 컨테이너의 DSN으로 SELECT만, env는 비밀이 아닌 키만 — journal
+2026-10-15).
+
+1. **적재 수단 = D3-6 지름길 (a)**: n150 2026-10-12 백업 `kor_travel_geo_backup_20261012T231533Z_zstd3`을 odroid
+   `kor-travel-shared-postgres` 11000(arm64 `imresamu/postgis:16-3.5`)에 Dagster 밖 수동 `pg_restore --jobs=2`(rc=0, 오류 0, 51표·
+   153인덱스; 표 19 GB/인덱스 12 GB — n150 19/15 GB). DB 크기 31 GB. 그 뒤 Alembic 0028→0029(ADR-069) + `ktgctl serving
+   fingerprint-active`. D3의 기본(serving DB 직접 풀로드)은 **실행되지 않았다**; odroid geo 컨테이너에는 `/app/data/source` bind도
+   아직 없다(D3-2 — Manager 몫, 다음 재적재 때 필요).
+2. **결과 수치**: `mv_geocode_target`·`tl_juso_text` `count(*)` = 6,416,637 / 6,416,637(복원 원본 = n150 운영이므로 동일; T-290l
+   참고값과 같다). 활성 릴리스는 n150의 것 그대로(`e0db4ff8…`, 2026-09-28 `manual_rebuild`, `mv_refresh strategy=swap`) — 복원은
+   새 릴리스를 만들지 않았다. `ops.serving_releases`에는 n150 이력의 `pending`/`restore`(활성화 시각 NULL) 2행도 함께 왔다.
+3. **D2 키**: 예측대로 복원이 `ops.public_api_keys`를 보존했다 — 08:27Z 기준 active 2건(`kor-travel-map` 2026-08-08, `pinvi-api`
+   2026-10-14), ≈09:00Z `kor-travel-concierge` 발급 뒤 **3건**.
+   Map 키 재발급 없이 키 경로가 이어졌고, PinVi 전용 키는 (나) 소비자별 발급의 첫 사례다. **concierge**는 그때까지 VWorld 형식
+   키를 보내 odroid geo에서 401이었고(DB에 키가 있어 VWorld 폴백이 꺼진 상태 — D2 함정 그대로), 2026-10-15 ≈09:00Z 전용 키
+   `kor-travel-concierge`를 발급해 odroid에서 정상 응답(운영자 확인). 이로써 active 3건 = 소비자별 1개.
+   **문서 정정**: D2·T-326a·런북의 `SELECT count(*) FROM ops.public_api_keys WHERE active`는 열 이름이 틀렸다(열은
+   `state TEXT`) — `WHERE state = 'active'`로 고쳤다(이 PR).
+4. **D1·D5 env 확인(odroid geo-api)**: `KTG_ADMIN_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`(`.14` 없음),
+   `KTG_BACKUP_SCHEDULE_ENABLED=false`, `KTG_VWORLD_API_KEY` 비어 있지 않음, `KTG_DAGSTER_URL=http://127.0.0.1:11002`(odroid 공용 plane
+   webserver), `KTG_DAGSTER_PUBLIC_URL=https://dagster-sub.digitie.mywire.org` — §14-4(odroid plane 공개 host)는 `dagster-sub.`로
+   실행됐다. `.env.prod.example`·`docs/ports.md`의 `12502` 서술을 이 사실로 정정(T-326b 수정 파일 중 둘).
+5. **D7**: odroid에서 빌드한 geo code-server 이미지가 `linux/arm64`이고 `dagster 1.13.24`·`sqlalchemy 2.1.1`·GDAL 3.10.3 바인딩이
+   동작 — digest 핀이 arm64로 풀렸다(기대 결과, 재핀 논의 해당 없음; 빌드가 저장소 Dockerfile 그대로였는지는 빌드한 세션 확인).
+6. **Dagster**: geo code server는 2026-10-15 02:52Z odroid 자체 plane으로(n150 cs 02:42Z 정지). odroid geo schedule·sensor는
+   **STOPPED**. `mv_refresh`는 odroid에서 아직 한 번도 돌지 않아 **D4 입력(standalone 실측)이 없다**; 열 제약(CPU 1.416 GHz 캡,
+   load ≈20)이라 ×3 가정보다 길 수 있으므로 schedule을 켜기 전에 D4를 결정해야 한다.
+7. **D6**: 플립 게이트(n150 geo cs anon ≤ 0.95 GiB)는 측정 없이 플립됐다 — 사후 관찰(odroid 첫 `mv_refresh` 중 cs 메모리 최대·
+   OOM 여부)로 대신한다(T-326a).
+8. **D8 수정 입력**: "dump 복원이면 서빙 내용 지문이 같아 토큰이 같으므로 재계획 0"은 **양쪽에 토큰이 있다는 가정**이었다. n150
+   DB는 Alembic 0028이라 `data_token`이 없었고 odroid에서 처음 생겼다(`version_token`은 같음). 소비자 센서가 "판정 불가 → 첫 토큰"을
+   재계획으로 보는지는 소비자 규칙에 달렸다 → **소유자 결정(2026-10-15)으로 "기준선"**: 저장된 토큰이 없던 소비자가 처음 받은
+   토큰은 저장만 하고 재해석·재계획하지 않는다(재해석은 저장값과 새 값이 둘 다 있고 다를 때만). 열 제약 odroid에 전량
+   재지오코딩이 몰리는 것을 막기 위함. ADR-069 D8 amendment·`docs/api-reference/v2/dataset-version.md`·`llm-summary.md`에도 같은
+   문구; 소비자 쪽 구현은 Map ADR-109·concierge 몫. T-326c는 실제 계획 건수 **0**을 확인한다.
+9. **아직 서 있지 않은 전제**: n150 geo-api·geo-ui는 아직 Up(T-326c의 "n150 geo-api stop 상태에서" 검증 전제 미충족). 정지는
+   **Manager T-MGR-01b 뒤**여야 한다 — n150 Manager compose에 `map → geo` `depends_on` 간선이 남아 있는 동안은 n150에서 `ensure map`을
+   돌릴 때마다 n150 geo 컨테이너가 되살아난다.
+
+**소유자 결정(2026-10-15)** — 상태 `accepted`: (1) §14-8 dump 복원 (a)로 갈음, 풀로드는 다음 재적재 때(그때 D3-2 소스 bind·
+D3 절차를 쓴다); (2) §14-12 odroid 이전 확정 — D6 게이트 대신 사후 메모리 관찰(T-326a ⓐ'); (3) §14-21 (나) 소비자별 키 1개씩;
+(4) Track 1 기준선 규칙(위 8); (5) GeoIP gate는 n150·odroid 모두 `off` 유지(`.env.prod.example`을 `off`로, 코드 변경 없음 —
+ADR-037의 대한민국 IP 제한은 운영에서 적용하지 않는 상태); (6) odroid schedule 재가동 전에 standalone `mv_refresh` 1회 실측
+(운영자 실행) → D4 상한 결정(T-326b 남은 항목).

@@ -6,6 +6,29 @@
 
 ## 완료
 
+- [x] **T-325a+b+c — 데이터셋 `data_token`(서빙 내용 지문) + v2 응답 `dataset` + 관리 UI** (2026-10-15 원장 정리; 머지
+  2026-10-14, by claude/codex). 결정 [ADR-069](adr/069-dataset-data-token.md)(accepted 2026-10-13, 구현 기록 절이 정본).
+  - **T-325a+b** — #573(`1c9187d`): `ops.dataset_snapshots.data_fingerprint`(Alembic `0029_t325a_data_fingerprint`), 9표 지문
+    SQL(열 명시 목록 + lint 두 겹), 활성화마다 `geo_cache` 삭제, `derive_data_token`(`dd1-`), `DatasetVersionEntry.data_token`·
+    `ServingRelease.data_token`, `ktgctl serving fingerprint-active [--dry-run]`, 네 v2 응답 `dataset{version_token, data_token}`
+    (TTL 10 s), CI `integration-postgis`. 적대 리뷰 2차까지 반영(journal 2026-10-13 두 항목). prod dry-run: 조용할 때 57.4/103.4 s,
+    IO 경합 중 485.8 s — 소유자 결정 "경합 시 fail-open 수용".
+  - **T-325c** — #574(`7d3217c`): OpsPanel `data_token` 열·"데이터 동일"/"지문 없음" 배지·실패 사유 툴팁·두 활성화 누락 경고,
+    `DatasetVersionDetailDialog` live preview(`previous_serving_release_id`로 실제 이전 활성화 비교), api-reference v2 네 문서 +
+    `dataset-version.md` 규약 승격 + `llm-summary.md`, CHANGELOG UI 항목. 수정 파일 목록의 전 항목이 #574에 있다(2026-10-15 대조).
+  - **배포·backfill(수용 기준 a(4))**: odroid(2026-10-14~15) DB Alembic `0029`, `fingerprint-active` backfill로 활성 릴리스 지문
+    비NULL(2026-10-15 08:2xZ 확인). 운영 E2E는 Odroid 장애로 미실행인 채 사용자 지시로 머지([기록](reviews/2026-10-14-odroid-e2e-deferred.md)).
+  - **남긴 것**: 실행되지 않은 수용 기준(관리 UI live 확인, T-325b (3) reverse p50, backfill 직후 `geo_cache` 0행 기록)은
+    `tasks.md` "T-325 잔여 검증"으로 열어 뒀다.
+
+- [x] **T-324 — 공유 Dagster plane geo 선행 작업** (2026-10-15 원장 정리; 코드 머지 #569 `3f4ddc2`, by claude). 이미지 exact
+  constraints(`constraints-dagster.txt`, dagster 1.13.24·dagster-postgres 0.29.24·sqlalchemy 2.1.1) + 두 `FROM` digest 핀,
+  `/v1/ops/dagster/*`를 geo code location으로 한정, instigator 기본 상태를 코드로(D4), run-failure sensor
+  `monitor_all_code_locations` 제거, 6 h를 넘을 수 있는 4개 job만 `dagster/max_runtime=86400`(`run_tags.py`, 소유자 결정
+  2026-09-30). 마지막 열린 항목("머지 후 `ktdctl ensure geo` 재빌드 → site-packages 1.13.24 확인")은 **효과로** 닫았다: 2026-10-15
+  odroid geo code-server(arm64, odroid 빌드)가 `dagster 1.13.24`·`dagster-postgres 0.29.24`·`sqlalchemy 2.1.1`이고, geo가 붙은 공용
+  plane의 daemon·webserver도 `dagster 1.13.24`. 재빌드 수단은 `ktdctl ensure geo`가 아니라 odroid 호스트 쪽 빌드였다(T-326 실행 상태).
+
 - [x] **T-322 마무리 — kor-travel-geo-dagster `sqlalchemy<2.1` pin 해제** (2026-09-29, by claude, 사용자 지시
   "1번만 진행. n150에 디플로이까지 해"). 조건 셋을 갖춘 뒤 해제: (1) 운영 storage URL `postgresql+psycopg2://`
   (07:51Z 적용), (2) 이미지 ENTRYPOINT `docker/entrypoint.sh`가 세 서비스 모두 시작 전에 드라이버를 확인해
