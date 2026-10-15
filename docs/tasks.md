@@ -11,16 +11,15 @@
 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은
 `tasks-done.md` 상단에 누적한다.
 
-## 현재 세션 상태 (2026-10-13)
+## 현재 세션 상태 (2026-10-15)
 
-열린 항목 인덱스(상세는 아래 섹션; 완료된 T-297/T-299/T-300/T-303/T-304는 `tasks-done.md`로 갔다).
+열린 항목 인덱스(상세는 아래 섹션; 2026-10-15에 T-324·T-325a~c가 `tasks-done.md`로 갔다).
 
-- [ ] **T-326a~c** — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 proposed, Track 2;
-  소유자 결정 대기) — 아래 "T-326" 섹션.
-- [ ] **T-325a~c** — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 accepted 2026-10-13;
-  a+b = draft PR #573 구현·검증 완료, 머지·배포·backfill 대기; c 남음) — 아래 "T-325" 섹션.
-- [ ] **T-324** — 공유 Dagster plane geo 선행 작업 잔여(머지 후 `ktdctl ensure geo` 재빌드 확인) —
-  아래 "T-324" 섹션.
+- [ ] **T-326a~c** — geo 스택 odroid(192.168.1.13) 이전 (ADR-070 proposed, Track 2). **2026-10-14~15 스택 이전은
+  풀로드가 아니라 n150 백업 dump 복원(설계 §14-8 지름길 (a), 수동 `pg_restore`)으로 실행됐고 소비자 전환도 끝났다** —
+  남은 것은 odroid 실측·`mv_refresh` 상한 결정·사후 검증·소유자 결정 확인. 아래 "T-326" 섹션.
+- [ ] **T-325 잔여 검증** — T-325a~c(#573·#574 머지·odroid 배포) 뒤 실행되지 않은 수용 기준(관리 UI live 확인·reverse
+  p50) — 아래 "T-325" 섹션.
 
 ## 진행 중
 
@@ -54,26 +53,6 @@ URL(`geo-dagster.digitie.mywire.org`)을 관리자 `/admin/dagster` 화면에 if
 (`DagsterEmbed` + `resolveDagsterPublicUrl`, 서버측 `KTG_DAGSTER_PUBLIC_URL` 해석; Dagster UI가
 frame-busting 헤더를 보내지 않아 CSP 변경 불필요). 남은 것은 UI 컨테이너 재배포로 라이브 반영하는 단계뿐.
 
-### T-324 — 공유 Dagster plane(dagster-shared plan) geo 선행 작업
-
-계획 정본: Manager 쪽 `dagster-shared-plan.md`(2026-09-29) §3·§5 stage 0/2/3. branch
-`feat/dagster-shared-stage0`(PR은 아직 없음 — 머지·배포는 소유자 지시 후).
-
-- [x] stage 0(0.4) — 이미지가 `kor-travel-geo-dagster/docker/constraints-dagster.txt`로 exact 설치
-  (dagster 1.13.24 계열, dagster-postgres 0.29.24, pydantic/psycopg/grpcio/protobuf, sqlalchemy 2.1.1),
-  두 `FROM`을 `python:3.12-slim@sha256:f77ac9e4…`(3.12.14)로 digest 핀. CI `dagster` job도 같은 `-c`.
-- [x] 3.3 — `/v1/ops/dagster/summary`·`/runs/{id}`를 geo code location으로 한정(단일 tenant에서도 결과 동일).
-- [x] 2.2(D4) — backup schedule·retention janitor·run-failure sensor `default_status=RUNNING`,
-  restore drill은 `STOPPED`(n150 운영 상태 그대로).
-- [x] 공유 plane 전제 — run-failure sensor의 `monitor_all_code_locations` 제거, entrypoint psycopg2 guard가
-  `KOR_TRAVEL_DAGSTER_SHARED_PG_URL`도 검사.
-- [ ] 머지 후 `ktdctl ensure geo`로 재빌드(stage 0 rollout 2번) — 세 컨테이너 site-packages 1.13.24 확인.
-- [x] (계획 밖 발견) 공유 instance의 `run_monitoring.max_runtime_seconds`(21600) 기본값이 geo run에도
-  걸린다(지금 geo instance엔 run_monitoring이 없어 무제한). 소유자 결정(2026-09-30): 6시간을 넘을 수 있는
-  job만 `dagster/max_runtime=86400` — `full_load_batch`·`load_source`·`db_restore`·`backup_restore_drill`
-  (`kortravelgeo_dagster/run_tags.py`). 나머지 8개는 공유 기본값. `test_definitions.py`가 12개 job 전부의
-  기대값을 나열해 새 job은 선택을 강제당한다.
-
 (그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 
 ## 대기
@@ -89,91 +68,33 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 성능 수용은 [`docs/t177h-benchmark-acceptance.md`](t177h-benchmark-acceptance.md)가
 정본이다.
 
-### T-325 — 데이터셋 `data_token`(서빙 내용 지문) + 응답 `dataset` 필드 (ADR-069 accepted, a+b PR #573)
+### T-325 잔여 — 운영 검증 (T-325a~c 본문은 2026-10-15 `tasks-done.md`)
 
-결정 [ADR-069](adr/069-dataset-data-token.md)(2026-10-13 소유자 승인 — 4개 모두 추천안; 구현에서 달라진 점은 ADR
-"구현 기록" 절: 지문 열 명시 목록(D1 지렛대 1), revision id `0029_t325a_data_fingerprint`, reverse 캐시 케이스는
-`tl_sppn_makarea`), 배경 설계 요약
-[t291-dataset-version-external-api.md §7](t291-dataset-version-external-api.md).
-소비자 측 작업은 Map(ADR-109)·concierge(ADR-49) 각 저장소가 추적한다(코드 머지는 geo와 병렬 가능, 활성화 검증만 geo
-배포 뒤). 의존: a → b → c. PR 묶음: **PR-1 = a+b**
-(코드·마이그레이션·테스트 **+ DTO 변경에 따른 `openapi.json` 재export와 UI `gen:types` 산출물** — OpenAPI drift
-워크플로 `.github/workflows/openapi.yml`과 `ci.yml:135-137` gen:types diff 검사가 모든 PR에 돌므로 뒤로 미룰 수
-없다, ADR-069 컨텍스트 7 — **+ `CHANGELOG.md`·journal·resume**, 사용자 가시 변경이라 AGENTS.md 작업 후 체크리스트가
-PR 단위로 요구한다), **PR-2 = c**(UI 화면·api-reference 문서·CHANGELOG의 UI 항목). 모두 `feature branch + CI green` 뒤 머지.
+ADR-069 구현은 머지·배포됐다 — T-325a+b #573(`1c9187d`), T-325c #574(`7d3217c`); odroid DB는 Alembic `0029`, 활성 릴리스
+지문 비NULL(`ktgctl serving fingerprint-active` backfill, 2026-10-15 확인). 완료로 옮기면서 **실행되지 않은 수용 기준만** 여기
+남긴다 — 운영 검증 면제가 아니다([운영 E2E 미실행 기록](reviews/2026-10-14-odroid-e2e-deferred.md)).
 
-- [ ] **T-325a** — 데이터 지문·`data_token`·캐시 무효화·backfill CLI (규모 M) — **구현·검증 완료(draft PR #573)**;
-  남은 것: 머지·배포 → backfill(수용 기준 (4)). prod dry-run 실측(수용 기준 (3))은 2026-10-13 수행 — 조용할 때 57.4 s·
-  103.4 s(50% = 300 s 안), IO 경합 중 485.8 s(81%, 성공). **소유자 결정(2026-10-13): 경합 시 fail-open 수용, 지렛대 추가 없음**
-  — 50% 기준은 조용한 시간 측정에 적용, 재검토 조건·운영 규칙은 ADR-069 구현 기록 "재실측" 문단.
-
-  `ops.dataset_snapshots.data_fingerprint TEXT NULL`(Alembic `0029_t325a_data_fingerprint`, 직전 head
-  `0028_t319_source_month_manifest`; `infra/sql.py` DDL + `sql/ddl/001_schema.sql` 사본) +
-  `DATA_FINGERPRINT_TABLES`/`DATA_FINGERPRINT_SQL`(ADR-069 D2·D3 — surrogate key·적재 메타 제외) +
-  `_insert_dataset_snapshot_and_release`가 `data_fingerprint` 인자 None이고 active면 지문 계산(`mv_hash`와 같은 규칙;
-  **advisory lock 획득 전**, 같은 transaction, savepoint 안 10 min timeout, 끝나면 항상 `ROLLBACK TO SAVEPOINT`, fail-open
-  → NULL + `notes` 접미 `data_fingerprint_failed: <code>`) + lock 뒤 원장 INSERT 자리에서 인자와 무관하게 active면
-  `GeoCacheRepository.clear_on(conn)`(D4~D6) + `derive_data_token`(`core/dataset_version.py`) +
-  `DatasetVersionEntry.data_token`·admin `ServingRelease.data_token` + `ktgctl serving fingerprint-active [--dry-run]`(D9 —
-  `--dry-run`은 헬퍼와 같은 `DATA_FINGERPRINT_SQL`·같은 10 min timeout).
-  - 수정 파일: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `alembic/versions/0029_t325a_data_fingerprint.py`(신규),
-    `src/kortravelgeo/infra/admin_repo.py`, `src/kortravelgeo/infra/cache.py`, `src/kortravelgeo/core/dataset_version.py`,
-    `src/kortravelgeo/dto/v2.py`, `src/kortravelgeo/dto/admin.py`, `src/kortravelgeo/cli/main.py`,
-    `tests/unit/test_data_fingerprint_covers_serving_tables.py`(신규), 통합 테스트, **`openapi.json`**(재export),
-    **`kor-travel-geo-ui/types/api.gen.ts`·`kor-travel-geo-ui/lib/schemas.gen.ts`**(`npm run gen:types` 산출물),
-    `CHANGELOG.md`(`[Unreleased]` Added: `data_fingerprint`·`data_token`·`DatasetVersionEntry.data_token`·
-    `ServingRelease.data_token`·`ktgctl serving fingerprint-active`; Changed: 활성 릴리스마다 `geo_cache` 삭제),
-    `docs/journal.md`·`docs/resume.md`.
-  - 수용 기준: (1) 지문 민감도 통합 테스트 — 같은 데이터 재활성화 → 같은 토큰; `postal_bulk_delivery` 같은 파일
-    2회 적재(`bulk_id` 재부여) → 같은 토큰; `mv_geocode_target`은 원천 표 1행 변경 + `refresh_mv` 뒤 → 다름(MV는
-    직접 UPDATE 불가); `tl_scco_sig` 명칭·`tl_kodis_bas`·`postal_bulk_delivery`·`tl_sppn_makarea` 1행 변경 → 다름;
-    폴리곤 정점 1개 추가 → 다름; timeout 주입 → active + NULL + `notes` 접미 + 뒤이은 INSERT·DELETE가 경로의 기존
-    timeout으로 돈다; restore 경로 릴리스도 토큰 비NULL(같은 백업 두 번 → 같은 토큰); 일변동 1건(MVM 63) 뒤
-    `record_mv_refresh_release(load_batch_id=None, consistency report 없음, release_kind="daily_delta")` 호출 →
-    `source_set_hash` 동일·`data_token` 상이 — **기준월 추론 분기(`admin_repo.py:758-759`)를 타게 구성**한다(batch를
-    넘기면 해시가 달라져 케이스 무효); 캐시 무효화(두 경로) — reverse 1회로 캐시 1행 → `postal_bulk_delivery` 1행
-    변경 → standalone `record_mv_refresh_release` → 같은 좌표 reverse가 새 우편번호·새 `dataset.data_token`; geocode 1회로
-    캐시 1행 → `tl_sppn_makarea` 1행 변경 → standalone `record_mv_refresh_release` → 같은 질의 geocode가 새 후보·새
-    `dataset.data_token`; 네 경로 모두 `geo_cache` 0행. 표 변경·캐시 삭제 케이스는 **일부러 빨갛게**(해당 표/삭제를
-    빼고 실패 확인 — 캐시 두 케이스 모두) 기록. (2) `history` entry에 `data_token`, 지문 NULL 행은 필드 생략.
-    (3) **prod 규모 지문 사전 실측 1회** — 소유자가 PR-1 브랜치 체크아웃의 `ktgctl serving fingerprint-active
-    --dry-run`(읽기 전용, 저장·캐시 삭제 없음, 헬퍼와 같은 SQL 상수·같은 timeout)을 n150 prod DB에 **머지 전** 실행하고
-    `/proc/pressure/io`를 동시 기록; 10 min timeout의 50% 안이면 통과, 넘으면 머지 전 설계 재검토(ADR-069 결과(부정)의
-    지렛대 순서). (4) 머지·배포 뒤 backfill(`--dry-run` 없이) → prod `current.data_token` 비NULL·`geo_cache` 0행.
-    (5) lint 초록 + lint를 **일부러 빨갛게**(repo에 가짜 `JOIN tl_new_table` 추가 → 실패; 허용 목록에 유도 집합에 없는
-    표 이름 추가 → 실패; 일반 CTE 또는 `AS MATERIALIZED (` CTE만 추가 → 통과; 소문자 `from tl_x`는 lint가 못 보므로
-    대문자 규약 메모) + `postal_pobox` v2 경로 여부 확인 결과를 PR 본문에. (6) `hotswap.py`·`partial_restore.py`·
-    `postload.py` diff 0. (7) `python scripts/export_openapi.py --check`·UI `gen:types` diff 0 초록(PR-1 CI 게이트).
-    (8) 지문 SELECT가 `pg_advisory_xact_lock` 앞에서 실행됨을 단언(지문 SQL 지연 주입 + 동시 두 번째 활성화 호출이
-    지문 시간 동안 lock 대기 없이 진행 — 통합 테스트).
-- [ ] **T-325b** — v2 응답 최상위 `dataset{version_token, data_token}` (규모 S, T-325a 뒤) — **구현 완료(PR #573에
-  함께)**; 수용 기준 (3) reverse p50 회귀 측정은 미수행(PR 본문 미검증 항목).
-
-  `DatasetRef` DTO + 네 응답 클래스(`GeocodeV2Response`·`ReverseV2Response`·`SearchV2Response`·
-  `RegionsWithinRadiusResponse`)에 `dataset: DatasetRef | None = None` + `api/dataset_ref.py` TTL 10 s 의존성 +
-  `api/routers/v2.py` 네 핸들러 `model_copy(update={"dataset": ref})`(ADR-069 D7).
-  - 수정 파일: `src/kortravelgeo/dto/v2.py`, `src/kortravelgeo/api/routers/v2.py`, `src/kortravelgeo/api/dataset_ref.py`(신규),
-    tests, `openapi.json`(재export), `kor-travel-geo-ui/types/api.gen.ts`·`lib/schemas.gen.ts`(`gen:types` 산출물).
-  - 수용 기준: (1) 4 endpoint 응답에 `dataset`, active 릴리스 없으면 생략; (2) TTL 만료 후 새 값(시간 주입);
-    (3) reverse p50 회귀 < 5% — `scripts/benchmark_api_latency.py` reverse 케이스, PR 베이스 commit 대비 같은
-    로컬 환경; (4) 외부 fallback(vworld·juso) 응답에도 로컬 토큰 + `candidates[].source≠local`; (5) 캐시 hit 응답에도 현재
-    토큰; (6) `export_openapi.py --check`·`gen:types` diff 0 초록.
-- [ ] **T-325c** — admin UI 화면·api-reference 문서·CHANGELOG (규모 S, T-325b 뒤). **진행 중(2026-10-14):** 표·상세·규약 문서·회귀 구현. 두 리뷰와 운영 live UI/backfill 확인은 후속으로 완료 체크하지 않는다.
-
-  OpsPanel releases 표에 `data_token` 열("데이터 동일"·"지문 없음" 배지, `notes` 접미 툴팁, 연속 2회 지문 없음
-  배너) + `DatasetVersionDetailDialog` live preview + 문서. (OpenAPI 재export·`gen:types`·API CHANGELOG 항목은 PR-1에서
-  끝난다.)
-  - 수정 파일: `kor-travel-geo-ui/components/admin/OpsPanel.tsx`,
-    `kor-travel-geo-ui/components/admin/ops/DatasetVersionDetailDialog.tsx`, `CHANGELOG.md`(`[Unreleased]` — UI 화면 항목만),
-    `docs/api-reference/v2/{dataset-version,geocode,reverse,search,regions-within-radius}.md`(응답 예시에 `dataset`,
-    `dataset-version.md`의 "예정" 절을 현재 규약으로 승격), `docs/api-reference/llm-summary.md`(v2 dataset 행에
-    `data_token`, 네 조회 행에 `dataset`), `docs/tasks-done.md`·`resume.md`·`journal.md`.
-  - 수용 기준: (1) UI lint·type-check 초록; (2) 소비자 규약 문단이 "`data_token` 동등성, 없으면 판정 불가,
-    `version_token`은 관측용"을 명시(ADR-069 D8 문구 그대로); (3) UI 표에 두 배지 + 툴팁; (4) 네 v2 문서와
-    `llm-summary.md`에 `dataset`/`data_token`.
+- [ ] **T-325 잔여 검증** — (1) 관리 UI live 확인(데스크톱·모바일, odroid `12505`): releases 표 `data_token` 열·"데이터
+  동일"/"지문 없음" 배지·실패 사유 툴팁·상세 대화상자 live preview·재조회 실패/복구. odroid DB는 복원 이력 그대로라 활성
+  릴리스(`e0db4ff8…`, 2026-09-28 `manual_rebuild`)만 지문이 있고 이전 릴리스는 전부 지문 NULL — "데이터 동일"·"연속 2회 지문 없음"
+  배너는 live에서 재현되지 않을 수 있다(재현 안 되면 mock e2e로 갈음했음을 기록). (2) T-325b 수용 기준 (3) reverse p50 회귀 < 5% —
+  2026-10-13 n150 측정은 부하 잡음(±50%)으로 판정 불가였고 스탬프 경로 비용(요청당 ≈2.5 µs)만 측정됐다. odroid도 CPU 열 제약·
+  load ≈20이라 같은 문제 — 조용한 창에서 base(`3ee05ee`)/head 교대 측정을 하거나, 소유자가 "경로 비용 측정으로 갈음"을 결정한다.
+  (3) T-325a 수용 기준 (4)의 "backfill 직후 `geo_cache` 0행"은 backfill 시각 기록이 없어 사후 확인 불가 — 2026-10-15 08:27Z 2행
+  (가장 이른 생성 2026-10-14 21:17Z; backfill은 같은 transaction에서 `clear_on`을 부르므로 그 전이면 정합). 운영자가 backfill
+  시각을 journal에 남기거나, 다음 활성화(첫 `mv_refresh`) 직후 0행으로 갈음한다.
 - (보류) phase 2 — 코드 단위 인벤토리 + `POST /v2/dataset/changes`(ADR-069 후속). 소유자 결정 뒤 번호 부여.
 
-### T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 proposed, 미구현, Track 2)
+### T-326 — geo 스택 odroid(192.168.1.13) 이전 + 빈 호스트 풀로드 (ADR-070 proposed, 이전은 복원 경로로 실행됨, Track 2)
+
+> **2026-10-14~15 실행 상태(운영자 확인 + 2026-10-15 08:2xZ 읽기 전용 재확인, 상세 journal 2026-10-15·ADR-070 "실행 기록").**
+> 이전은 아래 계획의 풀로드(8b)가 아니라 **n150 2026-10-12 백업(`kor_travel_geo_backup_20261012T231533Z_zstd3`)을 odroid
+> `kor-travel-shared-postgres` 11000에 수동 `pg_restore --jobs=2`**(rc=0, 오류 0, 51표·153인덱스) = 설계 §14-8 지름길 (a)로 했다.
+> 그 뒤 Alembic 0028→0029, `ktgctl serving fingerprint-active`(backfill), geo-api(`1c9187d`)·geo-ui(`7d3217c`) odroid 빌드, 공개
+> URL `.13` 매핑, geo code-server는 odroid 자체 Dagster plane(2026-10-15 02:52Z, n150 cs는 02:42Z 정지), 소비자(Map·PinVi·concierge)
+> `.13` 호출 확인. **이 경로는 Manager `ensure` 밖에서 호스트 쪽으로 했다.** 따라서 accepted 게이트 3건은 **실행으로 사실상
+> 골라졌다**(§14-8 = 지름길 (a), §14-12 = 옮김, §14-21 = 복원이 키를 보존 + PinVi 전용 키 `pinvi-api` 발급 = (나)) — ADR 상태 전환은
+> 소유자 확인 뒤(ADR-070 후속 첫 항목). odroid geo schedule·sensor는 현재 **STOPPED**.
 
 결정 [ADR-070](adr/070-odroid-host-and-empty-host-full-load.md)(D1~D9; 소유자 결정 대기 — **accepted 게이트 3건**: 설계
 §14-8 소스 ZIP 재확보·serving DB 직접 풀로드·dump 복원 지름길, §14-12 geo 플립 여유 값(0.2 → anon ≤ 0.95 GiB) 또는 n150
@@ -192,6 +113,17 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
 
 - [~] **T-326a** — T-055/T-108 정정 + odroid envelope·n150 anon 실측 (규모 M; T-063 보류 승계)
 
+  **2026-10-15 상태.** 끝난 것: 문서 정정(#572); (3)의 base digest — odroid 빌드 geo code-server 이미지가 `linux/arm64`로
+  존재하고 그 안에서 `dagster 1.13.24`·`dagster-postgres 0.29.24`·`sqlalchemy 2.1.1`·`from osgeo import gdal`(3.10.3)이 동작 →
+  digest 핀이 arm64로 풀렸다(효과 확인; 그 빌드가 저장소 Dockerfile 그대로였는지는 빌드한 세션 확인 필요 — 바꿨다면 D7 재핀 절차
+  대상). ⓒ의 "전환 **전** 기록"은 시점을 놓쳤다 — 대신 전환 **뒤** 값: odroid `ops.public_api_keys` active 2건(`kor-travel-map`
+  2026-08-08, `pinvi-api` 2026-10-14), `mv_geocode_target`·`tl_juso_text` `count(*)` 둘 다 **6,416,637**(= T-290l 참고값, 복원 원본이
+  n150 운영이므로 동일). **ⓐ D6 anon 게이트는 측정 없이 플립됐다** — 이제 의미 있는 측정은 odroid 사후 관찰(아래 "남은 것" ⓐ').
+  남은 것: (1) odroid envelope 전부(미실행 — 단 odroid는 무팬 열 제약으로 CPU 1.416 GHz 캡·load ≈20이라 probe 수치에 그 조건을
+  병기); ⓐ' odroid 첫 `mv_refresh`·(수동) `db_backup` 중 geo code-server cgroup v1 메모리 최대값·OOM 여부(D6의 사후 판정 — 넘으면
+  `mem_limit`/memswap 정책 재검토, Manager §14-14); ⓑ PG anon(Manager 입력, odroid에서); (3) GDAL arm64 빌드 시간·메모리는 빌드한
+  세션 기록 회수.
+
   문서 정정은 이 PR에서 완료 ✅(`docs/t055-deployment-n150-odroid.md` 정정 블록 — x86 가정 → 실측 aarch64 Cortex-A55×4
   1.8 GHz·7,676 MiB·eMMC/NVMe, PG 값은 설계 §5.3(Manager ADR-58 결정 (8)) 포인터; `docs/t108-deploy-automation.md` 보류 블록 — 레지스트리·
   QEMU 불채택, `linux/arm64` 확정). 남은 것: (1) odroid envelope — **지금 가능**(NOPASSWD sudo·docker 그룹 완료, fact base
@@ -209,7 +141,7 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   아님)·`POST /v1/admin/backups`(`routers/admin.py:1928`)로) → **ADR-070 D6 플립 조건 입력**(anon ≤ 0.95 GiB(여유 0.2) — 미달이면
   geo n150 잔류); ⓑ 같은 창의 PG 컨테이너 cgroup anon — D6가 아니라 **Manager 쪽 §14-14(PG `mem_limit 4g` 가드 vs 하드 캡)
   입력**; ⓒ **전환 전 현재 값 기록 1회**(면제 여부는 코드·journal 2026-08-17로 이미 닫힘 — ADR-070 컨텍스트 1): n150 DB
-  `SELECT count(*) FROM ops.public_api_keys WHERE active`(기대 ≥1) + 명령은 ADR-070 D2(대상 `.14`)로 Map `.env` **키 유효성** 200/401
+  `SELECT count(*) FROM ops.public_api_keys WHERE state = 'active'`(기대 ≥1) + 명령은 ADR-070 D2(대상 `.14`)로 Map `.env` **키 유효성** 200/401
   + n150 운영 `mv_geocode_target`·`tl_juso_text` `count(*)`(T-326b 6단계 비교 기준) → journal(소유자 §14-21 입력); 가능하면 T-290l
   scratch 풀로드(2026-07-12)의 wall clock을 `load_jobs`/run store에서 회수;
   (3) GDAL arm64 빌드 시간·메모리, Dagster base digest(`kor-travel-geo-dagster/docker/dagster.Dockerfile:34`)의 arm64 manifest
@@ -221,6 +153,18 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     내려진다.
 
 - [ ] **T-326b** — 빈 호스트 풀로드 실행 + `mv_refresh` run 상한 결정 + `.env.prod.example` 주석 (규모 M, 실행 L)
+
+  **2026-10-15 상태 — 풀로드는 하지 않았다(복원으로 대체).** 아래 수용 기준의 "지름길 (a)" 분기로 판정하면 적재 몫은 충족:
+  수동 `pg_restore` rc=0 + `count(*)` 6,416,637(둘 다, n150 운영 원본과 같음 — 기준월 차이 없음). odroid geo-api env는 D1·D5와
+  일치(`KTG_ADMIN_TRUSTED_PROXY_CIDRS` loopback만·`.14` 없음, `KTG_BACKUP_SCHEDULE_ENABLED=false`, `KTG_VWORLD_API_KEY` 비어 있지
+  않음, `KTG_DAGSTER_URL`은 공용 plane webserver loopback, `KTG_DAGSTER_PUBLIC_URL`은 `dagster-sub.` host). 복원이 키를 보존해
+  Map 키 재발급은 필요 없었다(D2). `.env.prod.example`·`docs/ports.md` 주석은 이 PR에서 정정. **남은 것**: (1) **standalone
+  `mv_refresh` 1회 odroid 실측 → D4 상한 결정과 `recovery.py`·`test_definitions.py` 코드**(schedule STOPPED라 아직 한 번도 안
+  돌았다 — 첫 실행은 수동 `POST /v1/admin/maintenance/refresh-mv`로 조용한 창에; odroid는 열 제약이라 n150 ×3 가정(3.7~4.8 h)보다
+  길 수 있고 그러면 21600 s 상한에 걸려 cancel된다 — **schedule을 RUNNING으로 돌리기 전에 결정**); (2) 복원 소요(wall clock)를
+  `docs/deploy/staging-full-load.md` 표에(운영자 기록 회수); (3) ADR-070 상태 줄(소유자 확인 뒤). **풀로드 경로 자체**(소스
+  반입·`/app/data/source` 상시 bind — odroid geo 컨테이너에 그 mount가 아직 없다)는 다음 재적재 때의 일이라 이 항목에서 뺀다 —
+  소유자가 "복원으로 갈음"을 확인하면 런북 계획 절을 "운영 중 재적재" 쪽으로만 남긴다.
 
   런북 "빈 호스트(odroid) 풀로드 — 계획" 절대로(순서 0 = §11.2 8a 완료 효과 검사 뒤): 소스 반입(파일 수 > 0·NVMe 장치
   프리플라이트) → `ensure geo` → **serving DB 직접** `full_load_batch`(`target_database` 없음; 라우팅 env 없음 —
@@ -252,6 +196,18 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     코드 0 + 위 count 기준, (b)면 `POST /v1/admin/restores`가 E0410 없이 run 생성.
 
 - [ ] **T-326c** — 플립 뒤 검증 + Track 1 상호작용 확인 (규모 S, 설계 §11.2 9단계(소비자 URL 전환) 뒤)
+
+  **2026-10-15 구체 점검 목록(소비자 전환은 끝났고 전부 미실행·미기록).** (1) **n150 geo-api 정지 전제가 아직 안 섰다** — n150
+  `kor-travel-geo-api-latest`·`-ui-latest`는 Up(code-server만 Exited); n150 geo-api access log의 24 h 소비자 peer가 0임을 먼저 숫자로
+  확인 → 정지(Manager) → Map geocode e2e 키 경로 200. (2) odroid geo-api access log peer 집계 — 2026-10-15 06:2x~08:2xZ 2 h 동안
+  loopback 592건·`192.168.1.14` 1건뿐(로그 형식상 IP만 셌다); Map·PinVi(`pinvi-api` 키)·concierge 각각 키 경로 2xx를 하나씩 상태코드로.
+  concierge가 어느 키를 쓰는지(활성 키는 Map·PinVi 둘뿐) 확인. (3) n150 → odroid `/v2/reverse` p50/p95(N ≥ 200, 발급 키) — ADR-070
+  D8 ≈2.5 h+ 추정 검증, odroid 열 제약 상태 병기. (4) **Track 1**: 복원이라 `version_token`은 n150과 같은 릴리스(`e0db4ff8…`,
+  2026-09-28 `manual_rebuild`)지만 n150 DB는 Alembic 0028이라 `data_token`이 **없었고** odroid에서 처음 생겼다(NULL → `dd1-…`).
+  ADR-070 D8의 "복원이면 재계획 0"은 양쪽 토큰이 같다는 가정이었다 — 소비자 규칙(Map ADR-109·concierge ADR-49)이 "판정 불가 →
+  첫 토큰"을 어떻게 다루는지에 따라 계획 0건 또는 1건; 실제 건수를 journal에. (5) odroid Dagster: geo schedule·sensor
+  STOPPED → 재가동 결정(위 T-326b (1) 상한 결정 뒤); 08:26Z 공용 plane `daemon`·`webserver`가 `unhealthy`, geo-ui도 healthcheck
+  5 s timeout으로 `unhealthy`(UI는 응답) — Manager 쪽 확인. (6) overlay 삭제 조건은 아래 그대로.
 
   n150 geo-api **stop 상태**에서 Map geocode e2e 키 경로 200 + odroid access log peer `192.168.1.14`; n150→odroid
   `/v2/reverse` p50/p95(ADR-070 D8 ≈2.5 h+ 추정 검증); Track 1 센서는 **조건부** — T-325(ADR-069) 구현 완료 상태면 URL 전환 뒤

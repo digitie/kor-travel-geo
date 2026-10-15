@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — T-324·T-325 원장 정리, T-326 실행 상태 기록(복원 경로), 문서만, by claude
+
+odroid 이전(2026-10-14~15, 운영자 수행)과 #573·#574 머지 뒤 백로그를 실제 상태에 맞췄다. **코드 변경 없음.** 근거는 운영자
+확인 사실 + 2026-10-15 08:2xZ 읽기 전용 재확인(odroid·n150 각각 geo-api 컨테이너 안에서 DSN으로 SELECT만; env는 비밀이 아닌 키만
+출력, 키 값은 "비어 있지 않음"만).
+
+**재확인 수치.** odroid: Alembic `0029_t325a_data_fingerprint`; 활성 릴리스 `e0db4ff8…`(2026-09-28 `manual_rebuild`, n150 것 그대로)
+지문 비NULL; `geo_cache` 2행(최초 2026-10-14 21:17Z); `ops.public_api_keys` active 2건(`kor-travel-map` 08-08, `pinvi-api` 10-14);
+`count(*)` `mv_geocode_target` 6,416,637(27.6 s)·`tl_juso_text` 6,416,637(83.9 s); DB 31 GB; load ≈24. 이미지: geo code-server
+`linux/arm64`·dagster 1.13.24·dagster-postgres 0.29.24·sqlalchemy 2.1.1·GDAL 3.10.3, 공용 plane daemon·webserver dagster 1.13.24.
+env: trusted CIDR loopback만, 백업 스케줄 false, VWorld 키 있음, `KTG_DAGSTER_URL=…:11002`, 공개 URL `dagster-sub.`. 상태:
+plane daemon·webserver `unhealthy`, geo-ui `unhealthy`(healthcheck 5 s timeout, UI는 307 응답). access log 2 h peer: loopback 592·
+`.14` 1. n150: geo DB Alembic 0028(지문 열 없음), geo-api·geo-ui Up, code-server Exited.
+
+**원장.** T-324(마지막 항목을 odroid 이미지 버전으로 효과 확인)·T-325a+b+c를 `tasks-done.md`로. T-325는 실행되지 않은 수용 기준만
+"T-325 잔여 검증"으로 남김(UI live·reverse p50·backfill 직후 캐시 0행 기록). T-326a~c에 2026-10-15 상태 블록: 적재는 풀로드가
+아니라 지름길 (a) 복원 — T-326b 수용 기준의 (a) 분기(rc=0 + count)로 적재 몫 충족, 남은 것은 standalone `mv_refresh` 실측 → D4
+상한 코드(schedule을 켜기 **전**), 복원 소요 기록, ADR 상태 줄. T-326c는 구체 점검 6개.
+
+**발견.** (1) D2·T-326a·런북의 `WHERE active`는 존재하지 않는 열 — `WHERE state = 'active'`로 정정. (2) ADR-070 D8 "복원이면 재계획
+0"은 양쪽 토큰 존재를 가정했는데 n150에는 `data_token`이 없었다(NULL → 첫 토큰) — 소비자 규칙에 따라 0 또는 1건, T-326c에서 측정.
+(3) n150 geo-api가 아직 떠 있어 T-326c의 "n150 stop 상태" 전제가 서지 않았다. (4) GeoIP gate는 odroid·n150 둘 다 `off`
+(`.env.prod.example`은 `strict`) — 이전으로 생긴 차이는 아님, 기록만.
+
+**문서.** ADR-070 상태 줄 갱신(여전히 proposed) + "실행 기록" 절; ADR 색인; `.env.prod.example`(CIDR·Dagster URL·VWorld 폴백·
+소스 경로 주석)·`docs/ports.md` 12502 행을 공용 plane 사실로 정정; CLAUDE.md ADR 범위 070.
+
 ## 2026-10-14 — Odroid 장애로 운영 E2E 미실행, 사용자 지시에 따른 머지
 
 - 사용자 보고로 운영 Odroid 중단을 확인했다. live E2E·UI E2E는 실행하지 못했으며 PASS로 표시하지 않는다. 사용자가 현재 PR의 E2E 선행 조건을 명시적으로 유예하고 머지 후 남은 작업을 계속하도록 지시했다.
