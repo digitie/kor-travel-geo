@@ -4,7 +4,7 @@ import { DagsterOperations } from "@kor-travel/ui/dagster-operations";
 import type { DagsterSnapshot } from "@kor-travel/ui/dagster-model";
 
 import { Check, Download, ExternalLink } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { RefreshButton } from "@/components/admin/shared/RefreshButton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -78,15 +78,9 @@ export function DagsterPanel() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const summaryQuery = useDagsterSummaryQuery();
   const summary = summaryQuery.data?.data;
-  const recentRuns = useMemo(() => summary?.recent_runs ?? [], [summary?.recent_runs]);
   const runDetailQuery = useDagsterRunDetailQuery(selectedRunId);
   const runDetail = runDetailQuery.data?.data;
   const ackMutation = useAckRunFailureMutation();
-
-  useEffect(() => {
-    if (selectedRunId || recentRuns.length === 0) return;
-    setSelectedRunId(recentRuns[0]?.run_id ?? null);
-  }, [recentRuns, selectedRunId]);
 
   const snapshot = useMemo(() => toCommonSnapshot(summary), [summary]);
 

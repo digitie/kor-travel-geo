@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — Dagster 상세·콘솔의 명시 조회와 종료 실행 polling 중단(Codex)
+
+- Common DagsterOperations의 기존 controlled selection을 사용하며 첫 run의 상세를 자동
+  선택하지 않는다. 내장 콘솔도 열기 버튼으로 시작하고 닫으면 iframe을 제거한다.
+- 성공·실패·취소가 확정된 상세는 자동 polling을 멈추고 수동 갱신은 유지한다. 활성·미확인
+  상세는 기존 15초, 요약·실패 목록은 기존 30초에 다시 조회한다. 장애 직후의 자동 retry를
+  제거해 겹친 요청을 줄이고 다음 주기·수동 갱신으로 복구한다. 기존 시간·본문 상한은 유지한다.
+- 기존 코드에 새 회귀를 적용해 7 FAIL/7 PASS를 확인했다. 초기 선택 검증의 effect 대기를
+  보강한 별도 OLD 재현도 1 FAIL/3 PASS였다. 변경 후 관련 14 PASS, 해당 atom 전체 frontend
+  261 PASS, type/lint PASS다. 지오코딩 UI atom과 최종 통합 검증·live E2E는 별도로 수행한다.
+- 실제 상태 조회의 단발 timeout과 tick 필드 분리, 3쌍 교차 비교를 수행했다. exhaustive
+  status 필터를 제거하면 현재 데이터에서는 빨랐지만 Dagster bulk 경로의 전체 이력 rank
+  비용과 timestamp 동률의 상한 차이가 있어 채택하지 않았다. 기존 3건 제한 조회를 유지한다.
+- CodeGraph MCP가 WSL 프로젝트 경로를 읽지 못해 Linux CLI sync → status → context로
+  호출자·Common 연결·상세 hook·콘솔의 영향을 확인했다. 제품 DB/스키마·query·timeout 변경은 없다.
+- 상세와 제한은 [검증 기록](reviews/2026-10-15-dagster-monitor-demand.md)에 적었다.
+
 ## 2026-10-15 — 관리 지오코딩 부분 실패 표시와 요청 취소(Codex)
 
 - typed geometry_error는 응답 JSON뿐 아니라 주소 요약의 경고로 표시한다. 주소 문자열이

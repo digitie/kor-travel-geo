@@ -2,6 +2,11 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+- 진행(2026-10-15, Codex): Dagster 상세·콘솔은 명시 선택/열기로 조회하고 종료 실행의
+  자동 상세 polling과 장애 직후 retry를 줄였다. 활성 상태·다음 주기 복구·수동 갱신은
+  유지한다. 해당 atom frontend 261 PASS/type/lint PASS. 지오코딩 UI와 통합한 최종 검증,
+  독립 리뷰 2인·배포·live E2E가 남아 있으며 운영 timeout 해결로 확대해 표시하지 않는다.
+
 - 진행(2026-10-15, Codex): geocoding 보조 geometry의 요청 내부 중복 조회를 제거했다.
   새 회귀 OLD 3 FAIL → 관련 NEW 146 PASS. 확인된 보조 statement timeout의 typed 경고·point 보존,
   일반 예외 전파·유한 geometry 관측과 OpenAPI/TS를 구현했다(ADR-071). 관리 UI는 부분 도형

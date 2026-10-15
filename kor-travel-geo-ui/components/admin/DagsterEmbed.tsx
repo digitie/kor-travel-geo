@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/Panel";
@@ -13,6 +14,8 @@ import { Panel } from "@/components/ui/Panel";
  */
 export function DagsterEmbed({ url }: { url: string }) {
   const target = url.trim();
+  const [openedTarget, setOpenedTarget] = useState<string | null>(null);
+  const opened = openedTarget === target;
 
   if (!target) {
     return (
@@ -41,13 +44,21 @@ export function DagsterEmbed({ url }: { url: string }) {
         </Button>
       }
     >
-      <iframe
+      <Button
+        variant="outline"
+        size="sm"
+        aria-expanded={opened}
+        onClick={() => setOpenedTarget(opened ? null : target)}
+      >
+        {opened ? "콘솔 닫기" : "콘솔 열기"}
+      </Button>
+      {opened ? <iframe
         src={target}
         title="Dagster 웹서버"
         referrerPolicy="no-referrer"
         sandbox="allow-scripts allow-forms allow-popups allow-downloads"
         className="h-[760px] w-full rounded-md border bg-background"
-      />
+      /> : <p className="mt-2 text-sm text-muted-foreground">콘솔을 열면 실행·스케줄을 직접 확인할 수 있습니다.</p>}
     </Panel>
   );
 }
