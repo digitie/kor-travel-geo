@@ -2,6 +2,10 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+- 진행(2026-10-15, Codex): API CMD에 exec를 추가해 shell을 API로 교체한다.
+  실제 CMD 로컬 대역에서 OLD 2 FAIL→직접 PID/SIGTERM·기본/명시 host/port 회귀를 검증했다.
+  c324 ARM64 context는 보존하고 새 HEAD의 API/CS/UI 최종 label export·2인 리뷰·운영 drain은 후속이다.
+
 - 진행(2026-10-15, Codex): UI8614 ARM64 빌드는 worker2·270.843초 완료했다.
   API는 GDAL 병렬 C++ 컴파일 중 실제 OOM으로 실패해 보존했다. 소형 실제 compile 동시2→1
   검증 후 API/CS의 해당 pip 빌드에만 임시 setuptools parallel=1을 적용했다.

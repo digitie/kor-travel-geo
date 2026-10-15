@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — API shell의 종료 신호 전달 경계 보강(Codex)
+
+- 실제 Dockerfile CMD를 본인 Linux 임시 session에서 실행해 shell 아래 별도 API 대역 PID를
+  확인했다. 기본/명시 host·port 두 회귀가 OLD 2 FAIL이었고 exec 추가 후 직접 PID/SIGTERM
+  handler·exit0과 인수 보존을 확인했다. 다른 Docker·운영 프로세스에 신호를 보내지 않았다.
+- API CMD의 exec 한 단어만 추가했다. pip/의존성/환경/timeout/동시성 튜닝은 바꾸지 않는다.
+  초기 신규 시험 ruff의 import 순서/suppress 제안은 수정했다. 실제 Uvicorn 운영 drain과
+  새 이미지 배포 검증은 후속이며 로컬 대역 시험을 운영 성공으로 세지 않는다.
+- 실행 중인 c324 ARM64 context는 변경하지 않았다. 새 HEAD API와 CS/UI 최종 label을
+  순차 export/검증하며 두 독립 reviewer가 이 종료 계약 delta를 다시 검토한다.
+- 새 종료 회귀+기존 deploy_app 8 PASS, backend unit 전체 1,903 PASS/41.47초, 전체 ruff PASS.
+  PG DSN 없이 unit만 실행했으므로 실제 PG integration은 NOT_RUN이다.
+
 ## 2026-10-15 — ARM64 GDAL 컴파일의 실제 OOM과 빌드 동시성 제한(Codex)
 
 - UI 최종 8614 재빌드는 CPU2·2GiB에서 270.843초에 완료했고 worker2를 확인했다.

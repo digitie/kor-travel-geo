@@ -55,3 +55,18 @@ API와 Dagster builder의 해당 pip invocation 동안만 임시 HOME의 .pydist
 GDAL과 loaders/code-location을 한 pip invocation으로 설치한다. 실패하면 image build 자체가
 중단되어 설정이 남은 최종 이미지를 생성하지 않는다. 새 SHA의 실제 ARM64 API/CS 빌드와
 archive 검증이 끝날 때까지 성공으로 표시하지 않는다. 운영 동시성/timeout/DB 스키마 변경은 없다.
+
+## API 종료 신호 전달 계약
+
+기존 API CMD의 sh -c uvicorn은 shell 아래 별도 API child를 만들었다.
+본인 Linux 시험에서도 실제 Dockerfile CMD를 그대로 실행한 로컬 대역의 PID가
+shell PID와 달라 기본/명시 host·port 두 회귀가 모두 실패했다.
+CMD 앞에 exec만 추가해 shell을 API로 교체한다. 환경변수의 기본값/명시값 확장은
+유지하고 API가 직접 SIGTERM을 받아 graceful shutdown할 수 있게 한다.
+
+새 회귀는 실제 CMD를 본인 임시 session과 Python 대역 executable로 실행한다.
+같은 PID와 host/port 인수, 그 PID에 보낸 SIGTERM의 handler 호출·exit0을 검증한다.
+본인 session/group만 정리하며 Docker/운영 프로세스를 호출하지 않는다.
+이는 실제 Uvicorn 요청/DB drain의 운영 검증이 아니므로 그 검증은 별도 배포에서 수행한다.
+기존 c324 ARM64 실행은 불변 context에서 끝내 보존하고 새 HEAD의 CMD는 캐시 기반
+재export와 source/이미지 검증 후에만 운영 후보로 사용한다.

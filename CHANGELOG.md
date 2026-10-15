@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- API shell CMD가 exec로 Uvicorn에 직접 종료 신호를 전달하도록 하고 host/port 확장을 보존한다.
 - ARM64 GDAL wheel 빌드의 실제 2GiB OOM에 대응해 API/CS의 해당 pip 빌드만 직렬 컴파일한다.
   임시 setuptools 설정은 같은 layer에서 제거하며 런타임 동시성과 의존성 버전은 유지한다.
 - Dagster 상세와 내장 콘솔을 사용자가 열 때 조회한다. 종료 실행은 자동 상세 조회를

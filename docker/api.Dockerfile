@@ -55,4 +55,4 @@ PY
 
 EXPOSE 12501
 
-CMD ["sh", "-c", "uvicorn kortravelgeo.api.app:app --host ${KTG_API_HOST:-0.0.0.0} --port ${PORT:-12501}"]
+CMD ["sh", "-c", "exec uvicorn kortravelgeo.api.app:app --host ${KTG_API_HOST:-0.0.0.0} --port ${PORT:-12501}"]
