@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — 적대 리뷰의 모호한 DB 진단 분류 경계 보강(Codex)
+
+- 구조화된 driver primary 메시지가 없을 때 str(orig)의 무관한 DETAIL 문구를 statement
+  timeout으로 오인하는 반례를 재현했다. SQLSTATE 57014도 사용자 취소와 공유하므로 primary가
+  없거나 비문자열이면 원 DB 오류를 전파한다. 확인된 primary statement timeout만 기존처럼
+  point·typed geometry_error로 격리하며, 사용자 취소·ProgrammingError는 성공으로 바꾸지 않는다.
+- 기존 7eef geometry source에 새 회귀를 적용해 10 FAIL/4 PASS를 확인했다. 세 보조 조회와
+  diag 누락·primary 누락/비문자열·사용자 취소 primary, client의 모호한 오류 전파를 포함한다.
+  변경 뒤 관련 188 PASS, 전체 ruff·mypy 167파일 PASS. DTO·OpenAPI·SQL·timeout·튜닝 변경은 없다.
+- 최종 backend unit 전체 1,901 PASS(36.84초). PG DSN 없이 실행했으며 실제 PG integration은
+  NOT_RUN이다. 검증 때문에 운영·보존 DB를 변경하지 않았다.
+- 이전 SHA의 로컬 ARM64 UI 빌드는 최종 배포 증거로 사용하지 않는다. 최종 SHA로 API/CS와
+  UI를 다시 빌드하며 운영 build/load/restart는 아직 실행하지 않았다.
+
 ## 2026-10-15 — Dagster 상세·콘솔의 명시 조회와 종료 실행 polling 중단(Codex)
 
 - Common DagsterOperations의 기존 controlled selection을 사용하며 첫 run의 상세를 자동

@@ -15,6 +15,8 @@
 - geometry repository에서 SQLSTATE57014와 driver primary message의 statement timeout을
   함께 확인한 경우만 GeometryTimeoutError로 구별한다. 같은 SQLSTATE의 사용자 취소,
   lock/connect 오류·programming 오류는 그대로 전파한다.
+  구조화된 diag.message_primary가 없거나 문자열이 아니면 원 오류를 전파한다.
+  DETAIL/CONTEXT가 섞이는 str(orig)는 statement timeout 확인 근거로 사용하지 않는다.
 - 이미 유효한 point를 확보한 v2 후보에만 보조 실패를 격리하고
   `geometry_error: {code: "statement_timeout", retryable: true}`를 명시한다. point·주소·confidence는
   보존한다. point가 없거나 primary 조회 자체가 실패하면 기존 오류다. v1 호환 DTO는 바꾸지 않는다.

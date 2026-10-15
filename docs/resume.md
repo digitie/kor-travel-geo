@@ -13,6 +13,8 @@
   경고와 좌표를 함께 표시하고 취소·새 제출·이탈의 signal/버전으로 늦은 응답을 격리한다.
   UI OLD 5 FAIL/1 PASS → NEW 전체 261 PASS, type/lint/build PASS. 독립 리뷰·같은 예제의
   운영 비교 측정·live E2E와 배포는 아직 후속이며 운영 완료로 표시하지 않는다.
+  적대 리뷰의 무관한 DETAIL 오분류를 OLD 10 FAIL/4 PASS로 재현하고 구조화 primary가
+  불명확하면 원 오류를 전파하도록 좁혔다. 관련 188 PASS이며 최종 SHA 재리뷰/이미지 검증이 남았다.
 
 - 진행(2026-10-15): T-324·T-325a~c 완료(원장 정리, `tasks-done.md`). geo 스택은 odroid로 이전됨 — 풀로드가 아니라 n150 백업 복원(ADR-070 지름길 (a)), 소비자 전환 완료, ADR-070 **accepted**(2026-10-15 소유자: 복원으로 갈음·이전 확정·소비자별 키·Track 1 첫 토큰=기준선·GeoIP off). **다음 한 작업**: 운영자가 schedule 재가동 전 odroid에서 standalone `mv_refresh` 1회 실측해 소요(초) 전달 → ADR-070 D4 상한 결정·코드(`recovery.py`·`test_definitions.py`) → 그 뒤 geo schedule·sensor 재가동; 병행으로 T-326c 점검(n150 geo-api 소비자 0 확인 후 정지, 키 경로 2xx, p50/p95, Track 1 계획 건수 0 확인)과 T-325 잔여 검증(UI live). 상세 `tasks.md` T-325 잔여·T-326, journal 2026-10-15.
 

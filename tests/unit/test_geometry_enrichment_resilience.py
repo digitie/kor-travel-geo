@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.protocols import GeometryLookup
@@ -162,6 +163,7 @@ async def test_programming_and_caller_cancellation_propagate(
 class DriverError(Exception):
     def __init__(self, sqlstate: str | None, message: str) -> None:
         self.sqlstate = sqlstate
+        self.diag = SimpleNamespace(message_primary=message)
         super().__init__(message)
 
 
@@ -222,6 +224,56 @@ async def test_driver_cancellation_remains_cancellation_and_releases_connection(
     with pytest.raises(asyncio.CancelledError):
         await repo.building_geometry(bd_mgt_sn="building-1")
     assert engine.exits == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["building", "region", "road"])
+@pytest.mark.parametrize(
+    "diagnostic", ["missing_diag", "missing_primary", "nonstring_primary", "user_cancel_primary"],
+)
+async def test_ambiguous_detail_never_becomes_confirmed_geometry_timeout(
+    kind: str, diagnostic: str,
+) -> None:
+    driver = DriverError(
+        "57014",
+        "canceling statement due to user request\nDETAIL: unrelated statement timeout text",
+    )
+    if diagnostic == "missing_diag":
+        del driver.diag
+    elif diagnostic == "missing_primary":
+        driver.diag = SimpleNamespace()
+    elif diagnostic == "nonstring_primary":
+        driver.diag = SimpleNamespace(message_primary=123)
+    else:
+        driver.diag = SimpleNamespace(message_primary="canceling statement due to user request")
+    original = OperationalError("SELECT geometry", {}, driver)
+    engine = FailedEngine(original)
+    repo = GeometryRepository(engine)  # type: ignore[arg-type]
+    with pytest.raises(OperationalError) as raised:
+        if kind == "building":
+            await repo.building_geometry(bd_mgt_sn="building-1")
+        elif kind == "region":
+            await repo.region_geometry(sig_cd="11680")
+        else:
+            await repo.road_geometries("테헤란로")
+    assert raised.value is original
+    assert engine.exits == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("programming", [False, True])
+async def test_ambiguous_database_error_is_not_a_partial_point_success(programming: bool) -> None:
+    driver = DriverError(
+        "42601" if programming else "57014",
+        "unconfirmed database failure\nDETAIL: unrelated statement timeout text",
+    )
+    driver.diag = SimpleNamespace()
+    error_type = ProgrammingError if programming else OperationalError
+    original = error_type("SELECT geometry", {}, driver)
+    client = AsyncAddressClient(engine=FailedEngine(original))  # type: ignore[arg-type]
+    with pytest.raises(error_type) as raised:
+        await client._enrich_candidates_with_geometry((candidate(),), include_geometry=True)
+    assert raised.value is original
 
 
 def test_geometry_metrics_do_not_accept_address_or_error_text_as_labels() -> None:

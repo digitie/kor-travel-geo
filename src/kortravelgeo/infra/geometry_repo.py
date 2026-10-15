@@ -402,9 +402,12 @@ class GeometryRepository:
             orig = exc.orig
             sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
             primary = getattr(getattr(orig, "diag", None), "message_primary", None)
-            message = primary if isinstance(primary, str) else str(orig)
-            # 57014는 사용자 취소도 공유한다. 확인된 statement timeout만 부분 실패로 구분한다.
-            if sqlstate == "57014" and "statement timeout" in message.lower():
+            # 57014는 사용자 취소도 공유한다. DETAIL/CONTEXT가 섞인 str(orig)는 근거가 아니다.
+            if (
+                sqlstate == "57014"
+                and isinstance(primary, str)
+                and "statement timeout" in primary.lower()
+            ):
                 outcome = "statement_timeout"
                 raise GeometryTimeoutError("보조 geometry 조회 제한 시간이 초과됐습니다.") from exc
             outcome = "error"
