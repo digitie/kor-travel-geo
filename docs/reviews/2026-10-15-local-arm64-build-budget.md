@@ -28,3 +28,30 @@ webpack fallback은 보존한다. Dockerfile·의존성·렌더링 기능은 변
 같다고 부르지 않는다. 주기적으로 샘플링한 process RSS도 연속 측정의 정확한 최대값으로
 과장하지 않는다. 원천 전체 manifest·이미지 revision/vendor·실제 bundle hash를 함께 남긴다.
 최종 이미지·운영 배포/live E2E는 이 설정 구현만으로 통과했다고 표시하지 않는다.
+
+## UI 재빌드 결과와 GDAL OOM
+
+같은 CPU2·2GiB 한도에서 8614 UI는 270.843초에 완료했고 Next 로그의 page data/static
+worker는 2개였다. 이전 빌드는 취소되었고 cache 상태도 같다고 증명하지 않았으므로
+전체 속도 개선 비율은 산출하지 않는다. 새 빌드도 샘플 cgroup 사용량은 2GiB에 닿았다.
+작업자 수와 완료를 검증했을 뿐 전체 메모리 최대 사용량 감소로 표시하지 않는다.
+
+뒤이은 8614 API는 GDAL 3.10.3 wheel의 C++ wrapper 여러 개를 동시에 컴파일하다
+659.422초에 실패했다. cc1plus의 Killed 로그와 본인 BuildKit cgroup의
+memory.events oom=1/oom_kill=1을 함께 확인했다. 이 실패는 앞선 UI 취소와 달리
+실제 OOM으로 분류한다. 원본 로그·실패 receipt를 보존하고 운영 빌드는 하지 않았다.
+
+[GDAL 3.10.3 공식 setup 소스](https://github.com/OSGeo/gdal/blob/v3.10.3/swig/python/setup.py.in)의
+build_ext는 initialize_options에서 parallel=True를 기본으로 둔다. CPU quota와 별개로
+setuptools가 host CPU 수를 작업자 수로 사용할 수 있다. 공식 setuptools 사용자 설정
+[build_ext] parallel=1이 이를 integer 1로 덮는 것을 실제 파싱으로 확인했다.
+소형 실제 C extension 2개도 같은 기본 subclass와 임시 HOME 설정으로 각각 빌드했다.
+기본 동시 compiler 최대 2 → 설정 적용 최대 1이며 양쪽 모두 extension 2개가 생성되었다.
+이는 GDAL 전체 빌드 성공을 대신하지 않는 로컬 메커니즘 검증이다.
+
+API와 Dagster builder의 해당 pip invocation 동안만 임시 HOME의 .pydistutils.cfg를
+적용한다. 기본 이미지·GDAL 버전 일치 검사·Dagster constraints·의존성 resolve와 runtime
+사용자는 보존하고, 임시 파일/빈 디렉터리는 같은 RUN에서 제거한다. CS는 기존 계약대로
+GDAL과 loaders/code-location을 한 pip invocation으로 설치한다. 실패하면 image build 자체가
+중단되어 설정이 남은 최종 이미지를 생성하지 않는다. 새 SHA의 실제 ARM64 API/CS 빌드와
+archive 검증이 끝날 때까지 성공으로 표시하지 않는다. 운영 동시성/timeout/DB 스키마 변경은 없다.

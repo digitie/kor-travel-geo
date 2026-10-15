@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-15 — ARM64 GDAL 컴파일의 실제 OOM과 빌드 동시성 제한(Codex)
+
+- UI 최종 8614 재빌드는 CPU2·2GiB에서 270.843초에 완료했고 worker2를 확인했다.
+  샘플 cgroup 최대는 여전히 2GiB이므로 전체 peak 메모리 감소로 표시하지 않는다.
+- API는 GDAL C++ 병렬 컴파일 중 cc1plus Killed와 cgroup oom/oom_kill 각1로 실패했다.
+  원래 실패 로그를 보존했다. 공식 GDAL의 parallel=True 기본과 setuptools 사용자 설정
+  덮어쓰기를 확인하고 실제 소형 extension 2개에서 compiler 동시2→1·양쪽 성공을 검증했다.
+- API/CS의 해당 pip 빌드 동안만 임시 HOME에서 parallel=1을 사용하고 같은 RUN에서 제거한다.
+  버전/constraints/base/런타임 동작은 보존한다. 새 SHA ARM64 빌드·검증·독립 리뷰가 남았고
+  운영 변경은 하지 않았다. [관측과 범위](reviews/2026-10-15-local-arm64-build-budget.md).
+
 ## 2026-10-15 — 로컬 ARM64 UI 빌드의 worker 예산 제한(Codex)
 
 - CPU2·2GiB BuildKit에서 Next가 page data worker 15개를 만들고 메모리 1.988~1.991GiB에
