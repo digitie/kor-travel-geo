@@ -74,7 +74,7 @@ lint-imports의 초기 python -m 호출은 검사 결과를 내지 않아 통과
 
 ## 선택적 native incarnation 복구 센서
 
-Dagster 패키지는 Common d1aa4bb의 복구 센서도 제공한다. 운영에서 실제 Geo
+Dagster 패키지는 Common의 복구 센서도 제공한다. 운영에서 실제 Geo
 RepositoryOrigin의 ID를 조회해 KTG_DAGSTER_NATIVE_RECOVERY_REPOSITORY_ORIGIN_ID로
 명시한 경우에만 geo_native_incarnation_recovery를 등록하며, 기본 상태는 STOPPED다.
 값은 정확히 소문자 16진수 40자여야 한다. 값이 없거나 공백뿐이면 등록하지 않는다.
@@ -87,6 +87,16 @@ private PID namespace·PID1 시작 anchor·NTP 신뢰 조건을 확인한다. �
 소스 회귀만으로 운영에서 충족되었다고 볼 수 없다. 센서는 정확한 DefaultRunLauncher와
 저장된 origin·전송 태그가 확인되는 이전 incarnation의 STARTED 실행만 대상으로 한다.
 현재 incarnation 실행, 외부 launcher, origin/태그/시계가 불확실한 실행은 보류한다.
+
+
+활성화 전제의 정본은 [고정 Common344d91c 가이드 §15](https://github.com/digitie/kor-travel-common/blob/344d91c0eec4b605e007e61ce248693a729d692d/docs/runbooks/dagster-adoption.md#15-컨테이너-재시작-뒤-native-실행-정산)다.
+해당 exact gRPC origin은 단일 code-server가 독점 소유해야 하며 구/신 동시 생존,
+rolling/blue-green overlap·proxy/LB의 다중 서버 분기는 지원하지 않는다.
+private PID namespace와 origin 일치만으로 구 worker 사망을 증명하지 않는다.
+실제 serial 교체에서 구 init/worker의 PID·start ticks 및 구 cgroup 비어 있음/소멸을
+대조하고 PID/cgroup 경로 재사용과 구분한 물리 소멸 증거가 필요하다.
+이 전제/물리 소멸이 UNKNOWN이면 기본 STOPPED를 유지하고 활성화하지 않는다.
+센서 자체가 구 namespace worker나 routing의 부재를 증명하지 않는다.
 
 이 센서는 native 실행을 실패로 정산하며 자동 재실행을 만들지 않는다. 기존
 geo_infrastructure_retry_backup_verify만 멱등 backup_verify의 인프라 실패를 한 번
