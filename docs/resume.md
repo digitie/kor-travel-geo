@@ -2,6 +2,13 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
+
+- 진행(2026-10-16, Codex): Dagster 패키지에서 Common ad988a5의 grpc-health extra를 설치하도록
+  준비했다(PR #577). 이전 선언/설치 RED 2 FAIL→새 설치 회귀 8 PASS, Python1907/Dagster129,
+  Ruff/mypy/lint-imports, frontend269/type/lint/build PASS. 실제 DB 미제공141 SKIP.
+  Manager의 순수 live 선언 적용 전 소비 이미지 확인·독립2리뷰·ARM64/운영 검증이 남았다.
+  API/core·기존 튜닝·주기·복구·GDAL/Next·UI pin은 유지한다.
+
 - 진행(2026-10-15, Codex): API CMD에 exec를 추가해 shell을 API로 교체한다.
   실제 CMD 로컬 대역에서 OLD 2 FAIL→직접 PID/SIGTERM·기본/명시 host/port 회귀를 검증했다.
   c324 ARM64 context는 보존하고 새 HEAD의 API/CS/UI 최종 label export·2인 리뷰·운영 drain은 후속이다.

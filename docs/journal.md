@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+
+## 2026-10-16 — Common 순수 gRPC 상태 조회 소비 준비(Codex)
+
+- Dagster 패키지의 Common pin을 ad988a5로 갱신하고 grpc-health 선택 extra를 명시했다.
+  Geo 본체/API에는 Common·Dagster·gRPC를 새로 강제하지 않는다. 이 저장소에 CS healthcheck
+  선언이 없어 실제 선언 소유 Manager #486의 소비 이미지 선행 설치 조건을 문서화했다.
+- 기존 Common 73e3의 세 runtime 파일은 byte 동일하다. constraints·수집·DB·복구·주기·
+  GDAL 직렬 빌드·Next worker2·UI/NPM 설정은 유지했다. 새 상태 조회에는 kill/DB reaper가 없다.
+- OLD 선언/설치본 2 FAIL→신규 실제 설치 회귀 8 PASS, Python 전체 1907 PASS/141 SKIP,
+  Dagster 129 PASS, Ruff/mypy/실제 lint-imports PASS. frontend gen/lint/type/269 tests/build PASS.
+  DB 미제공 skip과 초기 PATH·Ruff 오류/무동작 lint-imports 호출은 로컬 원문으로 보존했다.
+- 작성자 검증만 수행했다. 독립 2인 리뷰·실제 이미지/CLI 검증·운영 배포·성능 비교는 후속이며,
+  liveness 성공을 정의/worker/DB readiness 또는 장애 복구 성공으로 표시하지 않는다.
+  상세 경계는 [Common 상태 조회 채택](common-grpc-health-adoption.md)을 따른다.
+
 ## 2026-10-15 — 종료 회귀 대역의 준비 marker 원자 게시(Codex)
 
 - exec 회귀 대역의 준비 JSON을 임시 파일 작성 후 replace로 게시한다. reader가 파일 생성과
