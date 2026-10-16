@@ -1,0 +1,12 @@
+# 기존 운영 Compose 뒤에 병합하는 interval 전용 override.
+# 이미지·명령·환경·timeout/retries/start_period는 기존 선언을 상속한다.
+services:
+  kor-travel-geo-api:
+    healthcheck:
+      interval: 30s
+  geo-dagster-code-server:
+    healthcheck:
+      interval: 90s
+  kor-travel-geo-ui:
+    healthcheck:
+      interval: 30s

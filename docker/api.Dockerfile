@@ -57,7 +57,7 @@ PY
 RUN python -I -m kortravelcommon.build_bytecode --stdlib
 
 # public liveness의 응답 헤더 2xx만 확인한다. DB 준비·본문 검증은 /v1/readyz와 별개다.
-HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=30s CMD ["sh", "-c", "exec python -I -m kortravelcommon.http_health --port \"${PORT:-12501}\" --path /v1/healthz --timeout-seconds 4"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=12 --start-period=30s CMD ["sh", "-c", "exec python -I -m kortravelcommon.http_health --port \"${PORT:-12501}\" --path /v1/healthz --timeout-seconds 4"]
 
 EXPOSE 12501
 

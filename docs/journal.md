@@ -2,6 +2,13 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-16 — 상태 점검 실행 간격 3배(Codex)
+
+- 사용자 지시로 API 이미지 기본 interval10→30초와 실제 운영 API/CS/UI의 interval 전용
+  Compose override(30/90/30초)를 추가했다. Test·timeout·retries·start-period·수집/복구/튜닝은
+  유지하며 실패 감지가 늦어질 수 있음을 운영 안내에 기록했다.
+- 실제 배포·재측정은 독립 리뷰와 머지 후 별도로 수행한다. 여기서는 운영을 변경하지 않았다.
+
 ## 2026-10-16 — 최종 이미지 stdlib cache와 API 생존 확인(Codex D)
 
 - Geo578 위 별도 ext4 작업 트리에서 Common37 source344d91c를 API extra core-only와
