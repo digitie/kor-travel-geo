@@ -1,5 +1,9 @@
 # RESUME — 작업 재개 가이드
 
+- 진행(2026-10-16, Codex): 사용자 지시로 API/CS/UI 상태 점검 간격을30/90/30초로 늘리는
+  interval 전용 Compose override와 API 이미지 기본값을 준비했다. 기존 수집·복구·튜닝은 유지한다.
+  독립 리뷰·머지 후 Geo 유지 상태에서 Weather → Transport를 각각 검증하고 실적용을 확인한다.
+
 - 진행(2026-10-16, Codex D): API/CS 최종 interpreter/root 단계에 Common37 stdlib
   checked-hash bytecode 준비를 연결하고 API extra core-only 설치·이미지 기본 HTTP 생존 확인을
   추가했다. [이미지 채택 안내](runbooks/image-health-bytecode.md)의 Compose override·헤더/본문

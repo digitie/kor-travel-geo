@@ -105,7 +105,7 @@ def test_api_health_uses_public_loopback_liveness_and_runtime_port(
     instruction = next(value for kind, value in _instructions("docker/api.Dockerfile")
                        if kind == "HEALTHCHECK")
     options, command = instruction.split(" CMD ", 1)
-    assert options == "--interval=10s --timeout=5s --retries=12 --start-period=30s"
+    assert options == "--interval=30s --timeout=5s --retries=12 --start-period=30s"
     argv = json.loads(command)
     assert argv[:2] == ["sh", "-c"]
     output = tmp_path / "health.json"

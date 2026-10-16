@@ -16,8 +16,8 @@ CS는 원 appuser로 돌아간다. PYTHONDONTWRITEBYTECODE·-I·원 GDAL/constra
 이 변경은 root 권한을 runtime 사용자에게 주거나 stdlib를 writable로 만드는 작업이 아니다.
 
 API Dockerfile에 public /v1/healthz의 loopback HTTP 생존 확인을 기본값으로 선언한다.
-PORT(기본12501)를 CMD와 같이 사용한다. interval10s/timeout5s/retries12/start-period30s는
-기존 배포 선언의 수치를 유지하고 Common 내부 전체 예산은4초다.
+PORT(기본12501)를 CMD와 같이 사용한다. interval은 사용자 지시로10s에서30s로 늘린다.
+timeout5s/retries12/start-period30s와 Common 내부 전체 예산4초는 유지한다.
 Geo API의 /v1/healthz는 DB 조회 없는 상수 상태 경로다. /v1/readyz의 DB/serving 준비와 별개다.
 Common은 redirect/proxy/retry 없이 응답 헤더2xx만 검사한다.
 기존 urllib의 redirect·응답 본문 전체 읽기와 의미가 동일하다고 주장하지 않는다.
@@ -60,3 +60,21 @@ source를 덮으면 효과가 사라진다. checked-hash 읽기에도 source 검
 Docker 이미지 빌드·운영 설치·서비스 재시작·실제 최종 pyc/ARM/성능 비교는 이번 소스 검증에서
 NOT_RUN이다. unit loopback와 Dockerfile 명령 대역은 실제 이미지 실행의 대체 증거가 아니다.
 DB/RustFS 생명주기·provider 호출·실제 튜닝 값은 이 PR 소유 범위가 아니다.
+
+
+## 상태 점검 간격 3배 적용
+
+2026-10-16 사용자 지시로 Geo API10→30초, code-server30→90초, UI10→30초로
+점검 실행 간격만 늘린다. 데이터 수집·복구 센서·UI 데이터 조회 주기, 점검 명령과 실패 판정 횟수,
+타임아웃·시작 유예는 기존 값을 유지한다. 실패가 발견되는 최대 지연도 길어지는 변경이다.
+
+API 이미지 기본값 외 실제 Compose override에도 같은 간격을 반영해야 한다.
+[간격 전용 override](../deploy/geo-healthcheck-cadence.yml)는 운영 정본의 서비스 이름 세 개에만
+interval을 덮어쓰며 이미지·환경·원 Test를 포함하지 않는다. 기존 Compose 뒤에 병합하여
+완성된 설정에서 실제 Test와 interval을 검증한다. 이미지 기본값만 바꾸거나 Compose 파일만
+수정해 실행 중인 컨테이너에 적용됐다고 판단하지 않는다.
+
+Geo를 계속 서비스하는 요구를 우선하여 전후에 Geo API/UI의 실제 응답과 다섯 컨테이너 상태를
+확인하고, Weather와 Transport는 한 번에 한 스택씩 추가하여 별도 표본으로 기록한다.
+점검 간격 변경과 stdlib cache·HTTP 점검 변경의 효과를 구분한다. 공유 DB/RustFS의 생명주기는
+이 저장소에서 관리하지 않는다.
