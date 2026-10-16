@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- API/CS 이미지 빌드에서 최종 Python의 stdlib checked-hash bytecode를 명시적으로 준비한다.
+  API extra에 Common core와 기본 HTTP 생존 확인을 연결하며 Compose override 정산과 운영 효과는 별도다.
 - 실제 repository origin을 명시한 경우에만 Common native incarnation 복구 센서를
   기본 STOPPED로 등록한다. 잘못된 설정은 센서만 건너뛰고 기존 정의 로딩을 보존한다.
 - API shell CMD가 exec로 Uvicorn에 직접 종료 신호를 전달하도록 하고 host/port 확장을 보존한다.

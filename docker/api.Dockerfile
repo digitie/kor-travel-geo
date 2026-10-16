@@ -15,7 +15,7 @@ RUN apt-get update \
       build-essential \
       gdal-bin \
       libgdal-dev \
-      curl \
+      curl git \
       gnupg \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -52,6 +52,12 @@ print(f"python_gdal={python_version}")
 if lib_version not in python_version:
     raise SystemExit(f"GDAL version mismatch: lib={lib_version}, python={python_version}")
 PY
+
+# 최종 runtime interpreter/root로 stdlib cache를 준비한다. 런타임 health에서는 컴파일하지 않는다.
+RUN python -I -m kortravelcommon.build_bytecode --stdlib
+
+# public liveness의 응답 헤더 2xx만 확인한다. DB 준비·본문 검증은 /v1/readyz와 별개다.
+HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=30s CMD ["sh", "-c", "exec python -I -m kortravelcommon.http_health --port \"${PORT:-12501}\" --path /v1/healthz --timeout-seconds 4"]
 
 EXPOSE 12501
 

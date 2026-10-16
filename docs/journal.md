@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-16 — 최종 이미지 stdlib cache와 API 생존 확인(Codex D)
+
+- Geo578 위 별도 ext4 작업 트리에서 Common37 source344d91c를 API extra core-only와
+  Dagster 기존 extra에 고정했다. 최종 runtime Python/root로 --stdlib를 실행한 뒤 CS appuser를
+  보존한다. API VCS 의존성 설치에 필요한 git만 빌드 의존 목록에 추가했다.
+- API 이미지 기본 health는 /v1/healthz·PORT를 쓰고 원 배포 수치를 유지한다. Common header-only
+  2xx와 기존 urllib full-body 차이, 실제 Compose override 별도 정산을
+  [안내](runbooks/image-health-bytecode.md)에 기록했다.
+- 새 이미지 계약 회귀를 구 source에서 실행해5 FAIL을 보존했다. 수정 후 실행 argv/종료코드·
+  default/override port·설치 의존성·실제 quiet loopback 2xx/redirect/503을 확인했다.
+- CodeGraph MCP가 현재 도구에 없어 CLI init/status/context/impact를 사용했다.
+  Python1915 PASS/141 SKIP, Dagster148 PASS, 설치 wheel/관련16 PASS,
+  Ruff/mypy168파일·계층167파일·OpenAPI 통과. skip은 DB 실제 검증으로 세지 않는다.
+  첫 별도 환경의 Geo 패키지 미설치 실패는 설치 후 재검증했고 Docker 이미지는 실행하지 않았다.
+  원본/다른 작업자 변경과 운영은 건드리지 않았다. 실제 Docker build·ARM·배포/성능은 NOT_RUN.
+
 
 ## 2026-10-16 — 명시 origin 기반 Common native 복구 센서 채택(Codex)
 
