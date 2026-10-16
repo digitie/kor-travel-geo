@@ -2,9 +2,11 @@
 
 ## 범위와 상태
 
-Geo Dagster 구성요소가 Common d1aa4bbacab87af9ebae08757bd3fcb80f748fe9의
-선택 의존성 grpc-health를 설치하도록 준비한다. Geo 본체/API에는 gRPC나 Dagster
-의존성을 새로 강제하지 않는다. 배포와 운영 효과 검증은 아직 수행하지 않았다.
+현재 Geo Dagster 구성요소는 Common344d91c0eec4b605e007e61ce248693a729d692d의
+기존 dagster/grpc-health extra를 설치한다. API extra는 같은 pin의 core-only Common을
+추가하며 Geo 본체만 설치할 때는 Common·gRPC·Dagster를 강제하지 않는다.
+원 ad988 상태 조회 채택과 d1aa 복구 센서 채택의 검증 기록은 아래 역사 절에 보존한다.
+현재 source의 이미지 빌드·배포·운영 효과는 [bytecode 채택 안내](runbooks/image-health-bytecode.md)의 별도 gate다.
 
 Geo 저장소에는 code-server healthcheck 선언이 없다. 실제 선언의 소유자는
 Manager Compose이며, Manager #486에서 준비한 exec 명령은 다음과 같다.
@@ -36,8 +38,11 @@ live 성공을 실행 정지 복구 성공으로 확대하지 않는다. unhealt
 
 ## 기존 계약과 설정 보존
 
-기존 Common pin 73e3ff8b9398e533806d2d1a8435292570169de3에서 새 pin으로
-비교한 기존 __init__.py, dagster.py, deadline.py는 byte 동일하다.
+초기 상태 조회 채택 단계의 Common73e3ff8b9398e533806d2d1a8435292570169de3 →
+ad988a5 비교에서 기존 __init__.py, dagster.py, deadline.py는 byte 동일했다.
+현재344까지 dagster.py가 byte 동일하다는 뜻은 아니다. Common35 multi-job retry와
+Common36 PID1 leader clock·Common37 빌드 CLI가 후속에 포함됐다. Geo는 새 multi-job
+retry를 등록하지 않으며 기존 backup_verify만의 재시도 범위와 native 기본 STOPPED를 유지한다.
 http.py, scheduling.py와 상태 조회 모듈은 이후 추가된 API다.
 기존 pin에는 http/scheduling이 없었으므로 기존 다섯 파일이 모두 있었다고 기술하지 않는다.
 코어 필수 의존성은 추가되지 않고 새 gRPC 의존성은 선택 extra로만 노출된다.
@@ -74,7 +79,7 @@ lint-imports의 초기 python -m 호출은 검사 결과를 내지 않아 통과
 
 ## 선택적 native incarnation 복구 센서
 
-Dagster 패키지는 Common d1aa4bb의 복구 센서도 제공한다. 운영에서 실제 Geo
+Dagster 패키지는 Common의 복구 센서도 제공한다. 운영에서 실제 Geo
 RepositoryOrigin의 ID를 조회해 KTG_DAGSTER_NATIVE_RECOVERY_REPOSITORY_ORIGIN_ID로
 명시한 경우에만 geo_native_incarnation_recovery를 등록하며, 기본 상태는 STOPPED다.
 값은 정확히 소문자 16진수 40자여야 한다. 값이 없거나 공백뿐이면 등록하지 않는다.
@@ -87,6 +92,16 @@ private PID namespace·PID1 시작 anchor·NTP 신뢰 조건을 확인한다. �
 소스 회귀만으로 운영에서 충족되었다고 볼 수 없다. 센서는 정확한 DefaultRunLauncher와
 저장된 origin·전송 태그가 확인되는 이전 incarnation의 STARTED 실행만 대상으로 한다.
 현재 incarnation 실행, 외부 launcher, origin/태그/시계가 불확실한 실행은 보류한다.
+
+
+활성화 전제의 정본은 [고정 Common344d91c 가이드 §15](https://github.com/digitie/kor-travel-common/blob/344d91c0eec4b605e007e61ce248693a729d692d/docs/runbooks/dagster-adoption.md#15-컨테이너-재시작-뒤-native-실행-정산)다.
+해당 exact gRPC origin은 단일 code-server가 독점 소유해야 하며 구/신 동시 생존,
+rolling/blue-green overlap·proxy/LB의 다중 서버 분기는 지원하지 않는다.
+private PID namespace와 origin 일치만으로 구 worker 사망을 증명하지 않는다.
+실제 serial 교체에서 구 init/worker의 PID·start ticks 및 구 cgroup 비어 있음/소멸을
+대조하고 PID/cgroup 경로 재사용과 구분한 물리 소멸 증거가 필요하다.
+이 전제/물리 소멸이 UNKNOWN이면 기본 STOPPED를 유지하고 활성화하지 않는다.
+센서 자체가 구 namespace worker나 routing의 부재를 증명하지 않는다.
 
 이 센서는 native 실행을 실패로 정산하며 자동 재실행을 만들지 않는다. 기존
 geo_infrastructure_retry_backup_verify만 멱등 backup_verify의 인프라 실패를 한 번

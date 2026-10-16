@@ -123,6 +123,8 @@ RUN apt-get update \
     && chown -R appuser:appuser /app /opt/dagster
 
 COPY --from=builder /install /usr/local
+# 최종 runtime interpreter/root로 준비한 stdlib cache는 appuser도 읽을 수 있다.
+RUN python -I -m kortravelcommon.build_bytecode --stdlib
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/dagster.yaml /opt/dagster/dagster_home/dagster.yaml
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/workspace.yaml /opt/dagster/dagster_home/workspace.yaml
 # T-322: storage URL 드라이버 guard. compose는 `command:`만 주므로 세 서비스 모두 이 ENTRYPOINT를 거친다.

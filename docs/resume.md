@@ -1,5 +1,12 @@
 # RESUME — 작업 재개 가이드
 
+- 진행(2026-10-16, Codex D): API/CS 최종 interpreter/root 단계에 Common37 stdlib
+  checked-hash bytecode 준비를 연결하고 API extra core-only 설치·이미지 기본 HTTP 생존 확인을
+  추가했다. [이미지 채택 안내](runbooks/image-health-bytecode.md)의 Compose override·헤더/본문
+  차이·머지→빌드→배포→측정 순서를 따른다. 기존 CS 복구/주기/튜닝·UI는 유지한다.
+  실제 Docker build/배포/CPU 개선은 NOT_RUN이며 두 독립 리뷰·머지와 운영 전후 검증이 남았다.
+
+
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
 

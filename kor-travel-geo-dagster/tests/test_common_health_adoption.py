@@ -16,7 +16,7 @@ import pytest
 from packaging.requirements import Requirement
 
 _ROOT = Path(__file__).resolve().parents[2]
-_COMMON_COMMIT = "d1aa4bbacab87af9ebae08757bd3fcb80f748fe9"
+_COMMON_COMMIT = "344d91c0eec4b605e007e61ce248693a729d692d"
 
 
 def test_dagster_package_installs_exact_common_with_explicit_grpc_extra() -> None:
@@ -34,9 +34,17 @@ def test_dagster_package_installs_exact_common_with_explicit_grpc_extra() -> Non
 
 def test_main_and_api_dependencies_do_not_require_common_dagster_or_grpc() -> None:
     project = tomllib.loads((_ROOT / "pyproject.toml").read_text())["project"]
+    assert all(
+        Requirement(value).name != "kor-travel-common" for value in project["dependencies"]
+    )
     requirements = project["dependencies"] + project["optional-dependencies"]["api"]
-    forbidden = {"kor-travel-common", "dagster", "grpcio", "grpcio-health-checking", "protobuf"}
+    forbidden = {"dagster", "grpcio", "grpcio-health-checking", "protobuf"}
     assert not forbidden.intersection(Requirement(value).name for value in requirements)
+    common = next(
+        Requirement(value) for value in project["optional-dependencies"]["api"]
+        if Requirement(value).name == "kor-travel-common"
+    )
+    assert not common.extras
 
 
 def test_installed_common_is_the_declared_commit() -> None:
