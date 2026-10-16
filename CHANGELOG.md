@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Added
+- 실제 repository origin을 명시한 경우에만 Common native incarnation 복구 센서를
+  기본 STOPPED로 등록한다. 잘못된 설정은 센서만 건너뛰고 기존 정의 로딩을 보존한다.
 - API shell CMD가 exec로 Uvicorn에 직접 종료 신호를 전달하도록 하고 host/port 확장을 보존한다.
 - ARM64 GDAL wheel 빌드의 실제 2GiB OOM에 대응해 API/CS의 해당 pip 빌드만 직렬 컴파일한다.
   임시 setuptools 설정은 같은 layer에서 제거하며 런타임 동시성과 의존성 버전은 유지한다.

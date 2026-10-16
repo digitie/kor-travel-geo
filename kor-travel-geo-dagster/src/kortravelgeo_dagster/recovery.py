@@ -1,11 +1,14 @@
 """geo의 실행 예산을 common 예약·인프라 복구 계약에 연결한다."""
 
+import logging
+import re
 from collections.abc import Mapping
 from os import environ
 from typing import Any
 
-from dagster import job, multiprocess_executor
+from dagster import SensorDefinition, job, multiprocess_executor
 from kortravelcommon.dagster import RecoveryPolicy, has_active_run
+from kortravelcommon.dagster_recovery import native_incarnation_recovery_sensor
 from kortravelcommon.deadline import call_with_deadline
 
 PROJECT = "geo"
@@ -15,6 +18,27 @@ LOCATION_NAME = environ.get(
 LONG_JOBS = frozenset({"full_load_batch", "load_source", "db_restore", "backup_restore_drill"})
 IDEMPOTENT_RETRY_JOBS = frozenset({"backup_verify"})
 GEO_EXECUTOR = multiprocess_executor.configured({"max_concurrent": 1})
+
+
+def native_recovery_sensors() -> list[SensorDefinition]:
+    """운영에서 확인한 origin을 명시한 경우에만 STOPPED 복구 센서를 추가한다."""
+    key = "KTG_DAGSTER_NATIVE_RECOVERY_REPOSITORY_ORIGIN_ID"
+    origin_id = environ.get(key)
+    if origin_id is None or not origin_id.strip():
+        return []
+    if re.fullmatch(r"[0-9a-f]{40}", origin_id) is None:
+        logging.getLogger(__name__).warning(
+            "%s 형식이 잘못되어 native 복구 센서를 등록하지 않습니다.", key
+        )
+        return []
+    return [
+        native_incarnation_recovery_sensor(
+            name="geo_native_incarnation_recovery",
+            project=PROJECT,
+            location_name=LOCATION_NAME,
+            repository_origin_id=origin_id,
+        )
+    ]
 
 
 def policy_for_job(name: str) -> RecoveryPolicy:
