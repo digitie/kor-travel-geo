@@ -3,6 +3,11 @@
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
 
+- 진행(2026-10-16, Codex): Common d1aa4bb native incarnation 복구 센서를 선택적으로 연결했다.
+  KTG_DAGSTER_NATIVE_RECOVERY_REPOSITORY_ORIGIN_ID가 유효할 때만 기본 STOPPED로 등록한다.
+  미설정/잘못된 설정에서도 기존 정의는 유지한다. 실제 origin 설정·소비 이미지·활성화·
+  운영 복구 검증과 독립 리뷰는 후속이며 기존 backup_verify 외 재시도 범위는 늘리지 않는다.
+
 - 진행(2026-10-16, Codex): Dagster 패키지에서 Common ad988a5의 grpc-health extra를 설치하도록
   준비했다(PR #577). 이전 선언/설치 RED 2 FAIL→새 설치 회귀 8 PASS, Python1907/Dagster129,
   Ruff/mypy/lint-imports, frontend269/type/lint/build PASS. 실제 DB 미제공141 SKIP.

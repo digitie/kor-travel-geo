@@ -28,7 +28,7 @@ from .consistency_execute import CONSISTENCY_JOBS
 from .db_restore_execute import DB_RESTORE_JOBS
 from .full_load_execute import FULL_LOAD_JOBS
 from .mv import MV_REFRESH_JOBS
-from .recovery import LOCATION_NAME, PROJECT, policy_for_job
+from .recovery import LOCATION_NAME, PROJECT, native_recovery_sensors, policy_for_job
 from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 from .source_rebuild_execute import SOURCE_REBUILD_JOBS
 
@@ -94,6 +94,7 @@ defs = Definitions(
         "Any",
         [
             *BACKUP_SENSORS,
+            *native_recovery_sensors(),
             infrastructure_retry_sensor(
                 name="geo_infrastructure_retry_backup_verify",
                 project=PROJECT,

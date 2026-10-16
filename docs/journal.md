@@ -3,6 +3,22 @@
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
 
+## 2026-10-16 — 명시 origin 기반 Common native 복구 센서 채택(Codex)
+
+- Common d1aa4bb로 Dagster 의존성만 갱신하고 선택적 native incarnation 복구 센서를
+  연결했다. origin 미설정/빈값/잘못된 값은 센서 미등록으로 기존 Definitions를 보존한다.
+  올바른 형식으로 명시한 경우에도 기본 STOPPED이며 운영값은 저장소에 넣지 않는다.
+- 기존 backup_verify의 인프라 재시도만 유지하며 다른 jobs·schedules·executor·태그·
+  튜닝·API·UI를 바꾸지 않는다. DefaultRunLauncher와 per-run origin/전송 태그·PID1/시계
+  판정은 공통 모듈이 소유한다.
+- 신규 회귀를 기존 소스에서 실행해 16 FAIL/3 PASS를 확인했고, 구현 후 관련 33 PASS를
+  확인했다. 별도 실제 Common VCS 설치 환경에서는 Dagster 전체 148 PASS/10 warnings,
+  Ruff·mypy(168파일)·계층 계약 통과를 확인했다. 실제 운영 설치/환경 설정/활성화/복구/E2E는
+  수행하지 않았다. 초기 core 미설치의 1 FAIL/147 PASS, 생성 build 폴더를 포함한 Ruff 오류,
+  own venv에 없는 lint-imports script 호출 실패는 보존 후 환경을 교정했다.
+- 사용자가 승인한 별도 ext4 작업 트리에서 작업했다. 첫 reference clone은 linked checkout
+  제한으로 실패했고 plain clone으로 준비했다. 기존 worktree·운영 자료는 변경하지 않았다.
+
 ## 2026-10-16 — Common 순수 gRPC 상태 조회 소비 준비(Codex)
 
 - Dagster 패키지의 Common pin을 ad988a5로 갱신하고 grpc-health 선택 extra를 명시했다.
