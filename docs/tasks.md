@@ -70,7 +70,8 @@ cutover 배포·검증 완료. 실행이 프로덕션에서 **Dagster-only**(in-
 **후속 완료**: `integration→main` 머지(#485, merge commit `658a54e`) 및 geo Dagster 공개
 URL(`geo-dagster.digitie.mywire.org`)을 관리자 `/admin/dagster` 화면에 iframe으로 임베드
 (`DagsterEmbed` + `resolveDagsterPublicUrl`, 서버측 `KTG_DAGSTER_PUBLIC_URL` 해석; Dagster UI가
-frame-busting 헤더를 보내지 않아 CSP 변경 불필요). 남은 것은 UI 컨테이너 재배포로 라이브 반영하는 단계뿐.
+frame-busting 헤더를 보내지 않아 CSP 변경 불필요). 남은 것은 UI 컨테이너 재배포로 라이브 반영하는 단계뿐(2026-07 기록 — 이후 UI 이미지(현재 odroid `91c2e499`)는 #485를
+포함하므로 이 단계는 끝났다, 2026-10-17 git 조상 확인).
 
 (그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 

@@ -5,7 +5,8 @@ Dagster `full_load_batch`를 **serving DB를 건드리지 않고** 격리된 스
 
 > **두 절차.** 아래 본문(스크래치 DB → 검증 → 컷오버)은 **운영 중 재적재**용이다 — 보호할 serving MV가
 > 있을 때. 보호할 데이터가 없는 **빈 호스트**(odroid 전환, 장애 뒤 drop → 재적재)는 맨 아래
-> "빈 호스트(odroid) 풀로드 — 계획" 절을 따른다(ADR-070 proposed, 미구현).
+> "빈 호스트(odroid) 풀로드 — 계획" 절을 따른다(ADR-070 — 작성 당시 proposed; **2026-10-15 accepted**, 이번 odroid 이전은
+> 풀로드가 아니라 n150 백업 복원(지름길 (a))으로 실행됐고 이 절의 풀로드는 다음 재적재 때 쓴다).
 >
 > **정정(2026-10-13).** 아래 1)의 `KOR_TRAVEL_GEO_DAGSTER_EXECUTED_JOB_KINDS`는 **더는 존재하지 않는다** —
 > T-290k PR3(#482) 이후 모든 실행 종류가 무조건 Dagster로 라우팅된다
@@ -81,13 +82,15 @@ docker exec --user postgres kor-travel-shared-postgres psql -p 11000 -U shared_a
 serving DB(`kor_travel_geo`)는 이 절차 어디에서도 열리지 않는다 — 확인은 run 동안
 `SELECT datname,count(*) FROM pg_stat_activity GROUP BY 1`에 serving DB가 없어야 한다.
 
-## 빈 호스트(odroid) 풀로드 — 계획 (ADR-070 proposed, 미구현)
+## 빈 호스트(odroid) 풀로드 — 계획 (ADR-070 accepted 2026-10-15; 아직 실행 안 함 — 이전은 복원으로 갈음)
 
 정본은 [ADR-070](../adr/070-odroid-host-and-empty-host-full-load.md) D3; 여기는 실행 순서만 둔다.
 호스트 쪽 전제(odroid PG 인스턴스·NVMe fstab bind·compose v2·cgroup/memswap 효과 검사)는 Manager
 ADR-58 + `prod-deployment.md`의 odroid 초기화 절(그 문서 §9.1 — 설계 §11.1에 해당)이 정본이며, 그 단계가 PASS한 뒤에만 시작한다. **2026-10-13 현재** odroid는
 WSL 직접 ssh·NOPASSWD sudo·docker 그룹·NTP 수동 동기까지 완료, timesyncd 부팅 순서 drop-in·compose v2/buildx·
-방화벽·fstab bind·swapfile은 미완(설계 fact base §A3).
+방화벽·fstab bind·swapfile은 미완(설계 fact base §A3). — 위는 2026-10-13 기록이다. **2026-10-17 읽기 전용 확인**:
+`/var/lib/docker`와 공용 PG PGDATA는 NVMe(`/mnt/media`, fstab bind)에 있고, geo API/CS 컨테이너에는 `/data`(ro)·
+`/app/data/backups` 마운트만 있다 — `/app/data/source`·materialized 공유 bind는 **아직 없다**(다음 재적재 전 전제, ADR-070 D3-2).
 
 ### 전제
 
