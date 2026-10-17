@@ -1,7 +1,14 @@
 # RESUME — 작업 재개 가이드
 
 
-## 최신 재개 지점 (2026-10-17)
+## 최신 재개 지점 (2026-10-18)
+
+- G-01: odroid `mv_refresh` 30분 취소의 원인은 리프의 `SET LOCAL '30min'`(세션 0을 낮춤). 문장 상한을 6h 상수로(ADR-068
+  개정) 고치는 PR(`agent/claude-g01-locsum-link-join`). 실측 UPDATE 120 s·MV 정의 쿼리 510 s·지문 240 s(odroid 조용한 창).
+  다음 한 작업: PR 머지·odroid 배포 → standalone `mv_refresh` 실측(daemon OFF면 run이 QUEUED — 소유자 결정) → D4.
+- G-02/03/04/09/10/11 읽기 전용 확인 결과는 journal 2026-10-18.
+
+## 이전 재개 지점 (2026-10-17)
 
 - [Geo 잔여 작업 감사](audits/2026-10-17-remaining-work.md): main cae24c6, #573–580 머지,
   OPEN PR0 확인. source 구현을 중복하지 않는다.

@@ -10,6 +10,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.infra.cache import GeoCacheRepository
+from kortravelgeo.infra.engine import (
+    MAINTENANCE_STATEMENT_TIMEOUT,
+    MAINTENANCE_STATEMENT_TIMEOUT_MS,
+)
 from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.sql import (
     MV_SQL,
@@ -21,18 +25,21 @@ from kortravelgeo.infra.sql import (
 
 LOGGER = logging.getLogger(__name__)
 
+_SET_MAINTENANCE_TIMEOUT = text(f"SET LOCAL statement_timeout = '{MAINTENANCE_STATEMENT_TIMEOUT}'")
+
 
 async def resolve_text_geometry_links(
     engine: AsyncEngine,
     *,
-    statement_timeout_ms: int | None = 1_800_000,
+    statement_timeout_ms: int | None = MAINTENANCE_STATEMENT_TIMEOUT_MS,
 ) -> None:
     """Resolve text master rows to entrance and navigation geometry rows.
 
     This is a post-load maintenance step, not an online lookup path. The default
-    transaction-local statement timeout is therefore 30 minutes so large
-    two-sido or nationwide link updates do not inherit the 5 second API query
-    timeout. Pass None when the caller deliberately wants to keep the current
+    transaction-local statement timeout is therefore the maintenance ceiling
+    (``MAINTENANCE_STATEMENT_TIMEOUT``, 6 h) so large two-sido or nationwide link
+    updates do not inherit the 5 second API query timeout. ``0`` disables it for the
+    transaction. Pass None when the caller deliberately wants to keep the current
     connection/session timeout unchanged.
     """
     async with engine.begin() as conn:
@@ -72,7 +79,7 @@ async def refresh_mv(
     statement += " mv_geocode_target"
     async with engine.begin() as conn:
         # 긴 build 동안 소유 행을 잠그지 않는다. commit 직전 검증 실패는 refresh를 rollback한다.
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         await conn.execute(text(statement))
         text_search_exists = await conn.scalar(text("SELECT to_regclass('mv_geocode_text_search')"))
         if text_search_exists is None:
@@ -100,7 +107,7 @@ async def refresh_region_radius_parts(
 ) -> None:
     """Rebuild subdivided administrative-region geometry for radius lookup."""
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
             await conn.execute(text(sql))
         # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
@@ -110,7 +117,7 @@ async def refresh_region_radius_parts(
 
 async def rebuild_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search"))
         for sql in iter_sql_statements(MV_SQL):
             await conn.execute(text(sql))
@@ -161,21 +168,21 @@ async def shadow_swap_mv(
             await publication_guard(conn)
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
 
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         for sql in iter_sql_statements(build_mv_next_sql()):
             await conn.execute(text(sql))
 
 
 async def rebuild_text_search_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         for sql in iter_sql_statements(build_text_search_mv_next_sql()):
             await conn.execute(text(sql))
 

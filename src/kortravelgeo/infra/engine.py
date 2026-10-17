@@ -27,6 +27,15 @@ def _connect_options(settings: Settings) -> str:
     )
 
 
+#: Per-statement ceiling for post-load maintenance SQL (link resolution, MV refresh/swap,
+#: release record). It equals the ``mv_refresh`` Dagster run cap (ADR-070 D4, 21600 s) so a single
+#: statement can use the whole run budget but a hung one is still cancelled by PostgreSQL even when
+#: the run monitor is not running. The old 30 min ceiling (ADR-068) cancelled an odroid
+#: ``mv_refresh`` in its link-resolution step under host contention (G-01, 2026-10-15).
+MAINTENANCE_STATEMENT_TIMEOUT = "6h"
+MAINTENANCE_STATEMENT_TIMEOUT_MS = 21_600_000
+
+
 def make_async_engine(
     settings: Settings | None = None,
     *,

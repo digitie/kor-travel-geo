@@ -23,7 +23,7 @@
 
 1. `catalog.before`: relation/index 크기, dead tuple, analyze timestamp, invalid index를 catalog에서 읽는다.
 2. `source.vacuum_analyze`: 대량 COPY/UPSERT 뒤 source table에 `VACUUM (ANALYZE)`를 실행한다. 기본 plan에서는 실행하지 않고, `execute-safe --vacuum-analyze`에서만 수행한다.
-3. `links.resolve`: `resolve_text_geometry_links(statement_timeout_ms=1800000)`로 serving key를 해소한다.
+3. `links.resolve`: `resolve_text_geometry_links()`(문장 상한 `MAINTENANCE_STATEMENT_TIMEOUT` 6h — 2026-10-18 ADR-068 개정 전 1800000)로 serving key를 해소한다.
 4. `serving.refresh`: `refresh_mv(strategy="swap" | "concurrent")`로 `mv_geocode_target`, `mv_geocode_text_search`, `region_radius_parts`를 같은 세대로 갱신한다. 성공 후 `ANALYZE`와 `geo_cache` 무효화는 기존 `refresh_mv()`가 담당한다.
 5. `stats.capture`: `ops.table_stats_snapshots`에 후처리 후 relation 상태를 저장한다.
 6. `budget.check`: index footprint, invalid index, analyze 누락, dead tuple ratio를 report warning으로 남긴다.

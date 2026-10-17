@@ -98,6 +98,16 @@ def test_every_job_declares_its_max_runtime() -> None:
     assert declared == _EXPECTED_MAX_RUNTIME_TAG
 
 
+def test_maintenance_statement_ceiling_covers_the_mv_refresh_run_cap() -> None:
+    # G-01: the per-statement ceiling of the maintenance SQL must not cancel a statement before
+    # the run cap would (a 30 min ceiling did, on odroid). Raising the mv_refresh cap (ADR-070 D4)
+    # without revisiting the ceiling turns this red.
+    from kortravelgeo.infra.engine import MAINTENANCE_STATEMENT_TIMEOUT_MS
+
+    run_cap_ms = int(defs.get_job_def("mv_refresh").tags[MAX_RUNTIME_TAG]) * 1000
+    assert run_cap_ms <= MAINTENANCE_STATEMENT_TIMEOUT_MS
+
+
 def test_long_run_tag_is_twenty_four_hours() -> None:
     assert LONG_RUN_TAGS == {"dagster/max_runtime": "86400"}
 
