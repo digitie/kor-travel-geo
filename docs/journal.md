@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-18 — G-01 배포(odroid geo CS)와 G-06/G-07 확인 범위(by claude)
+
+- #583 머지(`d8370d0`, CI 5/5 green — integration-postgis가 새 모듈 3건 포함 skipped=0) 뒤 odroid geo code-server만
+  얇은 layer로 교체했다: 기존 `codex-local/geo-health-merged-cs:ed8b2b116f29-…`(=`fff8396e`) 위에 n150에서 `pip wheel --no-deps`로
+  만든 `kor_travel_geo`(sha256 `5e0bc46a…`)·`kortravelgeo_dagster`(`5fe2d907…`) wheel을 `--no-index --no-deps --force-reinstall`
+  → 이미지 `48799d51…`(`claude-local/geo-g01-cs:d8370d0ff61c`, label revision `d8370d0`). `/opt/kor-travel-odroid/compose.yml`의
+  CS `image:` 한 줄만 바꾸고(백업 `compose.yml.bak-g01-20261017T172041Z`) `compose up -d --no-deps geo-dagster-code-server`,
+  17:22Z healthy·restart 0. 설치 파일 sha256 `kortravelgeo` 167·`kortravelgeo_dagster` 15가 `d8370d0`과 전부 일치, stdlib
+  pyc·Common은 손대지 않았다. **API/UI는 바꾸지 않았다**(API 이미지 `ed8b2b1` 유지 — 바뀐 코드 경로는 CS의 유지보수 run만
+  쓴다). 부작용: compose가 같은 서비스 라벨을 가진 Exited 백업 컨테이너 3개(`…-before-pool-queue-f5ffe3e1`·`…-before-geo580-1818a346`·
+  `…-before-health-85124e73`)를 지웠다 — 이미지는 남아 있다. 롤백 = compose 백업 복원 후 같은 명령. geo schedule/sensor 상태는
+  배포 전후 동일, daemon OFF 유지.
+- **standalone `mv_refresh` 실측은 아직 못 했다.** 공용 instance의 run coordinator가 `QueuedRunCoordinator`이고 daemon이
+  꺼져 있어 admin `refresh-mv`가 만든 run은 QUEUED에 머문다(그 사이 다른 tenant QUEUED run 3건 — transport 2·weather 1).
+  daemon을 켜면 그 run들과 다른 tenant의 RUNNING schedule도 함께 돈다 → 소유자 결정 대기. load_jobs에 영구 queued 행을 남기지
+  않으려고 호출하지 않았다.
+- G-06(T-325 관리 UI): live 로그인용 관리자 비밀번호가 없어(odroid에는 해시만) 브라우저 live E2E는 실행하지 못했다. 같은 데이터의
+  백엔드 쪽은 읽기 전용으로 확인 — `/v1/admin/ops/releases`(trusted proxy, `source_file_viewer`) 4행: active(2026-09-28
+  `manual_rebuild`)만 `data_token` 있음, superseded `daily_delta`·pending restore 2건은 없음 → "지문 없음"은 live 재현 가능,
+  "데이터 동일"(연속 같은 토큰)은 토큰이 1개뿐이라 live 재현 불가 — UI 단위/mock(`ops-data-token`·`dataset-version-detail-dialog`·
+  `dataset-token`)은 main CI frontend job(이번 #583 run 포함 PASS)이 갈음한다. n150에서 vitest 재실행은 n150 npm 정책
+  (`EALLOWREMOTE`, GitHub tarball 의존)으로 설치가 막혀 하지 않았다.
+- G-07(geometry timeout 부분 성공·취소·재실행 live): 같은 이유로 live 미실행; `geocode-resilience.test.tsx`가 CI frontend에서 PASS.
+
 ## 2026-10-18 — G-01 mv_refresh 30분 취소 원인과 유지보수 SQL 상한 6h, 읽기 전용 실측(by claude)
 
 **원인.** odroid 첫 standalone `mv_refresh`(`job_fb535a34…`, 2026-10-15 09:10Z 시작, 09:40Z 실패)는 링크 해소
