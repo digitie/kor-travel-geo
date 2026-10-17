@@ -105,7 +105,7 @@ def test_maintenance_statement_ceiling_covers_the_mv_refresh_run_cap() -> None:
     from kortravelgeo.infra.engine import MAINTENANCE_STATEMENT_TIMEOUT_MS
 
     run_cap_ms = int(defs.get_job_def("mv_refresh").tags[MAX_RUNTIME_TAG]) * 1000
-    assert MAINTENANCE_STATEMENT_TIMEOUT_MS >= run_cap_ms
+    assert run_cap_ms <= MAINTENANCE_STATEMENT_TIMEOUT_MS
 
 
 def test_long_run_tag_is_twenty_four_hours() -> None:

@@ -205,9 +205,9 @@ def _maintenance_engine_settings(settings: Settings) -> Settings:
     so no maintenance statement inherits the serving cap. This is belt-and-suspenders
     with each leaf's own ``SET LOCAL statement_timeout`` (``0`` for restore/hot-swap, the
     ``MAINTENANCE_STATEMENT_TIMEOUT`` ceiling for post-load/MV leaves — G-01): the concurrent
-    ``refresh_mv`` path (``loaders/postload.py``) has follow-up statements
-    (``GeoCacheRepository.clear`` and region-radius refresh on fresh connections) that
-    do not all reset the timeout, and future backup/restore/full-load ops must be
+    ``refresh_mv`` path (``loaders/postload.py``) has a follow-up statement
+    (``GeoCacheRepository.clear`` on a fresh connection) that does not reset the
+    timeout, and future backup/restore/full-load ops must be
     protected too (ADR-066 §7 — the Dagster runtime is a maintenance engine).
 
     ``model_copy`` does not re-validate, so the ``ge=1`` field bound is intentionally

@@ -163,7 +163,7 @@ def build_postload_maintenance_plan(
             phase="serving_rebuild",
             mode="automatic",
             required=True,
-            command="resolve_text_geometry_links()  (statement_timeout 6h ceiling)",
+            command="resolve_text_geometry_links()",
             reason="derive serving keys before MV refresh",
             lock_impact="writes resolved link columns on loaded source tables",
             rollback="restore from pre-load backup or rerun loaders",

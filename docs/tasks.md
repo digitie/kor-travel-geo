@@ -175,6 +175,18 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
 
 - [ ] **T-326b** — 빈 호스트 풀로드 실행 + `mv_refresh` run 상한 결정 + `.env.prod.example` 주석 (규모 M, 실행 L)
 
+  **2026-10-18 (G-01, by claude).** 2026-10-15 첫 standalone 시도(`job_fb535a34…`)는 30분 문장 상한(`SET LOCAL '30min'`)에
+  걸려 실패했다 — 원인·실측은 journal 2026-10-18. 문장 상한을 `MAINTENANCE_STATEMENT_TIMEOUT='6h'`로(ADR-068 개정, PR
+  `agent/claude-g01-locsum-link-join`). **D4(run 상한)는 아직 열려 있다** — standalone 실측이 없다. 공용 run coordinator가
+  `QueuedRunCoordinator`라 daemon OFF(소유자 의도) 동안 admin `refresh-mv`는 QUEUED에 머문다 → 실측 창에 daemon을 켤지(다른
+  tenant의 QUEUED run·RUNNING schedule도 함께 돈다) 소유자 결정 필요. schedule·sensor 재가동은 하지 않는다.
+  - [ ] **G-01 후속 a** — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
+    최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
+  - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
+    SQL을 `pg_cancel_backend`로 끊게 할지.
+  - [ ] **G-01 후속 c (소유자 결정)** — 데이터 지문 savepoint `10min`(ADR-069 D5): odroid 조용한 실측 240 s(여유 2.5배) —
+    경합 시 NULL `data_token` 가능. 올릴지(30~60 min) 결정.
+
   **2026-10-15 상태 — 풀로드는 하지 않았다(복원으로 대체).** 아래 수용 기준의 "지름길 (a)" 분기로 판정하면 적재 몫은 충족:
   수동 `pg_restore` rc=0 + `count(*)` 6,416,637(둘 다, n150 운영 원본과 같음 — 기준월 차이 없음). odroid geo-api env는 D1·D5와
   일치(`KTG_ADMIN_TRUSTED_PROXY_CIDRS` loopback만·`.14` 없음, `KTG_BACKUP_SCHEDULE_ENABLED=false`, `KTG_VWORLD_API_KEY` 비어 있지

@@ -2,6 +2,47 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-18 — G-01 mv_refresh 30분 취소 원인과 유지보수 SQL 상한 6h, 읽기 전용 실측(by claude)
+
+**원인.** odroid 첫 standalone `mv_refresh`(`job_fb535a34…`, 2026-10-15 09:10Z 시작, 09:40Z 실패)는 링크 해소
+UPDATE(`POSTLOAD_SQL`의 `tl_locsum_entrc`)에서 정확히 30분에 `QueryCanceled`로 끝났다. 30분은 앱/롤/DB 설정이 아니라
+리프의 `SET LOCAL statement_timeout`이다 — `resolve_text_geometry_links(statement_timeout_ms=1_800_000)`와
+`postload.py`·`record_mv_refresh_release`의 `'30min'`(2026-10-05 8a83980이 `0`→`'30min'`, ADR-068). Dagster
+유지보수 엔진의 세션 값은 `0`인데 이것이 30분으로 **낮췄다**. 확인: 앱 롤 `rolconfig` NULL, 공용 PG 서버 기본값
+`statement_timeout` 0(서버 cmd에 없음), geo API DSN 세션은 5 s(서빙). n150에서는 같은 문장이 30분 안에 끝났다
+(n150 x86; 2026-08-26 concurrent 전체 96분·2026-09-28 swap 73분, 문장 단위로는 취소 없음).
+
+**odroid 읽기 전용 실측(2026-10-17 15:5x~16:2xZ, load 1.8~4, 51~69 °C, CPU 캡 1.1~1.4 GHz).** 실패한 UPDATE를
+그대로 `EXPLAIN (ANALYZE, BUFFERS)`(트랜잭션 rollback, 일치 0행, lock_timeout 5 s) — **120.0 s**(Merge Join, juso 6.4M
+외부 정렬 546 MB). `tl_locsum_entrc` 6,405,091행 중 `bd_mgt_sn IS NULL` 3,498,719행(매 refresh마다 다시 조인되고 0행
+일치 — 원천상 짝이 없는 출입구). `mv_geocode_target` 정의 쿼리 count **509.6 s**, `mv_geocode_text_search` 9.5 s,
+`DATA_FINGERPRINT_SQL` **240.1 s**(상한 10 min). 따라서 평시엔 30분 안이고 2026-10-15 실패는 호스트 경합(당시 load
+≈20) 중 한 문장이 30분을 넘은 것으로 본다(당시 PG 로그 없음, 같은 시간대 다른 geo job·잠금 없음 — 사후 확정 불가).
+비교로 시험한 인덱스 친화 재작성(`COALESCE` 동치 키 추가)은 오히려 느려(155 s vs 82 s, SELECT 형태) 채택하지 않았다.
+
+**수정(PR, 이 브랜치).** `MAINTENANCE_STATEMENT_TIMEOUT = '6h'`(`infra/engine.py`, = `mv_refresh` run 상한 21600 s)
+하나로 6곳 + `record_mv_refresh_release`를 바꿨다. 첫 안(하한 helper — 0을 유지)은 독립 적대 리뷰 2인이 `statement_timeout_ms=0`
+의미 변경(t177 harness)·daemon OFF/worker 사망 시 DB 쪽 상한 소멸·ADR-068 미개정을 지적해 버렸다. ADR-068 개정, ADR-069
+D5 괄호, `resources.py` docstring 정정. 효과 결박: 통합 테스트가 실제 트랜잭션 안 `current_setting`을 DO 블록으로 검사
+(Dagster 세션 0 → `6h`, `0` 인자 → `0`), Dagster 테스트가 `상한 ≥ mv_refresh run 상한`을 검사 — 일부러 빨갛게(상수를
+`30min`/1,800,000으로) 해 실패를 확인했다.
+
+**같은 세션의 다른 읽기 전용 확인.** G-09: n150 Map 컨테이너 → odroid `POST /v2/reverse`(Map의 발급 키, 서울 40점 순환,
+warm-up 10 제외) N=240 전부 200, **p50 51.7 ms·p95 132.4 ms·p99 212.2 ms**(최소 41.8·최대 224.9, 단일 클라이언트 순차,
+2026-10-17 16:07Z, odroid load 1.8~2.0·62 °C). 스탬프 경로 비용은 기존 ≈2.5 µs/요청(2026-10-13) — 소유자 결정(2026-10-18)으로
+reverse p50 회귀 <5% 수용은 이 경로 비용 측정으로 갈음한다. G-04: odroid API/CS 컨테이너의 설치 `kortravelgeo` 167·
+`kortravelgeo_dagster` 15 파일 sha256이 git `ed8b2b1`(#579)·현재 main과 **전부 일치**(#580은 `docker/api.Dockerfile`만),
+`kortravelcommon` 10 파일이 Common `344d91c`(pyproject 핀)·`c4859588`(이미지 라벨)과 일치, wheel `direct_url`은
+`/tmp/geo579-wheels`; stdlib pyc 686/686 checked-hash(API 3.12.15·CS 3.12.14), site-packages는 timestamp pyc; API HC는
+`kortravelcommon.http_health`, CS HC는 Manager 정본의 legacy 인라인 probe(`os.kill(1, 15)` 경로 포함, 운영 override).
+G-11: geo API/CS 마운트는 `/data`(ro, `app-data`)·`/app/data/backups`뿐 — `/app/data/source`·materialized 공유 bind 없음,
+NVMe `/mnt/media`(PGDATA·docker 모두 NVMe). G-02/G-03: Map `ops.kor_travel_geo_releases` 0행·items 0(기준선 미기록 —
+Map 센서 기본 STOPPED), concierge `kor_travel_geo_data_token` 커서 없음·`travel_places` 1,233행 토큰 NULL(기준선 미기록);
+geo 현재 `data_token` `dd1-…`(sha256 앞 12 `9fd1432fd257`), 활성 릴리스 1(2026-09-28 14:20Z), 비종결 load_jobs 0,
+advisory lock 0, geo 활성 Dagster run 0, active 키 3. G-10: n150 geo-api 컨테이너 로그 24 h(정지 15:50:17Z 직전까지)
+peer는 loopback healthz 8,399건뿐 — 소비자 peer 0(`docker logs --since 24h … | grep -oE '<ip>:<port> - "<method> <path>'`
+집계).
+
 ## 2026-10-17 — Geo 잔여 작업과 최신 운영 부분 수용 정산(Codex C)
 
 - 최신 main cae24c6와 OPEN PR0, main CI/OpenAPI SUCCESS를 읽기 전용으로 확인했다.
