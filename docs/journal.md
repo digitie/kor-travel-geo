@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-17 — Geo 잔여 작업과 최신 운영 부분 수용 정산(Codex C)
+
+- 최신 main cae24c6와 OPEN PR0, main CI/OpenAPI SUCCESS를 읽기 전용으로 확인했다.
+  #573–580의 머지·기존 구현과 문서의 예전 준비/미머지 문구를 구분했다.
+- 운영자 공개 요약11:58:07 UTC 기준 전체77/실행16(14 healthy·2 noHC),
+  Geo API/UI/CS healthy·restart0/OOM false·간격30/30/90초, daemon OFF·YAML463c8326 유지다.
+  image revision label을 whole-module/metadata/pyc 검증으로 확대하지 않았다.
+- 이전 root 증거의 cadence 실제 적용·동일 Admin 주소 예제/지도 PASS·idle90초×3 관측을 정산했다.
+  idle host9.0395→6.3629%는 통제되지 않은 관측이며 수집/실부하/RSS 개선 보장이 아니다.
+- 남은 것은 standalone mv_refresh 실측/상한, 소비자 Track1 기준선/동일/변경/재개,
+  T-325 전체 UI/성능·실작업 메모리·n150 은퇴·artifact/재적재 bind 확인 등이다.
+  tasks 전체 미완료 체크와 과거 journal 원문은 유지했다. 상세는
+  [잔여 작업 감사](audits/2026-10-17-remaining-work.md)에 근거·선행/다음 행동으로 묶었다.
+- 이번 변경은 문서4개뿐이다. 비밀/환경파일·운영 SSH/SDK/DB/Docker·브라우저 실행0,
+  새 CPU 측정·서비스/config/test 변경0. 사용자 지시로 [skip ci]를 사용하고
+  full suite/이미지 build/live 재실행 없이 diff-check·문서 링크·사실만 검증한다.
+
 ## 2026-10-16 — 상태 점검 실행 간격 3배(Codex)
 
 - 사용자 지시로 API 이미지 기본 interval10→30초와 실제 운영 API/CS/UI의 interval 전용
