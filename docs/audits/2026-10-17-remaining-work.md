@@ -54,6 +54,7 @@ G-02는 Geo가 소비자 계획을 생성하는 새 기능을 뜻하지 않는�
 - Geo 현재 토큰 유효성의 운영 읽기 전용 증거는 있다. 특정 관측에서 active/publish/native runs0·daemon OFF도 기록됐지만 직접 API write 차단은 false였다. 따라서 장기간 publication window 불변을 증명했다고 쓰지 않는다. 수용 전후 fresh 관측과 소비자 자체 재개 검증이 필요하다.
 - 현재 `recovery.py:44–50`는 mv_refresh에21600초, LONG_JOBS에는86400초를 준다. 실측 전에 임의로 상한을 늘리거나 tags 인자로만 덮어쓰지 않는다. `geo_job`이 policy tags를 뒤에 병합한다. 기본 RUNNING 정의와 실제 instance의 STOPPED/daemon OFF는 서로 다르므로 소스 기본값을 보고 운영 발화를 허용하지 않는다.
 - Common source pin은 Geo API `pyproject.toml:43` 및 Dagster `pyproject.toml:22`의344d91c다. 최신 Common을 무조건 올리는 작업은 이 감사의 결론이 아니다. Manager 공통 변경·미머지 후보 수용은 별도 담당 범위다.
+- root가 확인한 [Manager main e84 canonical 선언](https://github.com/digitie/kor-travel-docker-manager/blob/e84f3ce9dfd339056dd422a9b91adddc33c4d6ca/docker-compose.yml)의 Geo CS legacy probe에는 `os.kill(1, 15)` 경로가 남아 있어 G-04는 canonical/운영 override 정합([#486](https://github.com/digitie/kor-travel-docker-manager/pull/486)·[#488](https://github.com/digitie/kor-travel-docker-manager/pull/488) 포함)을 잔여로 유지하며, 이를 단순 superseded/완료나 현재 운영이 해당 kill probe를 사용한다는 주장으로 바꾸지 않는다.
 - 공통 UI는 이미 `DagsterPanel.tsx:3–4`, `LoginForm.tsx:3–4`, `AppShell.tsx:28`에서 채택했다. 별도 UI 재구현은 불필요하다. 상세는 명시 선택, 종료 상세 자동 polling 중단, 30초 요약/실패·15초 활성 상세가 source에 있다. 현재 image의 전체 공통 UI 회귀·RSS 감소는 정상 예제 하나로 판정하지 않는다.
 - 기존 `dataset-version-live.spec.ts`는 주로 version_token을 비교한다. data_token baseline/변경 수용을 자동으로 대신하지 않는다. 마지막 키 생성/폐기 시험은 명시적 mutation opt-in이므로 읽기 전용 수용에 그대로 포함하지 않는다.
 
