@@ -184,7 +184,7 @@ INSERT와 같은 자리에서 실행한다.
   실패·timeout이면 `data_fingerprint = NULL`로 활성화를 **통과**시킨다. 지문 SELECT가 끝나면
   성공·실패 모두 **`ROLLBACK TO SAVEPOINT`**로 닫는다(읽기 전용이라 잃는 것이 없고, `SET LOCAL`은
   savepoint를 RELEASE하면 transaction 끝까지 남지만 ROLLBACK TO면 되돌아간다). 그래서 각 경로의
-  기존 `statement_timeout`(mv_refresh 30min `admin_repo.py:748`, restore/hot-swap/rollback `0`
+  기존 `statement_timeout`(mv_refresh 30min `admin_repo.py:748` — 2026-10-18 ADR-068 개정으로 6h, restore/hot-swap/rollback `0`
   `:994, :1076, :1122`)이 지문 뒤 INSERT·`DELETE FROM geo_cache`(D6)에도 그대로 적용된다.
   대안 "지문 실패 = 활성화 실패"는 restore까지 막으므로 기각.
 - **fail-open의 대가.** 지문 없는 활성 릴리스에서 소비자는 "바뀜"으로 재처리하는 것이 아니라

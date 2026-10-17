@@ -789,8 +789,7 @@ async def test_consistency_sample_point_hydration_tolerates_missing_mv() -> None
 def test_mv_refresh_release_metadata_uses_operational_timeout() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.record_mv_refresh_release)
 
-    assert "raise_statement_timeout_floor(conn)" in source
-    assert "SET LOCAL statement_timeout = '30min'" not in source
+    assert "SET LOCAL statement_timeout = '{MAINTENANCE_STATEMENT_TIMEOUT}'" in source
     assert "_infer_current_source_set" in source
     assert "_collect_row_counts_for_conn" in source
 

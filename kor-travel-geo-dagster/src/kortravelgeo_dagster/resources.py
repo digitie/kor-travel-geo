@@ -203,7 +203,8 @@ def _maintenance_engine_settings(settings: Settings) -> Settings:
     into every connection via ``-c statement_timeout=...`` (``infra/engine.py``
     ``_connect_options``). We set ``pg_statement_timeout_ms=0`` (PostgreSQL "disabled")
     so no maintenance statement inherits the serving cap. This is belt-and-suspenders
-    with each leaf's own ``SET LOCAL statement_timeout = 0``: the concurrent
+    with each leaf's own ``SET LOCAL statement_timeout`` (``0`` for restore/hot-swap, the
+    ``MAINTENANCE_STATEMENT_TIMEOUT`` ceiling for post-load/MV leaves — G-01): the concurrent
     ``refresh_mv`` path (``loaders/postload.py``) has follow-up statements
     (``GeoCacheRepository.clear`` and region-radius refresh on fresh connections) that
     do not all reset the timeout, and future backup/restore/full-load ops must be

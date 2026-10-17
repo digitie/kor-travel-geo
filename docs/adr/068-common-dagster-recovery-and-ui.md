@@ -41,3 +41,16 @@ lock integrity로 고정하며 출처는 vendor/PROVENANCE.md에 기록한다.
 관측 조회의 전체 응답 예산은 기본 10초(최대 20초)이고 실행/취소의 기존 제한과 분리한다.
 Dagster 1.13.24에서 tick 조회가 전체 이력을 순위 계산하지 않도록 모든 tick status를
 명시해 최신 3건 제한 조회를 사용한다. 응답 크기와 전체 읽기 시간 제한을 함께 적용한다.
+
+### 개정 (2026-10-18, G-01) — 유지보수 SQL 상한 30분 → 6시간
+
+위 "MV 유지보수·릴리스 SQL에는 30분 상한"을 **`MAINTENANCE_STATEMENT_TIMEOUT = '6h'`**(문장당,
+`src/kortravelgeo/infra/engine.py`)로 바꾼다. odroid(A55·열 제약) `mv_refresh`(`job_fb535a34…`,
+2026-10-15)가 호스트 경합(load ≈20) 중 링크 해소 UPDATE에서 정확히 30분에 `QueryCanceled`로
+실패했다 — Dagster 유지보수 엔진의 세션 값은 `0`인데 리프의 `SET LOCAL '30min'`이 그것을 낮췄다.
+조용한 odroid 실측(2026-10-17, 읽기 전용·rollback): 그 UPDATE 120 s, `mv_geocode_target` 정의 쿼리
+510 s — 평시엔 30분 안이지만 경합 시 한 문장이 넘을 수 있다. 6시간은 `mv_refresh` run 상한(ADR-070
+D4, 21600 s)과 같아 한 문장이 run 예산 전체를 쓸 수 있되, run 감시(daemon)가 꺼져 있거나 worker가
+죽어도 PostgreSQL이 끝내 취소한다(무한 상한 0은 고르지 않았다). D4가 run 상한을 올리면
+`kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다.
+데이터 지문의 savepoint 안 `10min`(ADR-069 D5)은 그대로다(odroid 조용한 실측 240 s).
