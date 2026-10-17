@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from typing import Any
 
 import orjson
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from kortravelgeo.infra.metrics import install_db_query_metrics
@@ -24,6 +25,36 @@ def _connect_options(settings: Settings) -> str:
     return (
         f"-c statement_timeout={settings.pg_statement_timeout_ms} "
         f"-c search_path={settings.pg_search_path}"
+    )
+
+
+#: Floor for post-load maintenance statements (resolve links, MV refresh/swap, release record).
+MAINTENANCE_STATEMENT_TIMEOUT_FLOOR_MS = 1_800_000
+
+_STATEMENT_TIMEOUT_FLOOR_SQL = text(
+    "SELECT set_config('statement_timeout', :floor_text, true)"
+    "  FROM pg_settings"
+    " WHERE name = 'statement_timeout'"
+    "   AND setting::bigint > 0"
+    "   AND setting::bigint < :floor_ms"
+)
+
+
+async def raise_statement_timeout_floor(
+    conn: AsyncConnection, floor_ms: int = MAINTENANCE_STATEMENT_TIMEOUT_FLOOR_MS
+) -> None:
+    """Make this transaction's ``statement_timeout`` at least ``floor_ms`` — never lower it.
+
+    Maintenance steps used a bare ``SET LOCAL statement_timeout = '30min'`` so a CLI/API engine
+    (serving timeout, default 5 s) would not cancel them. On the Dagster maintenance engine the
+    session timeout is ``0`` (unlimited; the run is bounded by its ``dagster/max_runtime`` tag
+    instead), and the bare ``SET LOCAL`` *lowered* it to 30 min — which cancelled an odroid
+    ``mv_refresh`` (G-01, 2026-10-15). Only a positive timeout shorter than the floor is raised;
+    ``0`` and longer timeouts are kept. Transaction-local, like ``SET LOCAL``.
+    """
+
+    await conn.execute(
+        _STATEMENT_TIMEOUT_FLOOR_SQL, {"floor_text": str(floor_ms), "floor_ms": floor_ms}
     )
 
 

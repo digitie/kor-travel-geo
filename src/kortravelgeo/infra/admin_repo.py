@@ -65,6 +65,7 @@ from kortravelgeo.infra.data_fingerprint import (
     compute_data_fingerprint,
     fingerprint_for_activation,
 )
+from kortravelgeo.infra.engine import raise_statement_timeout_floor
 from kortravelgeo.infra.metrics import (
     record_data_fingerprint_failure,
     sql_fingerprint,
@@ -764,7 +765,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         label delta-lineage refreshes as ``daily_delta`` (T-291a)."""
 
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+            await raise_statement_timeout_floor(conn)
             report = (
                 await _latest_consistency_gate_for_batch(conn, load_batch_id)
                 if load_batch_id

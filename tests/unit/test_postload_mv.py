@@ -8,11 +8,21 @@ from kortravelgeo.loaders import postload
 def test_resolve_text_geometry_links_uses_postload_timeout() -> None:
     source = inspect.getsource(postload.resolve_text_geometry_links)
 
-    assert "statement_timeout_ms: int | None = 1_800_000" in source
+    assert "statement_timeout_ms: int | None = MAINTENANCE_STATEMENT_TIMEOUT_FLOOR_MS" in source
     assert "Pass None" in source
     assert "statement_timeout_ms is not None" in source
-    assert "set_config('statement_timeout', :timeout_ms, true)" in source
+    assert "raise_statement_timeout_floor(conn, statement_timeout_ms)" in source
     assert "POSTLOAD_SQL" in source
+    assert postload.MAINTENANCE_STATEMENT_TIMEOUT_FLOOR_MS == 1_800_000
+
+
+def test_postload_maintenance_never_lowers_the_session_timeout() -> None:
+    # G-01: a bare SET LOCAL '30min' lowered the Dagster maintenance engine's unlimited (0)
+    # timeout and cancelled an odroid mv_refresh. Every maintenance transaction raises a floor.
+    source = inspect.getsource(postload)
+
+    assert "SET LOCAL statement_timeout = '30min'" not in source
+    assert "set_config('statement_timeout'" not in source
 
 
 def test_rebuild_mv_drops_dependent_text_search_helper_first() -> None:
@@ -36,7 +46,7 @@ def test_shadow_swap_handles_missing_current_mv() -> None:
     assert "ANALYZE mv_geocode_target" in source
     assert "ANALYZE mv_geocode_text_search" in source
     assert "SET LOCAL lock_timeout = '2s'" in source
-    assert "SET LOCAL statement_timeout = '30min'" in source
+    assert "raise_statement_timeout_floor(conn)" in source
     assert source.count("async with engine.begin()") == 2
 
 
