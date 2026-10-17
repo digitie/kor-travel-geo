@@ -1,5 +1,24 @@
 # RESUME — 작업 재개 가이드
 
+
+## 최신 재개 지점 (2026-10-17)
+
+- [Geo 잔여 작업 감사](audits/2026-10-17-remaining-work.md): main cae24c6, #573–580 머지,
+  OPEN PR0 확인. source 구현을 중복하지 않는다.
+- 운영자의11:58:07 UTC 읽기 전용 확인: Geo API/UI/CS healthy·restart0/OOM false,
+  점검 간격30/30/90초, daemon OFF, instance YAML463c8326 유지.
+  전체77/실행16의14 healthy·2 noHC다. 이 요약은 라벨을 넘어선 whole-module 검증이나 새 CPU 실측이 아니다.
+- cadence 적용·기존 Admin 주소 예제와 지도·idle90초×3 관측은 완료 근거가 있다.
+  geometry timeout/취소/재실행 전체 live, T-325 배지·상세/장애 복구·reverse p50,
+  실제 작업 peak/RSS·복구 센서 활성화 수용은 별도다.
+- 다음 한 작업: daemon OFF·Geo 서비스 유지를 보존하며 운영자가 기존 artifact 정합/현재 token을
+  필요한 범위에서 읽기 전용으로 정산한다. 소비자 격리 Track1 수용과 병행할 수 있다.
+  standalone mv_refresh 실측→ADR-070 D4 상한 결정 전 schedule 재가동은 하지 않는다.
+- 아래 “미머지/준비/NOT_RUN/proposed” 문장은 각 작성 시점의 이력이다. 실제 미배포를
+  단정하는 근거로 쓰지 않으며 최신 완료/잔여는 위 감사와 tasks 최신 절을 따른다.
+
+## 이전 세션 기록
+
 - 진행(2026-10-16, Codex): 사용자 지시로 API/CS/UI 상태 점검 간격을30/90/30초로 늘리는
   interval 전용 Compose override와 API 이미지 기본값을 준비했다. 기존 수집·복구·튜닝은 유지한다.
   독립 리뷰·머지 후 Geo 유지 상태에서 Weather → Transport를 각각 검증하고 실적용을 확인한다.
