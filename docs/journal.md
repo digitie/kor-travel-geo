@@ -1,5 +1,12 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-18 — #589·590·591 공식 이미지 운영 배포
+
+- source d3dedb47 공식 API·CS ARM64 빌드와 격리검사 PASS, root 두이미지 rollout4df684f4 PASS. daemon OFF·기존큐 전후동일·D4=21600을 보존했다.
+- API SQLAlchemy2.1.5와 CS2.1.1을 구분하고 Fiona/GDAL 실제 빌드시간, 잘못된 CS selector의 prepare 선행차단·수정 이력을 [배포 기록](audits/2026-10-18-geo-deployment.md)에 남긴다.
+- 공식 지문 STORE는 root 단일 실행 진행 중이며 최종 비교·배포 후 UI는 대기다. 기존 “배포 미실행” 절은 당시 source 검토 이력으로 보존한다. 전체 Track/CPU·RSS 완료를 주장하지 않는다.
+- 문서 전용이며 사용자 지시로 CI 없이 처리한다. 코드·schema·설정·daemon 상태 변경0이다.
+
 ## 2026-10-18 — #590 최종 제품 검증
 
 제품fa3a779의 CI 5개 성공과 독립 두 리뷰 OPEN0을 확인했다.

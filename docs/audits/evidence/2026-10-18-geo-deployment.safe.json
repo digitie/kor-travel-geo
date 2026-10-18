@@ -1,0 +1,108 @@
+{
+  "recorded_at_utc": "2026-10-18T08:17:54.377214+00:00",
+  "source": "d3dedb478bfcac026e3c51a44336109fd1662ee0",
+  "images": {
+    "cs": "sha256:3b21fc5e8fcd90ebb3f583cb413349f995665b3f6fd5681efcf913ef353dc3a5",
+    "api": "sha256:e5ca22c96f40889d2463663e5f8123d07e473f6b1bff5b2342c77dacdbef703c"
+  },
+  "refs": {
+    "api": "kor-travel-geo-api:d3dedb47-a-4f67164c",
+    "cs": "kor-travel-geo-dagster:d3dedb47-a-4f67164c"
+  },
+  "versions": {
+    "api": {
+      "kor-travel-geo": "0.1.0",
+      "kortravelgeo-dagster": null,
+      "kor-travel-common": "0.1.0.dev0",
+      "sqlalchemy": "2.1.5",
+      "psycopg": "3.3.6",
+      "GDAL": "3.10.3",
+      "fiona": "1.10.1",
+      "dagster": null,
+      "dagster-postgres": null
+    },
+    "cs": {
+      "kor-travel-geo": "0.1.0",
+      "kortravelgeo-dagster": "0.1.0",
+      "kor-travel-common": "0.1.0.dev0",
+      "sqlalchemy": "2.1.1",
+      "psycopg": "3.3.6",
+      "GDAL": "3.10.3",
+      "fiona": "1.10.1",
+      "dagster": "1.13.24",
+      "dagster-postgres": "0.29.24"
+    }
+  },
+  "installed_source": {
+    "api": {
+      "kortravelgeo": {
+        "git_exact_files": 168,
+        "origin": "/app/src/kortravelgeo",
+        "mismatches": 0
+      }
+    },
+    "cs": {
+      "kortravelgeo": {
+        "git_exact_files": 168,
+        "origin": "/usr/local/lib/python3.12/site-packages/kortravelgeo",
+        "mismatches": 0
+      },
+      "kortravelgeo_dagster": {
+        "git_exact_files": 16,
+        "origin": "/usr/local/lib/python3.12/site-packages/kortravelgeo_dagster",
+        "mismatches": 0
+      }
+    }
+  },
+  "build_seconds": {
+    "api": 2207.284485460026,
+    "cs": 2445.647938476992
+  },
+  "compile_seconds": {
+    "api_gdal": 525.71,
+    "api_fiona": 1163.6,
+    "cs_gdal": 525.3,
+    "cs_fiona": 1101.5
+  },
+  "rollout": {
+    "attempt": "4df684f4-a7da-43d9-9b98-cb18c2deb2d6",
+    "status": "PASS",
+    "targets": [
+      {
+        "role": "cs",
+        "new_cid": "da95a61826569c4ea882943d771945e0e0478bb01df29b5f08bac86da90b1d7d",
+        "status": "READY"
+      },
+      {
+        "role": "api",
+        "new_cid": "894507e8696a35815e7b2560be99a4973629f44c519f46eb91f12ebedb18ef9d",
+        "status": "READY"
+      }
+    ],
+    "daemon_off": true,
+    "queue_unchanged": true
+  },
+  "initial_prepare": {
+    "attempt": "74fe2beb-7d60-4d3d-9a54-0e9e586df453",
+    "status": "UNKNOWN_NO_REPLAY",
+    "before_runtime_mutation": true,
+    "cause": "wrong Compose cs service literal",
+    "fixed_controller_sha256": "46dd455237cc6795aceeaf5644c001cb99fba97597170fe06e6fbab80a790727",
+    "replacement_prepare_status": "PASS",
+    "runtime_replay": false
+  },
+  "evidence_sha256": {
+    "geo589-591-native-images-a-20261018.safe.json": "a97b7c439b7082ae26ca423840f1a34b2240cdf063c2fbdc42ed81e376f7dae4",
+    "geo589-591-native-probes-a-20261018.safe.json": "24f57dc66b4037b8768b6ce05cf4ce6b793d4b3f03e0029afb88d28a08e47d55",
+    "geo589-4df684f4-a7da-43d9-9b98-cb18c2deb2d6.safe.jsonl": "45e510116155c9c18965d17dbfa0775d85fa8e04c4edf61e8845672a0b9b11e5",
+    "geo589-591-rollout-a-r2-20261018.remote.py": "46dd455237cc6795aceeaf5644c001cb99fba97597170fe06e6fbab80a790727"
+  },
+  "fingerprint_store": {
+    "attempt": "2fe59564-14d6-4237-8301-6bffeb85defa",
+    "observed_phase": "EXEC_START_INTENT",
+    "terminal_verified": false
+  },
+  "n150_comparison": "PENDING",
+  "postdeploy_live_ui": "PENDING",
+  "runtime_cpu_rss_measurement": "NOT_RUN"
+}
