@@ -39,6 +39,9 @@
 
 - **post-load 유지보수 SQL 문장 상한 30분 → 6시간**(`MAINTENANCE_STATEMENT_TIMEOUT`, G-01/#583, ADR-068 개정) — odroid
   `mv_refresh`가 30분 문장 상한에 취소되던 문제.
+- **`data_token` 지문에서 `region_radius_parts` 제외**(ADR-069 개정 2026-10-18) — refresh마다 원천 `tl_scco_*`에서
+  `ST_Subdivide`로 다시 만드는 파생 표라 호스트·실행마다 해시가 달라 원천 무변경에도 토큰이 바뀌었다. 지문 표 9 → 8,
+  정의 변경으로 같은 데이터의 토큰이 한 번 바뀐다.
 - **데이터 지문 쿼리 상한 10분 → 30분**(`DATA_FINGERPRINT_STATEMENT_TIMEOUT`, 소유자 결정 2026-10-18, ADR-069 D5 개정) —
   odroid 조용한 실측 240 s로 여유가 2.5배뿐이라 경합 시 NULL `data_token`(소비자 "판정 불가")을 줄인다.
 - Dagster 구성요소가 Common의 선택 gRPC 상태 조회 CLI를 설치하도록 준비한다.

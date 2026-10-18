@@ -179,7 +179,7 @@ class Client:
 
 def test_fingerprint_table_specs_are_unique_and_named() -> None:
     names = [spec.name for spec in DATA_FINGERPRINT_TABLE_SPECS]
-    assert len(names) == len(set(names)) == len(DATA_FINGERPRINT_TABLES) == 9
+    assert len(names) == len(set(names)) == len(DATA_FINGERPRINT_TABLES) == 8
 
 
 def test_allowlist_entries_carry_a_reason() -> None:
@@ -195,6 +195,69 @@ def test_text_search_mv_reads_only_mv_geocode_target() -> None:
     start = TEXT_SEARCH_MV_SQL.index("CREATE MATERIALIZED VIEW mv_geocode_text_search")
     definition = TEXT_SEARCH_MV_SQL[start : TEXT_SEARCH_MV_SQL.index("WITH DATA", start)]
     assert module_tables(definition) == {"mv_geocode_target"}
+
+
+# --- derived tables are not hashed (ADR-069 amendment 2026-10-18) ---------------------------
+
+
+def _refresh_derivations() -> dict[str, str]:
+    """Each table the serving refresh (re)builds -> the SQL that builds it."""
+    from kortravelgeo.infra.sql import MV_SQL, REGION_RADIUS_PARTS_REFRESH_SQL, TEXT_SEARCH_MV_SQL
+
+    def mv_body(sql: str, name: str) -> str:
+        start = sql.index(f"CREATE MATERIALIZED VIEW {name}")
+        return sql[start : sql.index("WITH DATA", start)]
+
+    insert = REGION_RADIUS_PARTS_REFRESH_SQL.index("TRUNCATE TABLE region_radius_parts")
+    return {
+        "mv_geocode_target": mv_body(MV_SQL, "mv_geocode_target"),
+        "mv_geocode_text_search": mv_body(TEXT_SEARCH_MV_SQL, "mv_geocode_text_search"),
+        "region_radius_parts": REGION_RADIUS_PARTS_REFRESH_SQL[insert:],
+    }
+
+
+def assert_no_derived_table_is_hashed(
+    derivations: dict[str, str], hashed: frozenset[str] | set[str]
+) -> None:
+    """A table rebuilt only from hashed tables adds mostly rebuild noise (``ST_Subdivide`` parts,
+    ``row_number`` ties) — it must not be hashed; one built from unhashed sources must be. Sources
+    are hashed per D3 (geometry as a summary), so this trades a little geometry sensitivity for
+    stability (ADR-069 amendment 2026-10-18). ``_refresh_derivations`` is a hand-kept list: a new
+    refresh-built table must be added there."""
+    for target, sql in derivations.items():
+        sources = module_tables(sql) - {target}
+        assert sources, f"{target}: derivation sources not found — the parse is broken"
+        if sources <= hashed:
+            assert target not in hashed, (
+                f"{target} is derived only from hashed tables {sorted(sources)} but is hashed"
+            )
+        else:
+            assert target in hashed, f"{target} is built from unhashed {sorted(sources - hashed)}"
+
+
+def test_derived_tables_are_not_in_the_fingerprint() -> None:
+    derivations = _refresh_derivations()
+    assert module_tables(derivations["region_radius_parts"]) - {"region_radius_parts"} == {
+        "tl_scco_ctprvn",
+        "tl_scco_sig",
+        "tl_scco_emd",
+    }
+    assert_no_derived_table_is_hashed(derivations, DATA_FINGERPRINT_TABLES)
+
+
+def test_derived_lint_goes_red_when_region_radius_parts_is_hashed_again() -> None:
+    with pytest.raises(AssertionError, match="region_radius_parts is derived only from hashed"):
+        assert_no_derived_table_is_hashed(
+            _refresh_derivations(), DATA_FINGERPRINT_TABLES | {"region_radius_parts"}
+        )
+
+
+def test_derived_lint_goes_red_when_a_source_of_the_derivation_is_not_hashed() -> None:
+    # mv_geocode_target reads unhashed sources (tl_juso_text …), so it must stay hashed.
+    with pytest.raises(AssertionError, match="mv_geocode_target is built from unhashed"):
+        assert_no_derived_table_is_hashed(
+            _refresh_derivations(), DATA_FINGERPRINT_TABLES - {"mv_geocode_target"}
+        )
 
 
 # --- the lint must actually discriminate (ADR-069 T-325a acceptance (5)) ---------------------
