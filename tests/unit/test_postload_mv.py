@@ -140,7 +140,7 @@ def test_region_radius_rebuild_caps_its_lock_wait() -> None:
     source = inspect.getsource(postload.refresh_region_radius_parts)
     lock = inspect.getsource(postload._lock_region_radius_parts)
 
-    assert source.index("_lock_region_radius_parts(conn)") < source.index(
+    assert source.index("await _lock_region_radius_parts(") < source.index(
         "REGION_RADIUS_PARTS_REFRESH_SQL"
     )
     assert "LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE" in lock

@@ -123,11 +123,16 @@ class _RegionRadiusLockBusyError(Exception):
         self.cause = cause
 
 
-async def _lock_region_radius_parts(conn: Any) -> None:
+async def _lock_region_radius_parts(
+    conn: Any, *, deadline: float | None = None, last_lock_error: DBAPIError | None = None
+) -> None:
     if await conn.scalar(text("SELECT to_regclass('region_radius_parts')")) is None:
         return  # first build: nobody can be reading it
     original_timeout = await conn.scalar(text("SELECT current_setting('lock_timeout')"))
     await conn.execute(text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'"))
+    # relation 조회와 GUC 준비 await도 예산을 소비하므로 실제 LOCK 직전에 검사한다.
+    if last_lock_error is not None and deadline is not None and time.monotonic() >= deadline:
+        raise last_lock_error from None
     try:
         await conn.execute(text("LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE"))
     except DBAPIError as exc:
@@ -162,7 +167,9 @@ async def refresh_region_radius_parts(
                 # 풀 연결·transaction 준비 중 늦어져도 새 LOCK을 요청하지 않는다.
                 if last_lock_error is not None and time.monotonic() >= deadline:
                     raise last_lock_error from None
-                await _lock_region_radius_parts(conn)
+                await _lock_region_radius_parts(
+                    conn, deadline=deadline, last_lock_error=last_lock_error
+                )
                 for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
                     await conn.execute(text(sql))
                 # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.

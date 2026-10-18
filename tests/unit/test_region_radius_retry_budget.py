@@ -13,7 +13,11 @@ from kortravelgeo.loaders import postload
 @pytest.mark.parametrize(
     ("resume_at", "delay_at", "ready_at"),
     [(32.0, None, 32.0), (3600.0, None, 3600.0), (4002.0, None, 4002.0)]
-    + [(32.0, stage, ready) for stage in ("pool", "setup") for ready in (3599.0, 3600.0, 4002.0)],
+    + [
+        (32.0, stage, ready)
+        for stage in ("pool", "setup", "relation", "read_timeout", "set_timeout")
+        for ready in (3599.0, 3600.0, 4002.0)
+    ],
 )
 async def test_radius_retry_checks_budget_after_sleep(
     monkeypatch, resume_at, delay_at, ready_at
@@ -38,12 +42,26 @@ async def test_radius_retry_checks_budget_after_sleep(
             and command.startswith("SET LOCAL statement_timeout")
         ):
             clock[0] = ready_at
+        if (
+            len(transactions) == 2
+            and delay_at == "set_timeout"
+            and command.startswith("SET LOCAL lock_timeout")
+        ):
+            clock[0] = ready_at
         if command.startswith("LOCK TABLE") and len(transactions) == 1:
             clock[0] = 2.0
             raise original_error
 
+    async def scalar(sql):
+        if len(transactions) == 2 and (
+            (delay_at == "relation" and "to_regclass" in str(sql))
+            or (delay_at == "read_timeout" and "current_setting" in str(sql))
+        ):
+            clock[0] = ready_at
+        return "existing"
+
     connection = SimpleNamespace(
-        scalar=AsyncMock(return_value="existing"),
+        scalar=scalar,
         execute=execute,
     )
 
