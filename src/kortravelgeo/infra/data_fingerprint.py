@@ -24,7 +24,10 @@ _LOGGER = logging.getLogger(__name__)
 
 #: Statement timeout for the fingerprint SELECT (ADR-069 D5). Applied with ``SET LOCAL`` inside
 #: a savepoint that is always rolled back, so the caller's own timeout comes back afterwards.
-DATA_FINGERPRINT_STATEMENT_TIMEOUT = "10min"
+#: 30 min (was 10 min, owner decision 2026-10-18): the odroid quiet measurement is 240 s, only
+#: 2.5x under 10 min; contention slowed the link UPDATE >15x there, and a timeout fails open to a
+#: NULL data_token that consumers must treat as "undecidable" (G-01 follow-up c).
+DATA_FINGERPRINT_STATEMENT_TIMEOUT = "30min"
 
 #: Columns never hashed (ADR-069 D2): load metadata, and the surrogate key re-assigned on every
 #: reload (``postal_bulk_delivery.bulk_id``). Either would make an identical reload look changed.

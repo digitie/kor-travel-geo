@@ -180,7 +180,7 @@ INSERT와 같은 자리에서 실행한다.
 
 ### D5 — 지문은 fail-open이고 알림은 `serving_releases.notes` 한 자리다
 
-- 지문 쿼리는 **savepoint 안에서** `SET LOCAL statement_timeout = '10min'`을 따로 걸고,
+- 지문 쿼리는 **savepoint 안에서** `SET LOCAL statement_timeout = '10min'`(2026-10-18 소유자 결정으로 `'30min'` — odroid 조용한 실측 240 s)을 따로 걸고,
   실패·timeout이면 `data_fingerprint = NULL`로 활성화를 **통과**시킨다. 지문 SELECT가 끝나면
   성공·실패 모두 **`ROLLBACK TO SAVEPOINT`**로 닫는다(읽기 전용이라 잃는 것이 없고, `SET LOCAL`은
   savepoint를 RELEASE하면 transaction 끝까지 남지만 ROLLBACK TO면 되돌아간다). 그래서 각 경로의
@@ -265,7 +265,7 @@ hit에도 현재 토큰" 규칙과 어긋난다.
 지나지 않으므로 명시 실행). 이력 행은 NULL로 둔다.
 
 - `--dry-run`: 저장·캐시 삭제 없이 지문 SQL만 실행해 **경과 시간과 표별 `h` 값**을 출력한다
-  (읽기 전용). 헬퍼와 **같은 `DATA_FINGERPRINT_SQL` 상수를 같은 `SET LOCAL statement_timeout = '10min'`
+  (읽기 전용). 헬퍼와 **같은 `DATA_FINGERPRINT_SQL` 상수를 같은 `SET LOCAL statement_timeout`(`DATA_FINGERPRINT_STATEMENT_TIMEOUT`, 2026-10-18부터 `'30min'`)
   안에서** 실행한다 — 측정 대상 = 수용 기준 대상. T-325a 수용 기준 "prod 규모 사전 실측"의 수단이다
   — 소유자가 PR-1 브랜치 체크아웃의 `ktgctl … --dry-run`으로 n150 prod DB에 **머지 전** 1회
   실행한다(미머지 코드로 prod를 **쓰지 않는다**).

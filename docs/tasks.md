@@ -184,8 +184,7 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
   - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
     SQL을 `pg_cancel_backend`로 끊게 할지.
-  - [ ] **G-01 후속 c (소유자 결정)** — 데이터 지문 savepoint `10min`(ADR-069 D5): odroid 조용한 실측 240 s(여유 2.5배) —
-    경합 시 NULL `data_token` 가능. 올릴지(30~60 min) 결정.
+  - [x] **G-01 후속 c** — 데이터 지문 savepoint `10min` → `30min`(소유자 결정 2026-10-18; ADR-069 D5 개정).
 
   **2026-10-15 상태 — 풀로드는 하지 않았다(복원으로 대체).** 아래 수용 기준의 "지름길 (a)" 분기로 판정하면 적재 몫은 충족:
   수동 `pg_restore` rc=0 + `count(*)` 6,416,637(둘 다, n150 운영 원본과 같음 — 기준월 차이 없음). odroid geo-api env는 D1·D5와
