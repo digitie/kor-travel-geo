@@ -15,7 +15,8 @@
 | Geo CS→API 이미지 교체 | root 직접 실행 PASS, 원본 컨테이너 보존·정상 종료 |
 | 공식 활성 지문 STORE | root 단일 실행 PASS, 저장227.521초·daemon OFF·수명 불변 |
 | n150 같은8표 지문과 비교 | MATCH, 8표 모두 같고 token 동일·DB/API 재조회 PASS |
-| 배포 후 Admin 예제 UI | 초기 WebGL2 불가 FAIL 보존, n150 렌더링 환경 정정 후 동일 canvas 기준 두 모드 PASS |\n| 대시보드/Map 기준선 UI | 별도 대기, Admin 예제와 전체 UI 수용을 혼동하지 않음 |
+| 배포 후 Admin 예제 UI | 초기 WebGL2 불가 FAIL 보존, n150 렌더링 환경 정정 후 동일 canvas 기준 두 모드 PASS |
+| 대시보드 전체 / Map 기준선 | 대시보드 전체는 별도 대기, Map baseline은 별도 Map #1338 기록을 따름 |
 | 새 CPU/RSS·실작업 SQL 취소·전체 Track1/2 | 이 기록에서 미실행/미완료 |
 
 [공개 증거 요약](evidence/2026-10-18-geo-deployment.safe.json)은 image ID·설치 버전·원천 SHA·
