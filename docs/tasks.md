@@ -188,7 +188,9 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     하지 않는다**(결정적이지 않으면 refresh마다 토큰이 바뀌어 소비자 전량 재계획).
   - [ ] **G-01 daemon ON 전제** — 공용 daemon을 켜면 `dagster/max_runtime`이 집행된다(mv_refresh schedule은 없고 발화는
     admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)와 D4 값(재확인)을 닫는다.
-  - [x] **G-01 후속 a**(2026-10-18, `lock_timeout 5s` + 3회 재시도, PR `agent/claude-radius-lock-timeout`) — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
+  - [x] **G-01 후속 a — lock 대기**(2026-10-18, #590: `LOCK TABLE … ACCESS EXCLUSIVE`를 먼저 `lock_timeout 2s`로, 그 획득만 30 s 간격
+    최대 1 h 재시도 — 백업(`pg_dump`의 ACCESS SHARE)과 겹쳐도 reader를 한 번에 2 s 이상 줄 세우지 않고 끝까지 기다린다). **남은 것**:
+    획득 뒤 보유(재생성~commit, 6 h 문장 상한) — `_next` 표 재생성 뒤 rename swap으로 줄이는 것은 별도 후속(아래 a2). 원문: `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
   - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
     SQL을 `pg_cancel_backend`로 끊게 할지.

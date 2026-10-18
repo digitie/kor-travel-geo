@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import warnings
 from typing import Any, Literal
 
@@ -104,18 +105,35 @@ async def refresh_mv(
     await GeoCacheRepository(engine).clear()
 
 
-#: Lock-wait cap for the ``region_radius_parts`` rebuild (G-01 follow-up a). Its TRUNCATE takes
-#: ACCESS EXCLUSIVE; while it waits behind a long reader (e.g. ``pg_dump``) every new radius
-#: lookup queues behind it. Capped at the serving statement timeout (5 s) so a queued API read is
-#: never held longer than it would wait anyway; a lost wait rolls back (old rows stay) and retries.
-REGION_RADIUS_LOCK_TIMEOUT = "5s"
-REGION_RADIUS_LOCK_ATTEMPTS = 3
-REGION_RADIUS_LOCK_RETRY_DELAY_S = 10.0
+#: Lock-wait cap for the ``region_radius_parts`` rebuild (G-01 follow-up a). The rebuild needs
+#: ACCESS EXCLUSIVE; while that request waits behind a long reader (e.g. ``pg_dump``) every new
+#: radius lookup queues behind it. So the lock is taken explicitly first with a short wait, and a
+#: lost wait rolls back (old rows stay) and retries until a budget long enough to outlast a backup.
+#: Only that lock wait is retried — any other error propagates. The hold (rebuild until commit) is
+#: not capped here; rebuilding into a ``_next`` table and swapping is a separate follow-up.
+REGION_RADIUS_LOCK_TIMEOUT = "2s"
+REGION_RADIUS_LOCK_RETRY_DELAY_S = 30.0
+REGION_RADIUS_LOCK_BUDGET_S = 3600.0
 _LOCK_NOT_AVAILABLE = "55P03"
 
 
-def _is_lock_timeout(exc: DBAPIError) -> bool:
-    return getattr(exc.orig, "sqlstate", None) == _LOCK_NOT_AVAILABLE
+class _RegionRadiusLockBusyError(Exception):
+    def __init__(self, cause: DBAPIError) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
+
+
+async def _lock_region_radius_parts(conn: Any) -> None:
+    if await conn.scalar(text("SELECT to_regclass('region_radius_parts')")) is None:
+        return  # first build: nobody can be reading it
+    await conn.execute(text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'"))
+    try:
+        await conn.execute(text("LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE"))
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) == _LOCK_NOT_AVAILABLE:
+            raise _RegionRadiusLockBusyError(exc) from exc
+        raise
+    await conn.execute(text("SET LOCAL lock_timeout = 0"))
 
 
 async def refresh_region_radius_parts(
@@ -123,30 +141,31 @@ async def refresh_region_radius_parts(
 ) -> None:
     """Rebuild subdivided administrative-region geometry for radius lookup.
 
-    The lock wait is capped (``REGION_RADIUS_LOCK_TIMEOUT``) and a lost wait is retried a bounded
-    number of times; anything else propagates unchanged.
+    ACCESS EXCLUSIVE is acquired first with a short wait (``REGION_RADIUS_LOCK_TIMEOUT``) and the
+    acquisition alone is retried for up to ``REGION_RADIUS_LOCK_BUDGET_S``.
     """
-    for attempt in range(1, REGION_RADIUS_LOCK_ATTEMPTS + 1):
+    deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             async with engine.begin() as conn:
                 await conn.execute(_SET_MAINTENANCE_TIMEOUT)
-                await conn.execute(
-                    text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'")
-                )
+                await _lock_region_radius_parts(conn)
                 for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
                     await conn.execute(text(sql))
                 # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
                 if publication_guard is not None:
                     await publication_guard(conn)
             return
-        except DBAPIError as exc:
-            if not _is_lock_timeout(exc) or attempt == REGION_RADIUS_LOCK_ATTEMPTS:
-                raise
+        except _RegionRadiusLockBusyError as busy:
+            if time.monotonic() + REGION_RADIUS_LOCK_RETRY_DELAY_S > deadline:
+                raise busy.cause from None
             LOGGER.warning(
-                "region_radius_parts 재생성이 lock 대기 %s를 넘었다(%d/%d) — 재시도",
+                "region_radius_parts lock 대기가 %s를 넘었다(시도 %d) — %.0f s 뒤 재시도",
                 REGION_RADIUS_LOCK_TIMEOUT,
                 attempt,
-                REGION_RADIUS_LOCK_ATTEMPTS,
+                REGION_RADIUS_LOCK_RETRY_DELAY_S,
             )
             await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
 

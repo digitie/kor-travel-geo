@@ -55,7 +55,7 @@ D4, 21600 s)과 같아 `mv_refresh`에서는 한 문장이 run 예산 전체를 
 취소한다(무한 상한 0은 고르지 않았다). 한계: 상한은 문장 단위라 daemon OFF 동안 run 전체 시간은 묶이지 않고,
 `client_connection_check_interval`이 없어 worker가 죽은 뒤 고아 backend도 최대 6 h 돈다; `region_radius_parts`
 TRUNCATE는 `lock_timeout` 없이 AccessExclusive를 commit까지 쥔다(기존 문제, 최악이 30분→6 h로 커짐) — 둘 다 후속
-과제(tasks.md G-01 후속). 21600 s 자체도 D4 실측 전 잠정값이다. D4가 run 상한을 올리면
+과제(tasks.md G-01 후속). → 2026-10-18 후속 a(#590): ACCESS EXCLUSIVE **획득 대기**만 2 s × 재시도(최대 1 h)로 묶었다; 보유 시간은 그대로. 21600 s 자체도 D4 실측 전 잠정값이다. D4가 run 상한을 올리면
 `kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다.
 데이터 지문의 savepoint 안 `10min`(ADR-069 D5)은 이 개정에서 바꾸지 않는다 — odroid 조용한 실측 240 s로 여유가
 2.5배뿐이라 경합 시 NULL `data_token`(소비자 "판정 불가")이 될 수 있다. 올릴지는 네 활성화 경로가 공유하는 값이라
