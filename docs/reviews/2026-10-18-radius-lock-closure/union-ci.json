@@ -1,0 +1,55 @@
+{
+  "headRefOid": "bb6ef5ce675c9b4752d1943ffd2c88be94fed0fa",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-18T06:15:20Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/digitie/kor-travel-geo/actions/runs/39103256050/job/117603679338",
+      "name": "backend",
+      "startedAt": "2026-10-18T06:13:08Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-18T06:13:32Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/digitie/kor-travel-geo/actions/runs/39103256049/job/117603678980",
+      "name": "openapi",
+      "startedAt": "2026-10-18T06:13:08Z",
+      "status": "COMPLETED",
+      "workflowName": "OpenAPI drift"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-18T06:15:09Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/digitie/kor-travel-geo/actions/runs/39103256050/job/117603679207",
+      "name": "integration-postgis",
+      "startedAt": "2026-10-18T06:13:08Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-18T06:16:01Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/digitie/kor-travel-geo/actions/runs/39103256050/job/117603679301",
+      "name": "dagster",
+      "startedAt": "2026-10-18T06:13:08Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-18T06:14:38Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/digitie/kor-travel-geo/actions/runs/39103256050/job/117603679089",
+      "name": "frontend",
+      "startedAt": "2026-10-18T06:13:08Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    }
+  ]
+}

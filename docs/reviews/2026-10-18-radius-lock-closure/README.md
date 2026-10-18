@@ -19,3 +19,12 @@ D4=21600 및 daemon 중지는 유지한다. 실제 운영 배포·PG 잠금/응�
 - [geo590-review-popper-r1.md](geo590-review-popper-r1.md) — SHA256 088d1944702410a91ee68f6dfcb5033f11108910480b41c43b07e55fe783267e
 - [geo590-review-popper-r2.md](geo590-review-popper-r2.md) — SHA256 9802dbb9fb74c7e1e8822e8164a3bc7b58a1decb56dafc1205834b75837927bc
 - [제품 CI](source-ci.json)
+- [통합 후속 geo590-review-james-r3-union-20261018.md](geo590-review-james-r3-union-20261018.md) — SHA256 b5cb2e3eff152cb64706d26bbef4d451cd9886500413d891423d97f89468e4f0
+- [통합 후속 geo590-591-union-review-popper-r1.md](geo590-591-union-review-popper-r1.md) — SHA256 2e71dc88e6d2fb700f31e6361418d7b51af7f34dd77f58b0a19bf3e5f275b8a5
+
+## #591 통합 최종 확인
+
+#591 머지 후 bb6ef5ce의 두 독립 통합 리뷰도 OPEN0이며, 두 PostGIS integration
+모듈과 각각의 최소 실행 수를 함께 유지한다. 작성자 관련43 PASS/Ruff 및 두 리뷰어의
+별도 검증을 구분해 보존한다. [최종 통합 CI](union-ci.json) 5개 모두 성공했다.
+배포/실제 운영 수용은 여전히 별도다.
