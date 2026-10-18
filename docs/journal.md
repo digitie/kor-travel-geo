@@ -1,6 +1,37 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-18 — #591 CI 정의 등록 smoke의 instance 수명 격리
+
+사용자 takeover 위임으로 d8f7f0f에 main535e26b를 일반 merge했다.
+기존 CI39093261411의 weakref 오류는 job 미등록 assertion이 아니라
+DefinitionsLoadContext가 소멸한 instance의 defs-state 저장소를 읽던 경로였다.
+새 sterile3.12.13/정확 image constraints에서 원본 단독1·관련 순서22·전체150은 PASS라
+원 CI의 선행 오염 주체는 특정하지 않았다. actual SDK local-temp 저장소만 남긴
+소유 fixture에서는 같은 오류가 RED였고 구조 smoke에 명시 ephemeral instance 범위를
+두자 GREEN이었다. 제품 job/정의·설정·SDK pin은 바꾸지 않았다.
+
+수정 뒤 단독1 PASS(2.61초), 순서22 PASS(2.83초), 전체 Dagster150 PASS(7.54초,
+기존 BetaWarning10)·Ruff PASS. 첫 소유 반례 준비는 ephemeral instance의 저장소가
+None이라 AttributeError였고 local_temp로 fixture만 정정했다. 원 실패/원본150 PASS와
+보강후 결과를 구분해 보존한다. 새 CI·독립2리뷰·운영 수용은 별도이며 실제 PG/provider/
+worker/Daemon은 실행하지 않았다. G-01의 실제 worker 사망 취소 수용을 대신하지 않는다.
+
+
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
+
+## 2026-10-18 — #589 소스 머지·독립 두 리뷰 원문 보존 (Codex)
+
+- source head a6a9fcdf, 머지 047536dc. 두 FULL SOURCE PASS/열린 P0–P2=0과 원격 CI5 SUCCESS, 순수 회귀의 옛 소스 RED/최종 GREEN·mutant 거절을 [최종 기록](reviews/2026-10-18-fingerprint-final.md)에 보존했다.
+- 초기 분기점 혼동·존재하지 않는 경로의 준비 오류와 실제 Git 성공 조회 정정을 원문 그대로 보존한다. 실제 D4 네 문서는 머지 전 main과 예상 결과 bytes 동일, 기존 21600 유지다.
+- 비차단 P3에 따라 CHANGELOG의 호스트·매 실행 단정을 관측과 추정으로 정정했다. 기존 journal 이력은 수정하지 않는다.
+- 문서 전용 후속이며 CI 없이 처리한다. 실제 배포·fingerprint-active 재계산·소비자 기준선·live UI·Track 완료·CPU/RSS 개선은 이 기록에서 미실행이다. daemon OFF, 센서 활성화 없음.
+- 원 작성자의 Git 포인터/WIP 보존을 위해 별도 Linux clone을 문서 브랜치 정본으로 사용했다. Linux standalone CodeGraph 0.9.5 초기화→sync→status 모두 exit0, index up to date를 확인했다.
+
+## 2026-10-18 — ADR-070 D4 닫음: mv_refresh 21600 s 유지(소유자 결정, by claude)
+
+- 실측 2,157 s(odroid standalone, Dagster run `2bd07f07…`), n150 이력 최대 5,760 s, 부하 시 한 문장 >30 min 사례, 중간 끊김 시 옛
+  `data_token`으로 서빙될 위험 → 산식값 3,235 s(#586)를 채택하지 않고 21600 s 유지. 코드 변경 없음(`recovery.py`·테스트 기대값 21600).
+  #586은 닫았다. ADR-070 D4 결정 절에 근거를 남겼다.
 
 ## 2026-10-18 — #585(지문 30 min) odroid geo CS 배포·D4 draft(by claude)
 

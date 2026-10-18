@@ -70,9 +70,10 @@ class FingerprintTable:
 
 _SCCO = ("geom",)
 
-#: ADR-069 D2 — the 9 tables the v2 responses are built from (head 2026-10-13; derived from every
-#: ``infra/*_repo.py`` not on the non-v2 allow-list — ``postal_bulk_delivery``/``tl_kodis_bas`` are
-#: read only by the v1 ``zip_repo`` and are therefore not hashed).
+#: ADR-069 D2 — the tables the v2 responses are built from (head 2026-10-13; 8 since the
+#: 2026-10-18 amendment moved the derived ``region_radius_parts`` to the allow-list). Derived
+#: from every ``infra/*_repo.py`` not on the non-v2 allow-list — ``postal_bulk_delivery`` and
+#: ``tl_kodis_bas`` are read only by the v1 ``zip_repo`` and are therefore not hashed.
 DATA_FINGERPRINT_TABLE_SPECS: tuple[FingerprintTable, ...] = (
     FingerprintTable(
         "mv_geocode_target",
@@ -84,11 +85,6 @@ DATA_FINGERPRINT_TABLE_SPECS: tuple[FingerprintTable, ...] = (
         ),
         point_columns=("pt_5179",),
         dropped_columns=("pt_4326",),
-    ),
-    FingerprintTable(
-        "region_radius_parts",
-        columns=("level", "code", "name", "parent_sido_cd", "parent_sig_cd", "part_no"),
-        summary_columns=_SCCO,
     ),
     FingerprintTable(
         "tl_scco_ctprvn", columns=("ctprvn_cd", "ctp_kor_nm"), summary_columns=_SCCO
@@ -126,6 +122,13 @@ DATA_FINGERPRINT_ALLOWLIST: Mapping[str, str] = {
     "mv_geocode_text_search": (
         "derived from the same sources as mv_geocode_target by the same REFRESH; its "
         "definition only changes with a code release"
+    ),
+    "region_radius_parts": (
+        "derived on every refresh from tl_scco_ctprvn/tl_scco_sig/tl_scco_emd (all hashed, "
+        "geometry "
+        "as the D3 summary) by ST_Subdivide + row_number() over ST_Area; its parts are rebuild "
+        "noise that moved data_token with unchanged sources (ADR-069 amendment 2026-10-18). "
+        "Relies on ADR-043: the parts are rebuilt in the same release as their sources"
     ),
 }
 

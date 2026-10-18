@@ -104,13 +104,13 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 ### D2 — 지문 표 집합은 손으로 고르지 않고 유도한다
 
 정의: **"v2 응답을 만드는 infra repo(`reverse_repo`·`zip_repo`·`geometry_repo`·`geocode_repo`·
-`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표 — 1차 리뷰 뒤 v1 전용 두 표를 빼 9표, 구현 기록 12):
+`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표 — 1차 리뷰 뒤 v1 전용 두 표를 빼 9표, 구현 기록 12; **2026-10-18 개정으로 `region_radius_parts`를 빼 8표** — 아래 "개정" 절):
 
 | 표 | 읽는 repo | 지문에 넣는 열 |
 |---|---|---|
 | `mv_geocode_target` | reverse·zip·geocode·search | 비-geometry 전 열 + `md5(ST_AsBinary(pt_5179))`. `pt_4326`은 `ST_Transform` 산출(`sql.py:1410-1415`)이라 PROJ/PostGIS 업그레이드만으로 바뀌므로 **제외** |
 | `tl_scco_ctprvn`·`tl_scco_sig`·`tl_scco_emd`·`tl_scco_li` | geometry·search | `(code, name, geom 요약)` — `ctprvn_cd/ctp_kor_nm`·`sig_cd/sig_kor_nm`·`emd_cd/emd_kor_nm`·`li_cd/li_kor_nm`(`sql.py:199-233`) |
-| `region_radius_parts` | geometry(within-radius) | 비-geometry 전 열 + geom 요약(`sql.py:235-245`; `refreshed_at` 제외) |
+| ~~`region_radius_parts`~~ | geometry(within-radius) | ~~비-geometry 전 열 + geom 요약~~ — **2026-10-18 개정으로 제외**(파생 표, 허용 목록) |
 | `tl_kodis_bas` | zip | `bas_mgt_sn, bas_id` + geom 요약(`sql.py:247-254`) |
 | `postal_bulk_delivery` | zip | `zip_no, bd_mgt_sn, bulk_name, detail`(`sql.py:360-367`; geometry 없음, `bulk_id BIGSERIAL`은 아래 규칙으로 제외) |
 | `tl_sppn_makarea` | reverse·geocode | 전 열 + geom 요약 |
@@ -122,7 +122,7 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
   걸러내지 못한다(`sum()` 설계라 행 정렬에 의존하지 않으므로 빼도 안전).
 - 허용 목록(유도 집합에 **실제로 있으나** 지문에서 빼는 표, 사유를 lint에 적는다):
   `mv_geocode_text_search`(geocode·search가 읽음; 같은 원천에서 같은 REFRESH로 파생, 정의 변경은
-  코드 릴리스) 하나.
+  코드 릴리스) 하나. — 2026-10-18 개정으로 `region_radius_parts` 추가(둘).
 - `geo_cache`는 다섯 repo가 읽지 않는다(`GeoCacheRepository`를 `client.py`가 읽는 client 계층의
   파생 캐시) — 유도 집합 **밖**이며 D6에서 무효화한다. 허용 목록에 넣지 않는다(본 적 없는 항목을
   허용 목록에 두면 아래 (3)의 실재 검사가 빨갛게 된다).
@@ -149,7 +149,7 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 ### D3 — geometry는 비용 등급을 나눈다(점은 정확, 폴리곤·선은 요약)
 
 - 점(`mv_geocode_target.pt_5179`): `md5(ST_AsBinary(pt))`.
-- 폴리곤·선(`tl_scco_*`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
+- 폴리곤·선(`tl_scco_*`·~~`region_radius_parts`~~(2026-10-18 제외)·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
   `tl_sprd_manage`·`tl_kodis_bas`의 geometry): 전체 WKB를 직렬화하지 않고
   `concat(ST_NPoints(geom), '|', Box2D(geom)::text)` **요약**만 센다.
 - **명시된 한계(가정·트레이드오프).** 정점 수와 bbox가 그대로인 미세 경계 이동(좌표 재투영·
@@ -399,7 +399,7 @@ rollback·standalone 적재 활성화는 이력상 0회; (b) 485.8 s도 성공�
     `lock_timeout='5s'`를 transaction 끝까지 남긴다 — 그 안에서 스캔하면 cancel·`renew_lease`·`set_progress`가 스캔 내내
     막히고(300 s lease 만료 → reconciler가 정상 job을 죽일 수 있음) 5 s lock_timeout이 스캔에 샌다. 스캔은 `mv_hash` 옆에서
     하고 결과를 `fingerprint_attempt`로 넘긴다(실패해도 "계산했고 실패" 상태로 넘어가 `notes` 접미가 그대로 붙는다).
-12. **(M1) 지문 표는 9개다.** `zip_repo`는 v1 `/v1/address/zipcode` 전용이라(`client.zipcode` → `api/routers/zipcode.py`)
+12. **(M1) 지문 표는 9개다**(2026-10-18 개정 뒤 8개). `zip_repo`는 v1 `/v1/address/zipcode` 전용이라(`client.zipcode` → `api/routers/zipcode.py`)
     `postal_bulk_delivery`·`tl_kodis_bas`를 뺐다(`postal_pobox`를 뺀 것과 같은 이유). lint는 이제 `infra/*_repo.py` 전부를
     스캔하고, 비v2 허용 목록(`admin_repo`·`file_inventory_repo`·`source_upload_repo`·`pobox_repo`·`zip_repo`, 각 사유)의
     클래스가 v2 클라이언트 메서드에 나오지 않음을 함께 단언한다 — v2 경로에서 쓰이는 새 repo는 숨을 수 없다.
@@ -428,6 +428,31 @@ rollback·standalone 적재 활성화는 이력상 0회; (b) 485.8 s도 성공�
     `COLLATE "C"` — 그래도 PostGIS 버전·바이트 순서가 바뀌면(odroid aarch64 이전 등) `Box2D` 텍스트·`ST_AsBinary`가 달라져
     토큰이 한 번 바뀔 수 있다(ADR-070 D8과 같은 "전량 재계획 1회"). admin `ServingRelease.data_token`도 `dd1-` 패턴.
     backfill CLI는 lock 대기·UPDATE·DELETE를 `statement_timeout 5min`으로 한다(세션 기본 5 s).
+
+## 개정 (2026-10-18) — `region_radius_parts`를 지문에서 뺀다(파생 표, 소유자 결정)
+
+- **관측.** odroid standalone `mv_refresh`(2026-10-18, 원천 무변경) 뒤 `data_token`이 바뀌었다. 같은 지문 SQL을 n150 옛 DB와 odroid에
+  돌려 표별로 비교하면 9표 중 `region_radius_parts`만 달랐다(나머지 8표 동일 — journal 2026-10-18).
+- **원인.** 이 표는 refresh마다 `tl_scco_ctprvn`·`tl_scco_sig`·`tl_scco_emd`(셋 다 지문 대상)에서 `ST_Subdivide(geom, 256)` +
+  `row_number() OVER (… ORDER BY ST_Area DESC)`로 **다시 만든다**(`infra/sql.py` `REGION_RADIUS_PARTS_REFRESH_SQL`). 조각 경계는
+  PostGIS/GEOS·아키텍처에 따라, `part_no`는 면적 동률에서 실행마다 달라질 수 있다고 **추정**한다(같은 호스트 재실행 결정성·GEOS
+  버전은 확인하지 않았다 — 결정은 그에 의존하지 않는다). 원천 3표의 코드·명칭은 그대로 해시되므로 이 표는 원천 변화 외에 주로 **재구축
+  잡음**을 더한다. **잃는 것(수용):** 원천 geometry는 D3 요약(점 수+Box2D)으로만 해시되므로, 폴리곤 단위 요약은 그대로인데 내부
+  경계만 움직인 변경은 예전엔 조각별 요약으로 잡힐 수 있었으나 이제는 토큰을 바꾸지 않는다 — D3가 이미 수용한 within-radius 가장자리
+  한계를 조각 단위에서 폴리곤 단위로 넓힌다. 또 이 표가 원천과 **같은 릴리스에서** 다시 만들어진다는 ADR-043 불변식에 기댄다
+  (모든 `tl_scco_*` 적재 경로가 릴리스 기록 전에 재생성한다 — `batch_dag.py`·`cli/main.py`·`refresh_mv`).
+- **결정.** D2의 지문 표에서 빼고 `DATA_FINGERPRINT_ALLOWLIST`에 이유와 함께 둔다(9 → 8표). D2의 "v2 repo가 읽는 표" 유도 lint는
+  그대로 통과한다(허용 목록 경로). 규칙을 테스트로 고정: refresh가 다시 만드는 표(`mv_geocode_target`·`mv_geocode_text_search`·
+  `region_radius_parts`)의 출처가 **전부** 지문 표면 그 표는 지문에서 빠져야 하고, 아니면 들어가야 한다
+  (`tests/unit/test_data_fingerprint_covers_serving_tables.py` — 다시 넣거나 `mv_geocode_target`을 빼면 빨강). 통합 테스트: 이 표만
+  바꾸면 토큰 불변, 원천(`tl_scco_sig`)을 바꾸고 다시 만들면 토큰 변경.
+- **영향.** 지문 정의가 바뀌므로 같은 데이터라도 토큰이 **한 번** 바뀐다(D1 "열 추가 = 토큰 변경 1회"와 같은 성격; 접두 `dd1-`는
+  유지). 이미 저장된 과거 릴리스 지문은 옛 정의 값이라 새 활성 지문과 비교하면 "다름"이다 — 소비자 기준선(Map·concierge)은
+  2026-10-18 현재 0건이라 영향 없고, 기준선 기록·센서 가동은 이 개정 배포 뒤에 한다. 활성 릴리스는 배포 직후 D9 CLI
+  (`ktgctl serving fingerprint-active`)로 다시 계산한다. **"한 번"이 아닌 경우:** hot-swap·rollback은 대상 DB에 저장된 지문을 재사용하므로
+  (구현 기록 15) 이 개정 **전** 백업·DB로 되돌리면 옛 정의(9표) 토큰이 다시 활성이 된다(방향은 안전 — 거짓 "같음"은 없고 거짓
+  "바뀜"만) → 그런 hot-swap·rollback 뒤에는 `ktgctl serving fingerprint-active`를 다시 돌린다. 관리 UI의 "데이터 동일" 배지는 인접
+  릴리스 토큰이 같을 때만 붙으므로, 개정 전 릴리스와 그 뒤 릴리스 사이에는 데이터가 같아도 붙지 않는다(표시만의 차이).
 
 ## 후속
 

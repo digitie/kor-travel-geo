@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from typing import Any, ClassVar
 
 import pytest
-from dagster import build_op_context
+from dagster import DagsterInstance, build_op_context
 from kortravelgeo.settings import Settings
 
 from kortravelgeo_dagster import source_rebuild_execute
@@ -148,6 +148,8 @@ async def test_source_rebuild_op_integrity_gate_failure_audits_and_raises(
 def test_source_rebuild_db_job_registered_and_op_name_differs() -> None:
     from kortravelgeo_dagster.definitions import defs
 
-    assert "source_rebuild_db" in {job.name for job in defs.resolve_all_job_defs()}
-    assert source_rebuild_execute.run_source_rebuild_db_op.name == "run_source_rebuild_db"
-    assert source_rebuild_execute.source_rebuild_db_job.name == "source_rebuild_db"
+    # 구조 검사는 선행 시험의 defs-state storage 수명에 의존하지 않는다.
+    with DagsterInstance.ephemeral():
+        assert "source_rebuild_db" in {job.name for job in defs.resolve_all_job_defs()}
+        assert source_rebuild_execute.run_source_rebuild_db_op.name == "run_source_rebuild_db"
+        assert source_rebuild_execute.source_rebuild_db_job.name == "source_rebuild_db"

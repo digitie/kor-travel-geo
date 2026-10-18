@@ -1,0 +1,31 @@
+{
+  "supersedes_path_only": "r2 root_merge_verification main_only_d4_docs_byte_preserved first path was incorrect and both git-show stdout were empty because exit status was not asserted; source/base/head/tree unchanged",
+  "manifest_sha": "5f58be530c9b58b7e423f9ae2c6fc68ef40855780053e932bf07a031aaf52c92",
+  "verification": "Each git show now check_output asserted successful exit and byte equality; exact four existing immutable blobs preserved",
+  "proof": [
+    {
+      "path": "docs/adr/070-odroid-host-and-empty-host-full-load.md",
+      "current_main_blob": "dd96d915d02c4bc20657d3aab08c049b4c9e2b4c",
+      "merge_tree_blob": "dd96d915d02c4bc20657d3aab08c049b4c9e2b4c",
+      "sha256": "550a5640b54fbeddb95d82889478102749540c5a3ff5f8c36a18ff3455e90a20"
+    },
+    {
+      "path": "docs/journal.md",
+      "current_main_blob": "0bf5c0ffbe5ebe2793fdf0f1606b129eef464490",
+      "merge_tree_blob": "0bf5c0ffbe5ebe2793fdf0f1606b129eef464490",
+      "sha256": "bc7f8124a48e399f521cc04551488e565395078a38ffb20d230fc520da8220cd"
+    },
+    {
+      "path": "docs/resume.md",
+      "current_main_blob": "436aedfc397d88da8ec62579d72a288215e134ab",
+      "merge_tree_blob": "436aedfc397d88da8ec62579d72a288215e134ab",
+      "sha256": "bca9d0f0837c29f3a317b8d7ea99f06bb8a6ff60c6f4b20497ed5b0a0ffc35a5"
+    },
+    {
+      "path": "docs/tasks.md",
+      "current_main_blob": "ce2005f2367c3596cf9a3561a97901392abaaf6b",
+      "merge_tree_blob": "ce2005f2367c3596cf9a3561a97901392abaaf6b",
+      "sha256": "46d2a18e3349f3ea556066eda236a499c4c5b0795666eaa3c2cd83ccf3cb0b57"
+    }
+  ]
+}

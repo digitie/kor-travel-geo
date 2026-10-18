@@ -1,0 +1,215 @@
+{
+  "schema": 1,
+  "purpose": "Geo589 독립 2리뷰 준비용 불변 입력. SOURCE_PASS·머지 판정·운영 수용 결과가 아니다.",
+  "repository": "https://github.com/digitie/kor-travel-geo",
+  "pr": "https://github.com/digitie/kor-travel-geo/pull/589",
+  "author_branch": "agent/claude-fp-drop-radius",
+  "base": "03269e2426beb0837b17a40726adc9a16f26b6a0",
+  "head": "a6a9fcdf09656c29828113ada12cf2990d1d5d31",
+  "state_at_check": "OPEN",
+  "mergeable_at_check": "MERGEABLE",
+  "source_changes_by_preparer": 0,
+  "review_verdict": null,
+  "independent_reviews_prepared": 2,
+  "independent_reviews_completed_by_this_manifest": 0,
+  "file_count": 8,
+  "files": [
+    {
+      "path": "CHANGELOG.md",
+      "git_blob_sha": "07d01192ab9324c278e5f1b4c4086f0b34134eb8",
+      "sha256": "abd734c4738ce656c4175f68dae2112734779a7a7521f83e26346a1cde500b66",
+      "bytes": 144440,
+      "additions": 3,
+      "deletions": 0
+    },
+    {
+      "path": "docs/adr/069-dataset-data-token.md",
+      "git_blob_sha": "eba8c314f95b6874bb2c09f0707c4b8d8d71a9a5",
+      "sha256": "7bebebfcdacd5dd2d99a359880f5c057b0b4f84b72965377180f6dc5e5ba27b0",
+      "bytes": 48773,
+      "additions": 30,
+      "deletions": 5
+    },
+    {
+      "path": "docs/adr/README.md",
+      "git_blob_sha": "f57ac6921bafb235699f6a963c70c5808df2c9d5",
+      "sha256": "46ace3acf72d5542c405830f4f25841eaf0d6ba9fba5c0566ebbfa33816b58f9",
+      "bytes": 15775,
+      "additions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "docs/api-reference/v2/dataset-version.md",
+      "git_blob_sha": "507644bd37f8c8e4874bcd65bea6e21e9da559f0",
+      "sha256": "ccfe83a29ea6050cb801abbbccff0ccbbe30c8d9e32e1585825f96c725afa19e",
+      "bytes": 9300,
+      "additions": 2,
+      "deletions": 1
+    },
+    {
+      "path": "src/kortravelgeo/infra/data_fingerprint.py",
+      "git_blob_sha": "ef479537b7320663fa2eaa4c8a7b3c43099228a2",
+      "sha256": "de7a65a1fff94138e40e8fc4d8cf251fa83643c71fb5dd29f36cafd3e5d5238d",
+      "bytes": 13250,
+      "additions": 11,
+      "deletions": 8
+    },
+    {
+      "path": "tests/integration/test_t325_data_fingerprint.py",
+      "git_blob_sha": "b250dd93109fb79ca6cd206166f6b6a99884c50e",
+      "sha256": "33a9b7cbc9f7c7df23e6d073b02f6962bddb71be36e6f9026148e963475926d7",
+      "bytes": 38998,
+      "additions": 32,
+      "deletions": 6
+    },
+    {
+      "path": "tests/unit/test_data_fingerprint_covers_serving_tables.py",
+      "git_blob_sha": "39c6ef81ad398279443e4adc394499ffdaad0f9d",
+      "sha256": "d5fb88cb5f6ca921bf9544dbbc9bac9449623a6c54e406a67b561b475900cd08",
+      "bytes": 17846,
+      "additions": 64,
+      "deletions": 1
+    },
+    {
+      "path": "tests/unit/test_t325_data_token.py",
+      "git_blob_sha": "e6ba89501acc35a072304f45ef497458491fb0f3",
+      "sha256": "3ef86907d7274a86c8e174ae3015b15189c341c9b6b9c0ddcfa6f4f32a80537f",
+      "bytes": 22526,
+      "additions": 2,
+      "deletions": 2
+    }
+  ],
+  "ci": [
+    {
+      "name": "backend",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/digitie/kor-travel-geo/actions/runs/39093110975/job/117573840741"
+    },
+    {
+      "name": "openapi",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/digitie/kor-travel-geo/actions/runs/39093110974/job/117573840685"
+    },
+    {
+      "name": "integration-postgis",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/digitie/kor-travel-geo/actions/runs/39093110975/job/117573840695"
+    },
+    {
+      "name": "dagster",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/digitie/kor-travel-geo/actions/runs/39093110975/job/117573840752"
+    },
+    {
+      "name": "frontend",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/digitie/kor-travel-geo/actions/runs/39093110975/job/117573840810"
+    }
+  ],
+  "local_git": {
+    "usable_immutable_repository_confirmed": false,
+    "interpretation": "아래 후보에서 cat-file로 base/head를 모두 읽을 수 없었다. 전체 로컬 객체가 없다는 단정이 아니라 현재 접근 가능한 검토 입력을 확보하지 못했다는 뜻이다. fetch/repair/clone은 실행하지 않았다.",
+    "attempts": [
+      {
+        "path": "/mnt/f/dev/kor-travel-geo",
+        "base_cat_file_exit": 128,
+        "head_cat_file_exit": 128,
+        "reason": "not a git repository"
+      },
+      {
+        "path": "/mnt/f/dev/kor-travel-geo-claude",
+        "base_cat_file_exit": 128,
+        "head_cat_file_exit": 128,
+        "reason": "Git 포인터가 F:/dev/python-kraddr-geo/.git/worktrees/python-kraddr-geo-claude로 연결되어 Linux에서 해석 실패"
+      },
+      {
+        "path": "/home/digitie/dev/kor-travel-geo-claude-test",
+        "base_cat_file_exit": 128,
+        "head_cat_file_exit": 128,
+        "reason": "cat-file 실패; 읽을 수 있는 두 commit 확인 못함"
+      },
+      {
+        "path": "/home/digitie/dev/kor-travel-geo-codex-remaining-docs-c-20261017",
+        "base_cat_file_exit": 128,
+        "head_cat_file_exit": 128,
+        "reason": "could not get object info"
+      },
+      {
+        "path": "/mnt/f/dev/python-kraddr-geo/.git",
+        "base_cat_file_exit": 128,
+        "head_cat_file_exit": 128,
+        "reason": "명시 --git-dir로도 not a git repository"
+      }
+    ],
+    "root_preparation_if_needed": "root가 별도 Linux clone에 두 commit 객체를 확보할 수 있다. 원 author WT·Git 포인터를 고치지 않는다. 현재도 GitHub contents?ref=<exact head>로 파일을 읽을 수 있으며 위 blob/SHA256과 대조 가능하다.",
+    "read_only_commands_after_objects_exist": [
+      "git -C <독립-clone> cat-file -t 03269e2426beb0837b17a40726adc9a16f26b6a0",
+      "git -C <독립-clone> cat-file -t a6a9fcdf09656c29828113ada12cf2990d1d5d31",
+      "git -C <독립-clone> diff --stat 03269e2426beb0837b17a40726adc9a16f26b6a0 a6a9fcdf09656c29828113ada12cf2990d1d5d31",
+      "git -C <독립-clone> diff 03269e2426beb0837b17a40726adc9a16f26b6a0 a6a9fcdf09656c29828113ada12cf2990d1d5d31 -- <8개-소유경로>"
+    ]
+  },
+  "review_brief": {
+    "scope": "8파일 전체 diff와 관련 fingerprint→activation→token 및 실제 serving-table coverage 연결을 독립 검토한다. 기존 author 결과·다른 reviewer 원문/모형은 독립 판정 전에 공유·합산하지 않는다.",
+    "checkpoints": [
+      "region_radius_parts는 같은 릴리스의 tl_scco 원천에서 재생성되는 파생물이라는 ADR043 불변식과 실제 경로의 정합을 확인한다.",
+      "fingerprint 대상9→8, 제외 allowlist에 이유가 있고 모든 실제 v2 serving table이 대상 또는 명시적 파생 예외로 검출되는지 확인한다.",
+      "파생 표만 재생성·변경하면 같은 원천의 token이 유지되고, tl_scco_sig 등 원천의 실제 변경·재생성은 token 변경으로 드러나는지 검토한다.",
+      "잘못 region_radius_parts를 다시 대상에 넣거나 파생 원천 대상을 빼는 mutant가 각각 실패하는 회귀의 판별력을 확인한다.",
+      "원천 geometry 점수/Box2D 요약이 같고 내부 경계만 움직이는 변화의 민감도가 줄어드는 수용 한계를 ADR069:438–443과 source가 숨기지 않는지 확인한다.",
+      "정의 변경으로 동일 데이터 token이 한 번 달라짐을 명시한다. 원천 무변경이면 옛9표 token과 새8표 token까지 같아야 한다고 잘못 요구하지 않는다.",
+      "옛 정의 backup으로 hot-swap/rollback하면 옛 token이 복귀할 수 있어 배포·복원 후 기존 fingerprint-active 재계산이 필요한 정책을 확인한다.",
+      "배포 후 활성 지문 재계산과 Map/Concierge 첫 기준선 수용은 별도 단계다. 현재 baseline0건은 문서의 관측 시점이지 이번 리뷰의 DB 증명이 아니다.",
+      "이미 token이 저장된 소비자까지 새 기준선0으로 자동 초기화된다고 해석하지 않는다. ADR069 D8의 없음→첫값 baseline, 두 값이 다름→재해석 구분을 보존한다.",
+      "D4=21600초 유지, recovery/run max_runtime/maintenance timeout 튜닝은 이8파일 범위 밖이다. 이를 재논의하거나590/591 기능을589에 추가하지 않는다.",
+      "문서·API 설명의 표 개수/정의·geometry 한계·한 번 변경·badge/hot-swap 설명이 source 및 기존 호환 계약과 일치하는지 확인한다."
+    ],
+    "must_read_minimum": [
+      "AGENTS.md:43–58 테스트 판별력·실제 보호대상 확인,88–111 Linux/DB 경계·runbook,139 이후 문서 라우터",
+      "README.md:16–48 resume/journal 및 상세 정본 라우터",
+      "SKILL.md:Linux-only/의존 방향/PR review body·thread 확인",
+      "docs/runbooks/agent-workflow.md 및 agent-failure-patterns.md의 관련 절",
+      "docs/resume.md 최신 G01절, docs/tasks.md:178–195, ADR069 D2/D3/D8 및2026-10-18 개정",
+      "ADR043의 같은 릴리스 파생 표 재생성 불변식 관련 절"
+    ],
+    "focused_unit_commands_not_executed": [
+      "pytest -q tests/unit/test_data_fingerprint_covers_serving_tables.py tests/unit/test_t325_data_token.py",
+      "ruff check src/kortravelgeo/infra/data_fingerprint.py tests/unit/test_data_fingerprint_covers_serving_tables.py tests/unit/test_t325_data_token.py tests/integration/test_t325_data_fingerprint.py",
+      "git diff --check <base> <head>"
+    ],
+    "execution_conditions": "위 명령은 검토 계획이며 실행하지 않았다. 독립 소유 Linux/ext4 mirror·공개 의존·sterile 환경·관련 conftest side effect 확인 후, 리뷰어에게 허용된 실행 범위에서만 사용한다. env 파일이나 운영 DSN을 읽지 않는다. AST/순수 fixture 검증은 별도 소유 scratch에서 가능하다.",
+    "canonical_workflow_reference_not_new_gate": [
+      "pytest -q; ruff check .; mypy src/kortravelgeo scripts/export_openapi.py; lint-imports",
+      "python scripts/export_openapi.py --check --output openapi.json",
+      "Dagster 패키지 pytest 및 frontend scripts/frontend_check.sh는 기존 CI/workflow 범위이며 현재5개 CI SUCCESS를 새 실행 증거로 대체하지 않는다."
+    ],
+    "integration_reference": {
+      "file": "tests/integration/test_t325_data_fingerprint.py",
+      "relevant_tests": [
+        "test_same_data_reactivation_keeps_the_token",
+        "test_one_row_change_in_each_serving_table_changes_the_token",
+        "test_derived_region_radius_parts_alone_does_not_move_the_token",
+        "test_a_source_change_rebuilt_into_region_radius_parts_still_moves_the_token"
+      ],
+      "status": "현 head integration-postgis CI SUCCESS는 기존 원격 증거다. 준비 담당자는 DB·SDK·테스트를 실행하지 않았다. 로컬 DB/production 검증을 새로 허가하지 않으며 이번 소스 리뷰가 production 재계산을 머지 선행 gate로 요구하지 않는다."
+    }
+  },
+  "not_run": [
+    "독립 제품 FULL 리뷰 판정",
+    "단위/통합/전체 suite 실행",
+    "새 CI 실행",
+    "source/branch/index/WIP 변경",
+    "PR메타데이터/ready/merge",
+    "Git fetch/clone/repair",
+    "env/secret 조회",
+    "운영 SSH/provider/DB/SDK/컨테이너/daemon 조작",
+    "배포 후 활성 지문 재계산",
+    "Map/Concierge 실제 baseline 수용"
+  ],
+  "authority": "이 manifest는 준비 작업이다. 기존 두 독립 리뷰 요구를 구현하며 사용자 추가 승인요건을 만들지 않는다. root의 기존 위임을 철회하지 않는다."
+}
