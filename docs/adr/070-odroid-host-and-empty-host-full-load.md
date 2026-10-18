@@ -227,6 +227,13 @@ fact base §E1; 런북 전제 `docs/deploy/staging-full-load.md:31-33`는 운영
 - 수용 기준(효과로 결박 — "소요 < 상한의 70 %"는 (ⅱ)에서 정의상 참(66.7 %)이라 쓰지 않는다): 풀로드 run이 cancel 없이
   SUCCESS; (ⅱ)면 태그 값 == `round(실측 s × 1.5)`이고 `test_definitions.py` 기대값이 그 숫자와 같으며 한 줄 바꾸면 빨갛다;
   (ⅰ)은 실측(또는 ×3 산식 근거)이 21600 s를 **넘었을 때만** 고르고 그 숫자를 journal에 적는다 — 넘지 않으면 (ⅰ)을 고르지 않는다.
+- **결정(2026-10-18, 소유자) — 21600 s 유지(코드 변경 없음, D4 닫힘).** odroid standalone `mv_refresh` 1회 실측 **2,157 s**(Dagster
+  run `2bd07f07…`, 조용한 창, code-server 안 in-process 실행 — journal 2026-10-18). (ⅱ)의 산식값 round(×1.5) = 3,235 s는 채택하지
+  않는다: ① 기록된 운영 이력이 그보다 길다 — n150 concurrent 최대 **5,760 s**(96 min, load 14~18)·swap 4,380 s; ② 부하 시 한 문장이
+  30분을 넘은 사례(odroid 2026-10-15, load ≈20); ③ MV refresh·`region_radius_parts`·릴리스 기록이 각자 commit하므로 run이 중간에
+  끊기면 새 MV가 **옛 `data_token`** 아래 서빙될 위험이 있고, 지문 상한 30 min(ADR-069 D5)과 겹치면 그 창이 커진다. 실측은 21600 s의
+  10 %이고 이력 최대도 27 %라 (ⅰ)(24 h)도 필요 없다. `recovery.py`·`test_definitions.py` 기대값은 21600 그대로. 상한은 공용 daemon이
+  켜졌을 때만 집행된다(현재 OFF, 재가동은 소유자 결정).
 
 ### D5 — odroid에서 geo 백업·restore drill은 off(켜지 않는다)
 

@@ -178,16 +178,17 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   **2026-10-18 (G-01, by claude).** 2026-10-15 첫 standalone 시도(`job_fb535a34…`)는 30분 문장 상한(`SET LOCAL '30min'`)에
   걸려 실패했다 — 원인·실측은 journal 2026-10-18. 문장 상한을 `MAINTENANCE_STATEMENT_TIMEOUT='6h'`로(ADR-068 개정, PR
   `agent/claude-g01-locsum-link-join`, #583). **standalone 실측 완료(2026-10-18)**: 소유자 결정으로 code-server 안 `dagster job
-  execute`(queue·daemon 밖) — 2156.9 s SUCCESS. D4 (ⅱ) 산식값 3235 s는 **draft PR 보류** — n150 운영 이력(4380~5760 s)과 경합 사례보다
-  짧아 소유자 재확인 필요(journal 2026-10-18). CS anon 최대 0.508 GiB·OOM 0,
+  execute`(queue·daemon 밖) — 2156.9 s SUCCESS. **D4 닫힘(소유자 결정 2026-10-18): 21600 s 유지**(ADR-070 D4 결정 절 — 3235 s
+  안 #586은 닫음). CS anon 최대 0.508 GiB·OOM 0,
   PG anon 0.343 GiB(memory.current가 3 GiB 상한에 붙어 reclaim, OOM 0), 최고 73.3 °C. 새 `data_token`은 **바뀌었다** —
   `region_radius_parts`만 달라졌다(아래 후속 d). schedule·sensor는 여전히 끔(재가동은 별도 소유자 결정).
-  - [ ] **G-01 후속 d (소유자 결정)** — `region_radius_parts`(매 refresh마다 `ST_Subdivide`로 재생성)의 지문이 플랫폼(n150
-    PostGIS 3.5.2/x86 → odroid 3.5.3/arm64)에 따라 달라져 원천 무변경인데 `data_token`이 바뀐다. 지문에서 빼고 원천
-    `tl_scco_*`로 갈음할지, 같은 호스트 재실행 결정성부터 확인할지. **이 결정 전에는 Map·concierge 기준선 기록·센서 활성화를
-    하지 않는다**(결정적이지 않으면 refresh마다 토큰이 바뀌어 소비자 전량 재계획).
+  - [x] **G-01 후속 d 소스 결정·구현** — #589 머지 047536dc: 파생 region_radius_parts를 제외하고 원천
+    tl_scco_* 지문을 유지한다. 독립 두 SOURCE PASS·CI5 SUCCESS, [원문·정정 기록](reviews/2026-10-18-fingerprint-final.md).
+    플랫폼 차이는 추정이며 같은 호스트 매 실행의 비결정성이 실측됐다는 뜻은 아니다.
+  - [ ] **G-01 후속 d 운영 수용** — 새 정의의 API/CS 적용·활성 지문 재계산 뒤 Map/concierge 첫 기준선과 기존 토큰
+    차이를 구분해 검증한다. 이번 소스 머지는 운영 완료가 아니다. daemon OFF·센서 비활성 유지.
   - [ ] **G-01 daemon ON 전제** — 공용 daemon을 켜면 `dagster/max_runtime`이 집행된다(mv_refresh schedule은 없고 발화는
-    admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)와 D4 값(재확인)을 닫는다.
+    admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)를 닫는다. D4는 21600 유지로 닫혔고 daemon OFF 지시는 계속 유효하다.
   - [x] **G-01 후속 a — lock 대기**(2026-10-18, #590: `LOCK TABLE … ACCESS EXCLUSIVE`를 먼저 `lock_timeout 2s`로, 그 획득만 30 s 간격
     최대 1 h 재시도 — 백업(`pg_dump`의 ACCESS SHARE)과 겹쳐도 reader를 한 번에 2 s 이상 줄 세우지 않고 끝까지 기다린다). **남은 것**:
     획득 뒤 보유(재생성~commit, 6 h 문장 상한) — `_next` 표 재생성 뒤 rename swap으로 줄이는 것은 별도 후속(아래 a2). 원문: `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로

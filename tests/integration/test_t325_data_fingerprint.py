@@ -46,7 +46,7 @@ from kortravelgeo.infra.admin_repo import (
 from kortravelgeo.infra.dataset_ref import DatasetRefCache
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.publication import load_job_publication_guard
-from kortravelgeo.loaders.postload import refresh_mv
+from kortravelgeo.loaders.postload import refresh_mv, refresh_region_radius_parts
 from kortravelgeo.settings import Settings
 from tests.integration._pg_guard import require_disposable_database
 
@@ -227,11 +227,6 @@ _SENSITIVITY_CASES: dict[str, tuple[str, str]] = {
         f"INSERT INTO tl_scco_li (li_cd, li_kor_nm, geom) VALUES ('9911010121', '구리', {_SQUARE})",
         "UPDATE tl_scco_li SET li_kor_nm = '신리' WHERE li_cd = '9911010121'",
     ),
-    "region_radius_parts": (
-        "INSERT INTO region_radius_parts (level, code, name, part_no, geom)"
-        f" VALUES ('sigungu', '99110', '구군', 1, {_SQUARE})",
-        "UPDATE region_radius_parts SET name = '신군' WHERE code = '99110'",
-    ),
     "tl_sppn_makarea": (
         "INSERT INTO tl_sppn_makarea (sig_cd, makarea_id, makarea_nm, geom, source_file)"
         f" VALUES ('99110', 'M1', '구구역', {_SQUARE}, 't325.shp')",
@@ -261,6 +256,37 @@ async def test_one_row_change_in_each_serving_table_changes_the_token(
     after = await _activate(engine)
     assert before is not None and after is not None
     assert before != after, f"{table}: a one-row change left data_token unchanged"
+
+
+async def test_derived_region_radius_parts_alone_does_not_move_the_token(
+    engine: AsyncEngine,
+) -> None:
+    """ADR-069 amendment 2026-10-18: the ST_Subdivide rebuild is noise — only its sources count."""
+    await _exec(
+        engine,
+        "INSERT INTO region_radius_parts (level, code, name, part_no, geom)"
+        f" VALUES ('sigungu', '99110', '구군', 1, {_SQUARE})",
+    )
+    before = await _activate(engine)
+    await _exec(engine, "UPDATE region_radius_parts SET part_no = 2 WHERE code = '99110'")
+    await _exec(engine, "UPDATE region_radius_parts SET name = '신군' WHERE code = '99110'")
+    after = await _activate(engine)
+    assert before is not None and before == after
+
+
+async def test_a_source_change_rebuilt_into_region_radius_parts_still_moves_the_token(
+    engine: AsyncEngine,
+) -> None:
+    await _exec(
+        engine,
+        f"INSERT INTO tl_scco_sig (sig_cd, sig_kor_nm, geom) VALUES ('99110', '구군', {_SQUARE})",
+    )
+    await refresh_region_radius_parts(engine)
+    before = await _activate(engine)
+    await _exec(engine, "UPDATE tl_scco_sig SET sig_kor_nm = '신군' WHERE sig_cd = '99110'")
+    await refresh_region_radius_parts(engine)
+    after = await _activate(engine)
+    assert before is not None and after is not None and before != after
 
 
 async def test_polygon_vertex_added_inside_the_same_bbox_changes_the_token(

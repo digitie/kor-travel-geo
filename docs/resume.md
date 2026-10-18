@@ -1,13 +1,23 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #590 main 통합 후보
+
+main535e26b와 기존 lock 대기 보강을 합쳤다. D4=21600 확정·Daemon OFF와
+lock 획득 대기 보강/a2 보유 시간 잔여를 모두 보존했다. 관련 unit11·Ruff PASS이며
+독립2리뷰·새 head CI·root merge/운영 수용은 후속이다. 이번 작업의 운영 실행은 없다.
+
+
 
 ## 최신 재개 지점 (2026-10-18)
+
+- #589 소스는 047536dc로 머지됨: 두 독립 FULL SOURCE PASS/CI5 SUCCESS, 파생 표 지문 제외와 원천 coverage 보존. [검토·오류 정정·원문](reviews/2026-10-18-fingerprint-final.md)을 따른다.
+- 현재 새 코드의 실제 API/CS 적용과 fingerprint-active 재계산은 미실행이다. 그 뒤 Map/Concierge의 첫 기준선/기존 토큰 규칙을 구분해 운영 수용한다. daemon OFF·센서 비활성 유지, D4=21600 결정은 닫혔다. 모든 Track1/2 후 수집 CPU·메모리 개선 순서다.
 
 - G-01: odroid `mv_refresh` 30분 취소의 원인은 리프의 `SET LOCAL '30min'`(세션 0을 낮춤). 문장 상한을 6h 상수로(ADR-068
   개정) 고치는 PR(`agent/claude-g01-locsum-link-join`). 실측 UPDATE 120 s·MV 정의 쿼리 510 s·지문 240 s(odroid 조용한 창).
   #583 머지(`d8370d0`)·odroid geo CS 배포 완료(이미지 `48799d51`, API/UI 불변). standalone `mv_refresh` 실측 2156.9 s(code-server
-  안 in-process). 지문 상한 30 min PR. D4 산식값 3235 s는 운영 이력보다 짧아 draft 보류(소유자 재확인). 새 `data_token`은
-  `region_radius_parts` 차이로 바뀜(플랫폼 차이 추정, 후속 d — 결정 전 소비자 기준선·센서 금지). daemon ON 전제는 tasks G-01.
+  안 in-process). 지문 상한 30 min PR. D4는 21600 s 유지로 닫힘(소유자 결정, #586 닫음). 새 `data_token`은
+  `region_radius_parts` 차이로 바뀜(플랫폼 차이 추정). 후속 d 소스 결정은 #589로 구현·머지됐고 새 정의의 실제 적용·재계산과 소비자 수용은 남았다. daemon ON 전제는 tasks G-01.
 - G-02/03/04/09/10/11 읽기 전용 확인 결과는 journal 2026-10-18.
 
 ## 이전 재개 지점 (2026-10-17)
