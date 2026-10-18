@@ -177,9 +177,17 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
 
   **2026-10-18 (G-01, by claude).** 2026-10-15 첫 standalone 시도(`job_fb535a34…`)는 30분 문장 상한(`SET LOCAL '30min'`)에
   걸려 실패했다 — 원인·실측은 journal 2026-10-18. 문장 상한을 `MAINTENANCE_STATEMENT_TIMEOUT='6h'`로(ADR-068 개정, PR
-  `agent/claude-g01-locsum-link-join`). **D4(run 상한)는 아직 열려 있다** — standalone 실측이 없다. 공용 run coordinator가
-  `QueuedRunCoordinator`라 daemon OFF(소유자 의도) 동안 admin `refresh-mv`는 QUEUED에 머문다 → 실측 창에 daemon을 켤지(다른
-  tenant의 QUEUED run·RUNNING schedule도 함께 돈다) 소유자 결정 필요. schedule·sensor 재가동은 하지 않는다.
+  `agent/claude-g01-locsum-link-join`, #583). **standalone 실측 완료(2026-10-18)**: 소유자 결정으로 code-server 안 `dagster job
+  execute`(queue·daemon 밖) — 2156.9 s SUCCESS. D4 (ⅱ) 산식값 3235 s는 **draft PR 보류** — n150 운영 이력(4380~5760 s)과 경합 사례보다
+  짧아 소유자 재확인 필요(journal 2026-10-18). CS anon 최대 0.508 GiB·OOM 0,
+  PG anon 0.343 GiB(memory.current가 3 GiB 상한에 붙어 reclaim, OOM 0), 최고 73.3 °C. 새 `data_token`은 **바뀌었다** —
+  `region_radius_parts`만 달라졌다(아래 후속 d). schedule·sensor는 여전히 끔(재가동은 별도 소유자 결정).
+  - [ ] **G-01 후속 d (소유자 결정)** — `region_radius_parts`(매 refresh마다 `ST_Subdivide`로 재생성)의 지문이 플랫폼(n150
+    PostGIS 3.5.2/x86 → odroid 3.5.3/arm64)에 따라 달라져 원천 무변경인데 `data_token`이 바뀐다. 지문에서 빼고 원천
+    `tl_scco_*`로 갈음할지, 같은 호스트 재실행 결정성부터 확인할지. **이 결정 전에는 Map·concierge 기준선 기록·센서 활성화를
+    하지 않는다**(결정적이지 않으면 refresh마다 토큰이 바뀌어 소비자 전량 재계획).
+  - [ ] **G-01 daemon ON 전제** — 공용 daemon을 켜면 `dagster/max_runtime`이 집행된다(mv_refresh schedule은 없고 발화는
+    admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)와 D4 값(재확인)을 닫는다.
   - [ ] **G-01 후속 a** — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
   - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중

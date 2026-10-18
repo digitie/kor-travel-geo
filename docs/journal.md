@@ -2,6 +2,54 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-18 — G-01 standalone mv_refresh 실측·D4 상한, 지문 30 min, G-06/G-07 live(by claude)
+
+**실행 방식과 이유.** 소유자 결정(2026-10-18): queue·daemon을 거치지 않고 geo code-server 안에서 1회. 공용 instance가
+`QueuedRunCoordinator`이고 daemon OFF라 API `refresh-mv`(GraphQL launchRun)는 QUEUED에 머문다. 그래서 API 런처
+(`_launch_control_job`)와 **같은 함수**로 load_jobs 행을 만들고(`AdminRepository.insert_load_job(kind="mv_refresh",
+payload={"strategy":"concurrent"}, executor="dagster")`, 감사 `mv_refresh.submit`도 같은 형식), 같은 run config
+(`ops.run_mv_refresh.config = {job_id, payload}`)·같은 tag(`kor_travel_geo.job_id`)로 `dagster job execute -m
+kortravelgeo_dagster.definitions -j mv_refresh`를 실행했다. 이 CLI는 정의된 job을 그대로 쓰므로 `geo_job`의 recovery 정책
+tag(`dagster/max_runtime`, `max_retries 0`, `kortravelcommon/*`)와 multiprocess executor(max 1)가 그대로 붙고(run 기록에서 확인),
+op 본문(`execute_load_job` → `run_mv_refresh` → `record_mv_refresh_release` → 지문)이 정식 경로와 동일하다. 다른 점은 run
+coordinator를 안 탄다는 것(`dagster/code_location` tag 없음 → 다른 tenant QUEUED run 3건과 무관, CS 헬스체크의 고아 reaper
+대상도 아님)뿐이다. `execute_job` 직접 호출 대신 CLI를 고른 것은 같은 instance·reconstructable job 해석을 코드 없이 쓰기 때문.
+
+**결과(Dagster run `2bd07f07…`, load_jobs `job_89e919f6…`, 2026-10-18 00:18~00:54Z, odroid 조용한 창).** SUCCESS, Dagster run
+wall **2156.9 s**(load_jobs 2134 s; CLI 프로세스 2178.5 s). 단계: 링크 해소 UPDATE 2개+ANALYZE 194 s, `REFRESH MATERIALIZED VIEW
+CONCURRENTLY` 2개 1623 s(이전 30분 문장 상한이었다면 이 단계가 위험했다), 릴리스 기록(row count·지문·`region_radius_parts`) 317 s.
+새 active 릴리스 `9a6b5f13…`(snapshot `d422bb24…`), `mv_geocode_target` 6,416,637(불변), locsum NULL 3,498,719·navi NULL 1,409(불변).
+**G-08**(cgroup v2, 10 s 샘플 208개): geo CS memory.current 최대 0.544 GiB·anon 최대 **0.508 GiB**·memory.peak 0.553 GiB·oom_kill 0;
+공용 PG anon 최대 **0.343 GiB**·shmem 0.791 GiB·memory.current가 상한 3 GiB에 붙음(memory.events `max` 67,991 — page cache reclaim)·
+oom_kill 0·swap peak 3.8 MiB. 온도 최고 **73.3 °C**(시작 52.5), CPU 1.416→0.816 GHz까지 내려감(thermal guard), load 최대 5.67.
+D4: 21600 s 미만 → 지시된 산식 (ⅱ)이면 `mv_refresh` 3235 s(round(2156.9 × 1.5)) — **draft PR로 보류**: 독립 리뷰가 이 값이
+기록된 모든 운영 `mv_refresh`보다 짧다고 지적했다(n150 concurrent 96 min=5760 s·swap 73 min=4380 s, Dagster 1.22 h·load_jobs
+1.59 h; 2026-10-15 odroid 경합 시 한 문장 >30 min). 이번 표본은 n=1·조용한 창·concurrent·원천 무변경(최선에 가까움)이고 swap은
+odroid에서 잰 적이 없다. 상한은 daemon ON일 때만 집행되므로(지금 OFF) 소유자 재확인 뒤 머지한다. 또 3235 s와 지문 30 min이
+겹치면 MV commit 뒤·릴리스 기록 전에 run이 끊겨 새 MV가 옛 `data_token` 아래 서빙되는 창이 생긴다(리뷰 M1).
+
+**data_token이 바뀌었다(9fd1432f → 54ba1bc6, sha256 앞 8).** 원천은 그대로다. 같은 지문 SQL을 n150 옛 geo DB(같은 dump 원본,
+release `e0db4ff8`)에 읽기 전용으로 돌리면 옛 토큰과 같은 값(sha `9fd1432fd257`)이 나오고, 표별로 odroid 현재와 비교하면 9개 중
+**`region_radius_parts`만 다르다**(`mv_geocode_target` 포함 나머지 8개 동일). concurrent refresh도 `refresh_region_radius_parts`로
+그 표를 `ST_Subdivide`로 다시 만들고, 지문은 그 도형 요약(점 수·Box2D)을 해시하므로 PostGIS/GEOS·아키텍처(n150 3.5.2 x86 → odroid
+3.5.3 arm64) 차이가 토큰을 바꾼 것으로 **추정**한다(같은 호스트 재실행 결정성·GEOS 버전은 아직 확인 안 함). 소비자 영향은 지금 0이다(Map 기준선 행 0·concierge 커서 없음 — 2026-10-18 G-02 관측). 처리는
+소유자 결정(tasks G-01 후속 d).
+
+**지문 상한 10 min → 30 min**(소유자 결정, `DATA_FINGERPRINT_STATEMENT_TIMEOUT`, ADR-069 D5 개정, 이 PR). 이번 run 안 지문은
+포함 317 s 단계, 단독 측정 245.6 s. 일부러 빨갛게: 상수를 `10min`으로 되돌리면 unit 2건 FAIL.
+
+**G-06/G-07 live UI**(odroid `12505`, 관리자 로그인 — 비밀번호는 env로만 주입, 실행 로그·결과물에서 문자열 0건 확인 뒤 결과물
+삭제). 실행 위치: n150은 npm 12 기본 정책(`allow-remote = none`, GitHub tarball 의존 거부)이라 우회하지 않고 **로컬 Windows**
+(Node 25.9/npm 11, Playwright 1.61 chromium, AGENTS.md의 Windows fallback)에서 새 clone `main f338017` + `npm ci`. 기존 읽기 전용 live
+스펙 7개(dataset-version·admin-browser-readonly·viewport-overflow·drawer-focus·browser-flows·admin-api-readonly·api-correctness):
+**80 passed / 3 skipped**(키 생성 mutation 1건은 env 미설정으로 skip, match-set·reconcile 데이터 없음 2건). 기존 스펙에 data_token
+UI·geometry timeout 화면이 없어 커밋하지 않은 임시 읽기 전용 스펙 4개를 데스크톱·모바일(390×844)에서 각각 **4/4 PASS**: releases
+표의 `data_token`(active `dd1-…`)·superseded 행 "지문 없음" 배지와 사유 도움말·상세 대화상자 live preview; releases 조회 503을
+page.route로 주입 → "일부 ops 데이터 로드 실패" 경고 → 재조회 복구; `/debug/geocode`에서 live 응답에 `geometry_error:
+statement_timeout`을 주입 → "도형 조회 경고"+좌표 유지·오류 alert 없음 → 다음 실행 복구; 지연시킨 live 요청을 취소 → "요청을
+취소했습니다"·늦은 응답 무시 → 재실행. "데이터 동일" 배지는 연속 같은 토큰이 없어(당시) live 재현 불가 — 단위 테스트(CI frontend)로
+갈음. 실행 시점은 mv_refresh 전(관리자 비밀번호는 저장된 해시와 일치해 변경 없음).
+
 ## 2026-10-18 — G-01 배포(odroid geo CS)와 G-06/G-07 확인 범위(by claude)
 
 - #583 머지(`d8370d0`, CI 5/5 green — integration-postgis가 새 모듈 3건 포함 skipped=0) 뒤 odroid geo code-server만
