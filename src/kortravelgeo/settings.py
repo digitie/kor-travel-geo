@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     pg_max_overflow: int = Field(default=5, ge=0)
     pg_pool_timeout_ms: int = Field(default=1_000, ge=1)
     pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
+    #: PostgreSQL ``client_connection_check_interval`` for this engine's sessions (0 = server
+    #: default, off). The Dagster maintenance engine turns it on so a statement whose run worker
+    #: died is cancelled by the server instead of running on (G-01 follow-up b).
+    pg_client_connection_check_interval_ms: int = Field(default=0, ge=0)
     pg_search_path: str = "public,x_extension"
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
     pg_prepare_threshold: int | None = Field(default=5, ge=0)

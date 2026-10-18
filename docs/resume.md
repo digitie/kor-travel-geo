@@ -1,5 +1,29 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #591 제품 검증 정산
+
+제품78ea197의 CI 5개 성공과 독립 두 리뷰의 P2 해소를 확인했다. CHANGELOG에
+유지보수 연결 검사 10초의 범위와 한계를 추가했다. 배포/실제 운영 수용은 남아 있다.
+[원문과 CI 근거](reviews/2026-10-18-worker-connection-closure/README.md)를 보존한다.
+
+
+## 2026-10-18 — #591 통합시험 child의 DSN argv 제거
+
+#591 통합시험의 DSN은 argv 대신 기존 상속 환경에서 읽는다.
+inert 회귀2 RED→GREEN/관련11·Dagster150·Ruff PASS, 실제 DB·signal 실행0이다.
+기존 구조 smoke 수명 보강과 제품GUC·D4=21600·Daemon OFF는 유지한다.
+정확 새 head CI·독립 post-fix2리뷰·root merge/운영 수용은 별도다.
+
+
+## 2026-10-18 — #591 CI weakref 수명 보강 후보
+
+main535e26b를 병합하고 정의 등록 smoke만 명시 ephemeral instance 범위로 격리했다.
+actual SDK orphan defs-state fixture는 원본 RED→보강 GREEN, 수정 후 단독1/순서22/
+전체 Dagster150·Ruff PASS다. 원본도 sterile전체150 PASS라 CI 선행 오염원은 미확정이다.
+제품 job/설정/SDK pin·D4=21600은 그대로다. 독립2리뷰·새 CI·root merge 및
+G-01 실제 운영 수용은 후속이며 Daemon OFF를 유지한다.
+
+
 
 ## 최신 재개 지점 (2026-10-18)
 

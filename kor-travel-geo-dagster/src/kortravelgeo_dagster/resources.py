@@ -194,6 +194,13 @@ def _dispose_async_engine(engine: Any) -> None:
         _run_async_resource_teardown(cast("Awaitable[object]", dispose_result))
 
 
+#: G-01 follow-up b: a maintenance statement can run for hours (6 h ceiling). If its run worker
+#: dies (run monitor terminate, OOM, container recreate) PostgreSQL otherwise keeps executing it —
+#: holding its locks — until it ends. With this set, the server polls the client socket while the
+#: query runs and cancels it within about this interval once the client is gone (Linux only).
+MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS = 10_000
+
+
 def _maintenance_engine_settings(settings: Settings) -> Settings:
     """Return ``settings`` with the serving ``statement_timeout`` disabled.
 
@@ -211,9 +218,15 @@ def _maintenance_engine_settings(settings: Settings) -> Settings:
     protected too (ADR-066 §7 — the Dagster runtime is a maintenance engine).
 
     ``model_copy`` does not re-validate, so the ``ge=1`` field bound is intentionally
-    bypassed here — ``0`` is a valid PostgreSQL sentinel meaning "no timeout".
+    bypassed here — ``0`` is a valid PostgreSQL sentinel meaning "no timeout". It also turns on
+    ``client_connection_check_interval`` (:data:`MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS`).
     """
-    return settings.model_copy(update={"pg_statement_timeout_ms": 0})
+    return settings.model_copy(
+        update={
+            "pg_statement_timeout_ms": 0,
+            "pg_client_connection_check_interval_ms": MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS,
+        }
+    )
 
 
 @resource(description="AsyncAddressClient bound to the kor-travel-geo app DB (KTG_PG_DSN).")
