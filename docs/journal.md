@@ -1,5 +1,18 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-18 — #591 통합시험 child의 DSN argv 제거
+
+독립 P2에 따라 dead-client 통합시험의 password-bearing DSN을 child argv에서
+제거했다. child는 기존 상속 KTG_TEST_PG_DSN 환경에서 읽고 app/interval 인자만 받는다.
+표준 실행/개별 SQL·제품 engine/GUC·실제 kill 효과 검증은 그대로다.
+소유 inert subprocess/Settings·engine 대역 회귀는 원본2 FAIL→수정2 PASS,
+관련 engine회귀까지11 PASS(1.12초), 전체 Dagster150 PASS(7.90초)·Ruff PASS다.
+회귀에서 실제 DB/OS signal/자식 process는 실행하지 않았다. env는 권한 소유자가
+읽을 수 있으므로 새 비밀 저장소나 process env 완전 비공개 보장으로 확대하지 않는다.
+원 argv 노출/CI 실패/앞선 smoke 수명 보강을 보존하며 정확 새 head CI와 두 독립
+post-fix 판정은 별도다. 운영·provider·worker/Daemon은 실행하지 않았다.
+
+
 ## 2026-10-18 — #591 CI 정의 등록 smoke의 instance 수명 격리
 
 사용자 takeover 위임으로 d8f7f0f에 main535e26b를 일반 merge했다.

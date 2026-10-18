@@ -45,19 +45,19 @@ pytestmark = [
 
 _CHILD = textwrap.dedent(
     """
-    import asyncio, sys
+    import asyncio, os, sys
     from sqlalchemy import text
     from kortravelgeo.infra.engine import make_async_engine
     from kortravelgeo.settings import Settings
 
     async def main() -> None:
-        settings = Settings(pg_dsn=sys.argv[1]).model_copy(
+        settings = Settings(pg_dsn=os.environ["KTG_TEST_PG_DSN"]).model_copy(
             update={"pg_statement_timeout_ms": 0,
-                    "pg_client_connection_check_interval_ms": int(sys.argv[3])}
+                    "pg_client_connection_check_interval_ms": int(sys.argv[2])}
         )
         engine = make_async_engine(settings)
         async with engine.connect() as conn:
-            await conn.execute(text(f"SET application_name = '{sys.argv[2]}'"))
+            await conn.execute(text(f"SET application_name = '{sys.argv[1]}'"))
             print("READY", flush=True)
             await conn.execute(text("SELECT pg_sleep(60)"))
 
@@ -106,7 +106,6 @@ async def _kill_child_mid_query(engine: AsyncEngine, interval_ms: int) -> str:
         sys.executable,
         "-c",
         _CHILD,
-        os.environ["KTG_TEST_PG_DSN"],
         app,
         str(interval_ms),
         stdout=asyncio.subprocess.PIPE,

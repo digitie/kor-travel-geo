@@ -1,5 +1,13 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #591 통합시험 child의 DSN argv 제거
+
+#591 통합시험의 DSN은 argv 대신 기존 상속 환경에서 읽는다.
+inert 회귀2 RED→GREEN/관련11·Dagster150·Ruff PASS, 실제 DB·signal 실행0이다.
+기존 구조 smoke 수명 보강과 제품GUC·D4=21600·Daemon OFF는 유지한다.
+정확 새 head CI·독립 post-fix2리뷰·root merge/운영 수용은 별도다.
+
+
 ## 2026-10-18 — #591 CI weakref 수명 보강 후보
 
 main535e26b를 병합하고 정의 등록 smoke만 명시 ephemeral instance 범위로 격리했다.
