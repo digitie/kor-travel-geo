@@ -108,7 +108,8 @@ jobs:
             tests/integration/test_dataset_version_projection.py \
             tests/integration/test_backup_restore_hot_swap_roundtrip.py \
             tests/integration/test_maintenance_statement_timeout.py \
-            tests/integration/test_region_radius_lock_timeout.py
+            tests/integration/test_region_radius_lock_timeout.py \
+            tests/integration/test_dead_client_statement_cancel.py
       - name: Require real coverage (no skips, enough tests)
         if: always()
         run: |
@@ -133,6 +134,7 @@ jobs:
               "test_backup_restore_hot_swap_roundtrip": 3,
               "test_maintenance_statement_timeout": 3,
               "test_region_radius_lock_timeout": 3,
+              "test_dead_client_statement_cancel": 2,
           }
           for module, floor in floors.items():
               assert ran[module] >= floor, f"{module}: {ran[module]} ran, expected >= {floor}"

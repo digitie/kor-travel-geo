@@ -21,10 +21,16 @@ def _json_serializer(value: Any) -> str:
 def _connect_options(settings: Settings) -> str:
     # x_extension is where PostGIS/pg_trgm/unaccent live. Keeping it in search_path
     # avoids public-schema extension drift while still allowing unqualified ST_* calls.
-    return (
+    options = (
         f"-c statement_timeout={settings.pg_statement_timeout_ms} "
         f"-c search_path={settings.pg_search_path}"
     )
+    if settings.pg_client_connection_check_interval_ms > 0:
+        options += (
+            f" -c client_connection_check_interval="
+            f"{settings.pg_client_connection_check_interval_ms}"
+        )
+    return options
 
 
 #: Per-statement ceiling for post-load maintenance SQL (link resolution, MV refresh/swap,

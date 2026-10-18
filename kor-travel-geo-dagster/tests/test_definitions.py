@@ -140,3 +140,19 @@ def test_default_resources_cover_required_keys() -> None:
     for key in ("admin_api", "client", "rustfs", "settings"):
         assert key in REQUIRED_RESOURCE_KEYS
         assert key in DEFAULT_RESOURCE_DEFINITIONS
+
+
+def test_maintenance_engine_turns_on_the_dead_client_check() -> None:
+    # G-01 follow-up b: a statement whose run worker died must not run on for hours.
+    from kortravelgeo.infra.engine import _connect_options
+    from kortravelgeo.settings import Settings
+
+    from kortravelgeo_dagster.resources import (
+        MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS,
+        _maintenance_engine_settings,
+    )
+
+    options = _connect_options(_maintenance_engine_settings(Settings()))
+    assert MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS > 0
+    assert f"client_connection_check_interval={MAINTENANCE_CONNECTION_CHECK_INTERVAL_MS}" in options
+    assert "statement_timeout=0" in options

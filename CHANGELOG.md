@@ -6,6 +6,7 @@
 
 ### Fixed
 - 반경 파생 테이블 재구축의 잠금 획득 대기를 2초로 제한하고, 잠금 충돌만 30초 간격으로 최대 1시간 재시도한다. 연결 준비 중 재시도 예산을 넘겨도 새 잠금을 요청하지 않으며, 획득 후 기존 transaction의 lock_timeout을 복원한다.
+- Dagster 유지보수 연결에서 PostgreSQL client_connection_check_interval을 10초로 설정해, worker 종료로 클라이언트 연결이 끊긴 뒤에도 장시간 쿼리가 남는 문제를 줄인다. 서버가 연결 단절을 감지하는 기능이며 모든 장애를 정확히 10초 안에 정리한다는 보장은 아니다. API 기본 연결 정책과 기존 SQL 시간 상한은 유지한다.
 
 ### Added
 - API/CS 이미지 빌드에서 최종 Python의 stdlib checked-hash bytecode를 명시적으로 준비한다.

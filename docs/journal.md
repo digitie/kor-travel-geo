@@ -48,6 +48,41 @@ docs/tasks.md 충돌 한 곳은 main의 D4=21600 확정·Daemon OFF와 #590의 l
 격리 ext4 미러에서 관련 unit11 PASS(1.12초)·Ruff PASS. 기존 head5CI SUCCESS와
 새 통합 head의 CI·독립2리뷰를 구분한다. 실제 PG lock 통합·배포·운영 수용은 이번에
 실행하지 않았으며 source merge 정합을 운영 완료로 표시하지 않는다.
+## 2026-10-18 — #591 제품 검증 정산
+
+제품78ea197의 CI 5개 성공과 독립 두 리뷰의 P2 해소를 확인했다. CHANGELOG에
+유지보수 연결 검사 10초의 범위와 한계를 추가했다. 배포/실제 운영 수용은 남아 있다.
+[원문과 CI 근거](reviews/2026-10-18-worker-connection-closure/README.md)를 보존한다.
+
+
+## 2026-10-18 — #591 통합시험 child의 DSN argv 제거
+
+독립 P2에 따라 dead-client 통합시험의 password-bearing DSN을 child argv에서
+제거했다. child는 기존 상속 KTG_TEST_PG_DSN 환경에서 읽고 app/interval 인자만 받는다.
+표준 실행/개별 SQL·제품 engine/GUC·실제 kill 효과 검증은 그대로다.
+소유 inert subprocess/Settings·engine 대역 회귀는 원본2 FAIL→수정2 PASS,
+관련 engine회귀까지11 PASS(1.12초), 전체 Dagster150 PASS(7.90초)·Ruff PASS다.
+회귀에서 실제 DB/OS signal/자식 process는 실행하지 않았다. env는 권한 소유자가
+읽을 수 있으므로 새 비밀 저장소나 process env 완전 비공개 보장으로 확대하지 않는다.
+원 argv 노출/CI 실패/앞선 smoke 수명 보강을 보존하며 정확 새 head CI와 두 독립
+post-fix 판정은 별도다. 운영·provider·worker/Daemon은 실행하지 않았다.
+
+
+## 2026-10-18 — #591 CI 정의 등록 smoke의 instance 수명 격리
+
+사용자 takeover 위임으로 d8f7f0f에 main535e26b를 일반 merge했다.
+기존 CI39093261411의 weakref 오류는 job 미등록 assertion이 아니라
+DefinitionsLoadContext가 소멸한 instance의 defs-state 저장소를 읽던 경로였다.
+새 sterile3.12.13/정확 image constraints에서 원본 단독1·관련 순서22·전체150은 PASS라
+원 CI의 선행 오염 주체는 특정하지 않았다. actual SDK local-temp 저장소만 남긴
+소유 fixture에서는 같은 오류가 RED였고 구조 smoke에 명시 ephemeral instance 범위를
+두자 GREEN이었다. 제품 job/정의·설정·SDK pin은 바꾸지 않았다.
+
+수정 뒤 단독1 PASS(2.61초), 순서22 PASS(2.83초), 전체 Dagster150 PASS(7.54초,
+기존 BetaWarning10)·Ruff PASS. 첫 소유 반례 준비는 ephemeral instance의 저장소가
+None이라 AttributeError였고 local_temp로 fixture만 정정했다. 원 실패/원본150 PASS와
+보강후 결과를 구분해 보존한다. 새 CI·독립2리뷰·운영 수용은 별도이며 실제 PG/provider/
+worker/Daemon은 실행하지 않았다. G-01의 실제 worker 사망 취소 수용을 대신하지 않는다.
 
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.

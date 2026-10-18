@@ -53,7 +53,7 @@ Dagster 1.13.24에서 tick 조회가 전체 이력을 순위 계산하지 않도
 D4, 21600 s)과 같아 `mv_refresh`에서는 한 문장이 run 예산 전체를 쓸 수 있되(`full_load_batch` 24 h 안의
 같은 리프에는 문장당 6 h가 그대로 걸린다), run 감시(daemon)가 꺼져 있거나 worker가 죽어도 PostgreSQL이 **6 h 뒤에는**
 취소한다(무한 상한 0은 고르지 않았다). 한계: 상한은 문장 단위라 daemon OFF 동안 run 전체 시간은 묶이지 않고,
-`client_connection_check_interval`이 없어 worker가 죽은 뒤 고아 backend도 최대 6 h 돈다; `region_radius_parts`
+`client_connection_check_interval`이 없어 worker가 죽은 뒤 고아 backend도 최대 6 h 돈다(2026-10-18 후속 b #591: 유지보수 엔진에 10 s로 켬 — 남은 경로는 tasks.md); `region_radius_parts`
 TRUNCATE는 `lock_timeout` 없이 AccessExclusive를 commit까지 쥔다(기존 문제, 최악이 30분→6 h로 커짐) — 둘 다 후속
 과제(tasks.md G-01 후속). → 2026-10-18 후속 a(#590): ACCESS EXCLUSIVE **획득 대기**만 2 s × 재시도(최대 1 h)로 묶었다; 보유 시간은 그대로. 21600 s 자체도 D4 실측 전 잠정값이다. D4가 run 상한을 올리면
 `kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다.

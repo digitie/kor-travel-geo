@@ -23,6 +23,14 @@ def test_engine_uses_settings_dsn_and_x_extension_search_path() -> None:
     assert "search_path=public,x_extension" in _connect_options(settings)
 
 
+def test_client_connection_check_is_off_by_default_and_wired_when_set() -> None:
+    dsn = "postgresql://u:p@localhost:5432/kor_travel_geo"
+    assert "client_connection_check_interval" not in _connect_options(Settings(pg_dsn=dsn))
+    options = _connect_options(Settings(pg_dsn=dsn, pg_client_connection_check_interval_ms=750))
+    assert "-c client_connection_check_interval=750" in options
+    assert "statement_timeout=5000" in options
+
+
 def test_engine_wires_explicit_pool_failfast_options(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
     fake_engine = object()
