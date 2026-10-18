@@ -178,8 +178,8 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   **2026-10-18 (G-01, by claude).** 2026-10-15 첫 standalone 시도(`job_fb535a34…`)는 30분 문장 상한(`SET LOCAL '30min'`)에
   걸려 실패했다 — 원인·실측은 journal 2026-10-18. 문장 상한을 `MAINTENANCE_STATEMENT_TIMEOUT='6h'`로(ADR-068 개정, PR
   `agent/claude-g01-locsum-link-join`, #583). **standalone 실측 완료(2026-10-18)**: 소유자 결정으로 code-server 안 `dagster job
-  execute`(queue·daemon 밖) — 2156.9 s SUCCESS. D4 (ⅱ) 산식값 3235 s는 **draft PR 보류** — n150 운영 이력(4380~5760 s)과 경합 사례보다
-  짧아 소유자 재확인 필요(journal 2026-10-18). CS anon 최대 0.508 GiB·OOM 0,
+  execute`(queue·daemon 밖) — 2156.9 s SUCCESS. **D4 닫힘(소유자 결정 2026-10-18): 21600 s 유지**(ADR-070 D4 결정 절 — 3235 s
+  안 #586은 닫음). CS anon 최대 0.508 GiB·OOM 0,
   PG anon 0.343 GiB(memory.current가 3 GiB 상한에 붙어 reclaim, OOM 0), 최고 73.3 °C. 새 `data_token`은 **바뀌었다** —
   `region_radius_parts`만 달라졌다(아래 후속 d). schedule·sensor는 여전히 끔(재가동은 별도 소유자 결정).
   - [ ] **G-01 후속 d (소유자 결정)** — `region_radius_parts`(매 refresh마다 `ST_Subdivide`로 재생성)의 지문이 플랫폼(n150
