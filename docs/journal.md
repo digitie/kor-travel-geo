@@ -4,7 +4,7 @@
 
 - source d3dedb47 공식 API·CS ARM64 빌드와 격리검사 PASS, root 두이미지 rollout4df684f4 PASS. daemon OFF·기존큐 전후동일·D4=21600을 보존했다.
 - API SQLAlchemy2.1.5와 CS2.1.1을 구분하고 Fiona/GDAL 실제 빌드시간, 잘못된 CS selector의 prepare 선행차단·수정 이력을 [배포 기록](audits/2026-10-18-geo-deployment.md)에 남긴다.
-- 공식 지문 STORE는 root 단일 실행 진행 중이며 최종 비교·배포 후 UI는 대기다. 기존 “배포 미실행” 절은 당시 source 검토 이력으로 보존한다. 전체 Track/CPU·RSS 완료를 주장하지 않는다.
+- root 공식 STORE227.521초 PASS, n150 같은8표/token MATCH·DB/API 재조회 PASS다. Admin 예제의 원 WebGL2 환경 FAIL과 별도 navigation 준비실패를 보존하고, n150 렌더링 옵션 정정 후 원 canvas 기준 두모드 PASS를 구분한다. 제품수정·Windowsfallback0이며 전체 Track/CPU·RSS 완료를 주장하지 않는다.
 - 문서 전용이며 사용자 지시로 CI 없이 처리한다. 코드·schema·설정·daemon 상태 변경0이다.
 
 ## 2026-10-18 — #590 최종 제품 검증

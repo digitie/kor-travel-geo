@@ -13,9 +13,9 @@
 | #589·#590·#591 source 머지 | 완료, 아래 source 표와 기존 독립 리뷰 기록 |
 | 공식 API→CS 순차 빌드·격리 이미지 검사 | 작성자 직접 실행, 둘 다 PASS |
 | Geo CS→API 이미지 교체 | root 직접 실행 PASS, 원본 컨테이너 보존·정상 종료 |
-| 공식 활성 지문 STORE | root 단일 실행 진행 중, 최종 결과 미확인 |
-| n150 같은8표 지문과 비교 | STORE 이후 대기, 같다고 선결론 내리지 않음 |
-| 배포 후 Admin 예제·대시보드/Map 기준선 UI | 대기, 기존 UI 결과를 이번 배포 결과로 이전하지 않음 |
+| 공식 활성 지문 STORE | root 단일 실행 PASS, 저장227.521초·daemon OFF·수명 불변 |
+| n150 같은8표 지문과 비교 | MATCH, 8표 모두 같고 token 동일·DB/API 재조회 PASS |
+| 배포 후 Admin 예제 UI | 초기 WebGL2 불가 FAIL 보존, n150 렌더링 환경 정정 후 동일 canvas 기준 두 모드 PASS |\n| 대시보드/Map 기준선 UI | 별도 대기, Admin 예제와 전체 UI 수용을 혼동하지 않음 |
 | 새 CPU/RSS·실작업 SQL 취소·전체 Track1/2 | 이 기록에서 미실행/미완료 |
 
 [공개 증거 요약](evidence/2026-10-18-geo-deployment.safe.json)은 image ID·설치 버전·원천 SHA·
@@ -74,12 +74,36 @@ root 배포는 두 Geo image만 변경하고 기존 HC·limits·env·D4=21600·�
 원본 대상은 정상 stop(-1)·PID/cgroup 소멸 후 보관했고 새 PID/ticks·healthy를 확인했다.
 API/CS 새 CID와 큐 보존은 공개 증거에 있다. daemon을 시작하거나 센서를 활성화하지 않았다.
 
-#589 정의변경에 따른 활성 지문 재계산은 root의 공식 ktgctl serving fingerprint-active
-한 번으로 진행 중이다. 중복 전량 스캔을 위한 선행 dry-run은 하지 않는다.
-원천 변경 없이 활성 메타데이터를 저장하는 범위이며 n150 같은8표 결과와 불일치하면
-값을 맞추지 않고 차이를 조사한다. 이 문서 시점에는 STORE 최종·비교·UI 결과가 아직 없으므로
-후속 증거로 갱신한다.
+#589 정의변경에 따른 활성 지문은 root가 공식 ktgctl serving fingerprint-active STORE
+한 번으로 저장했다(227.521초). 중복 전량 스캔을 위한 선행 dry-run은 하지 않았다.
+n150의 같은8표 READONLY 결과와 표별 hash8개·token 모두 MATCH다.
+새 token은 dd1-2f2ec5207609a2c1de57cbb64bebcb8f이며 DB와 API의 재조회도 PASS,
+활성 릴리스1개·수명 불변을 확인했다. 원천 변경 없이 활성 메타데이터를 저장한 범위다.
+
+root n150 Chromium1228 Admin 예제 attempt66efaadf는 처음 FAIL이었다. geometry=false
+API200/OK·후보1·point 있음·728ms 뒤 canvas 대기 TimeoutError였고 geometry=true는 미실행이었다.
+원 console/fallback 진단과 screenshot은 실패 전에 수집되지 않았으므로 첫 기록만으로 제품 오류로
+단정하지 않았다. 별도 진단1회는 로그인 전 navigation Error로 끝났으며 API·지도 회귀와 분리했다.
+
+추가 관측735478cb에서는 runtime key present=true/HTTP200, 두 주소 응답 모두 정상인데
+blank page와 실제 page의 WebGL2=false, canvas0 및 “WebGL2를 지원하지 않습니다” fallback을
+확인했다. 현재 CoordinateMap의 GPUInitializationError 안내와 일치하며 키 누락/주소 API 실패나
+낡은 selector 때문이라는 근거는 없었다. 설치1223/1228 둘 다 Chrome149.0.7827.55였고
+필요 GPU 공유 라이브러리는 존재했다.
+
+n150 blank probe로 원 소프트웨어 렌더링3옵션에 --ignore-gpu-blocklist와
+--disable-gpu-sandbox를 더하면 실제 WebGL2가 지원됨을 확인했다. 이는 소유 시험 브라우저의
+설정이며 앱/컨테이너/서비스나 배포된 제품 보안 설정을 바꾸지 않았다.
+Windows fallback은 사용하지 않았다. 기존 canvas visible assertion과 API 판정은 유지했고,
+진단상 첫 실패 뒤 두번째 API도 관측할 수 있게 하되 overall FAIL 조건은 그대로 뒀다.
+
+최종 attempt49fc068a는 n150 Linux에서 원 예제·include_geometry=false/true 둘 다 PASS다.
+API 각각200/OK·후보1·point 있음, true는 building geometry를 반환했다.
+두 모드 모두 canvas1·visible, WebGL2=true·키 존재·지도 오류/로딩/키/타일 fallback 범주0,
+pageerror0·의도 밖 write0이었다. private screenshot2개는 공개하지 않는다.
+183/415ms 응답 시간은 Transport Admin 빌드가 겹칠 수 있는 구간의 관찰이며 성능 개선으로
+해석하지 않는다. 이 예제2모드는 전체 Admin/대시보드·T-325/Map 수용을 대신하지 않는다.
 
 기존 G-01 a2의 실제 오래 걸리는 worker/SQL 취소 수용, 관리 UI 전체 T-325 및
 reverse 성능·메모리·소비자 기준선은 이 배포 PASS만으로 닫지 않는다.
-사용자 요청에 따라 문서 commit은 [skip ci], 새 CI/전체 suite/이미지 재빌드/UI 재실행은 없다.
+사용자 요청에 따라 문서 commit은 [skip ci]이며 문서 검증을 이유로 CI/전체 suite/이미지 재빌드를 추가하지 않았다. 위 UI는 별도 승인된 운영 수용 실행이다.

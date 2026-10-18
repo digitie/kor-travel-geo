@@ -15,7 +15,8 @@
 
 #589·590·591을 포함한 source d3dedb47의 공식 API/CS 운영 교체와 원천 hash 검증은 완료했다.
 [배포 기록](audits/2026-10-18-geo-deployment.md)의 root rollout PASS·daemon OFF·큐 보존을 따른다.
-공식 활성 지문 STORE 최종·n150 같은8표 비교·배포 후 UI는 아직 대기이며 기존 T-325/T-326
+공식 활성 지문 STORE·n150 같은8표/token 비교·DB/API 재조회는 PASS다. Admin 예제
+UI는 n150 WebGL2 환경 정정 후 원 canvas 조건으로 두 모드 PASS이며 기존 T-325/T-326
 전체를 완료로 바꾸지 않는다. 아래 과거 “배포 대기” 문장은 당시 기록으로 보존한다.
 
 ## 최신 확인과 남은 수용 (2026-10-17)
