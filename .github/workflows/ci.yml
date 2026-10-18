@@ -107,7 +107,8 @@ jobs:
             tests/integration/test_serving_release_lineage_race.py \
             tests/integration/test_dataset_version_projection.py \
             tests/integration/test_backup_restore_hot_swap_roundtrip.py \
-            tests/integration/test_maintenance_statement_timeout.py             tests/integration/test_dead_client_statement_cancel.py
+            tests/integration/test_maintenance_statement_timeout.py \
+            tests/integration/test_dead_client_statement_cancel.py
       - name: Require real coverage (no skips, enough tests)
         if: always()
         run: |
