@@ -182,12 +182,13 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
   안 #586은 닫음). CS anon 최대 0.508 GiB·OOM 0,
   PG anon 0.343 GiB(memory.current가 3 GiB 상한에 붙어 reclaim, OOM 0), 최고 73.3 °C. 새 `data_token`은 **바뀌었다** —
   `region_radius_parts`만 달라졌다(아래 후속 d). schedule·sensor는 여전히 끔(재가동은 별도 소유자 결정).
-  - [ ] **G-01 후속 d (소유자 결정)** — `region_radius_parts`(매 refresh마다 `ST_Subdivide`로 재생성)의 지문이 플랫폼(n150
-    PostGIS 3.5.2/x86 → odroid 3.5.3/arm64)에 따라 달라져 원천 무변경인데 `data_token`이 바뀐다. 지문에서 빼고 원천
-    `tl_scco_*`로 갈음할지, 같은 호스트 재실행 결정성부터 확인할지. **이 결정 전에는 Map·concierge 기준선 기록·센서 활성화를
-    하지 않는다**(결정적이지 않으면 refresh마다 토큰이 바뀌어 소비자 전량 재계획).
+  - [x] **G-01 후속 d 소스 결정·구현** — #589 머지 047536dc: 파생 region_radius_parts를 제외하고 원천
+    tl_scco_* 지문을 유지한다. 독립 두 SOURCE PASS·CI5 SUCCESS, [원문·정정 기록](reviews/2026-10-18-fingerprint-final.md).
+    플랫폼 차이는 추정이며 같은 호스트 매 실행의 비결정성이 실측됐다는 뜻은 아니다.
+  - [ ] **G-01 후속 d 운영 수용** — 새 정의의 API/CS 적용·활성 지문 재계산 뒤 Map/concierge 첫 기준선과 기존 토큰
+    차이를 구분해 검증한다. 이번 소스 머지는 운영 완료가 아니다. daemon OFF·센서 비활성 유지.
   - [ ] **G-01 daemon ON 전제** — 공용 daemon을 켜면 `dagster/max_runtime`이 집행된다(mv_refresh schedule은 없고 발화는
-    admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)와 D4 값(재확인)을 닫는다.
+    admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)를 닫는다. D4는 21600 유지로 닫혔고 daemon OFF 지시는 계속 유효하다.
   - [ ] **G-01 후속 a** — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
   - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
