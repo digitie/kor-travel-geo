@@ -98,6 +98,12 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 
 ### T-325 잔여 — 운영 검증 (T-325a~c 본문은 2026-10-15 `tasks-done.md`)
 
+> 2026-10-19 보완: n150 Chromium/Firefox × desktop/mobile 총24건의 릴리스 화면
+> 검증과 격리 PostGIS 동일 transaction/rollback 검증을 완료했다.
+> [현재 수용 증거](audits/2026-10-19-geo-track-acceptance.md)를 따른다.
+> 아래 과거 운영 backfill 직후0 미기록과 p50 비교 조건을 이 결과만으로 소급 완료하지 않는다.
+
+
 ADR-069 구현은 머지·배포됐다 — T-325a+b #573(`1c9187d`), T-325c #574(`7d3217c`); odroid DB는 Alembic `0029`, 활성 릴리스
 지문 비NULL(`ktgctl serving fingerprint-active` backfill, 2026-10-15 확인). 완료로 옮기면서 **실행되지 않은 수용 기준만** 여기
 남긴다 — 운영 검증 면제가 아니다([운영 E2E 미실행 기록](reviews/2026-10-14-odroid-e2e-deferred.md)).
@@ -254,6 +260,13 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     코드 0 + 위 count 기준, (b)면 `POST /v1/admin/restores`가 E0410 없이 run 생성.
 
 - [ ] **T-326c** — 플립 뒤 검증 + Track 1 상호작용 확인 (규모 S, 설계 §11.2 9단계(소비자 URL 전환) 뒤)
+
+  **2026-10-19 현재 상태:** 아래10월15일 목록은 과거 체크리스트다. n150 API/UI/CS는 이미
+  24시간 이상 정지했으며 재정지하지 않았다. 실제 n150 Concierge 경로 reverse200/200 PASS,
+  p50 109.042ms/p95 218.966ms, Manager Map ensure 계획의 Geo 제외 및 소비자 계약44건 PASS다.
+  [현재 수용 증거](audits/2026-10-19-geo-track-acceptance.md)를 우선한다. 정지 전 peer0은
+  미입증이며 실제 운영 ensure를 실행했다는 뜻은 아니다. 다른 소비자·Track1 센서 및 overlay는 별도다.
+
 
   **2026-10-15 구체 점검 목록(소비자 전환은 끝났고 전부 미실행·미기록).** (1) **n150 geo-api 정지 전제가 아직 안 섰다** — n150
   `kor-travel-geo-api-latest`·`-ui-latest`는 Up(code-server만 Exited). 정지는 **Manager T-MGR-01b(n150 compose의 `map → geo`
