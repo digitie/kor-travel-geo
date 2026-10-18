@@ -59,4 +59,5 @@ TRUNCATE는 `lock_timeout` 없이 AccessExclusive를 commit까지 쥔다(기존 
 `kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다.
 데이터 지문의 savepoint 안 `10min`(ADR-069 D5)은 이 개정에서 바꾸지 않는다 — odroid 조용한 실측 240 s로 여유가
 2.5배뿐이라 경합 시 NULL `data_token`(소비자 "판정 불가")이 될 수 있다. 올릴지는 네 활성화 경로가 공유하는 값이라
-소유자 결정으로 남긴다(tasks.md G-01 후속).
+소유자 결정으로 남긴다(tasks.md G-01 후속). → **2026-10-18 소유자 결정: 30 min으로 올린다**(ADR-069 D5 개정,
+`DATA_FINGERPRINT_STATEMENT_TIMEOUT`).

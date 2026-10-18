@@ -187,7 +187,7 @@ async def test_compute_fingerprint_runs_inside_a_savepoint_that_is_always_rolled
     assert result.error_code is None
     assert result.table_hashes == {"mv_geocode_target": "12", "tl_scco_sig": None}
     assert conn.log[0] == "SAVEPOINT"
-    assert conn.log[1] == "SET LOCAL statement_timeout = '10min'"
+    assert conn.log[1] == "SET LOCAL statement_timeout = '30min'"
     assert conn.log[-1] == "ROLLBACK TO SAVEPOINT"
 
 
@@ -272,7 +272,7 @@ def test_activation_paths_route_through_the_helper() -> None:
         assert "fingerprint" not in inspect.getsource(module)
     hotswap_source = inspect.getsource(hotswap)
     assert hotswap_source.count("fingerprint_attempt=fingerprint_attempt") == 2
-    assert data_fingerprint.DATA_FINGERPRINT_STATEMENT_TIMEOUT == "10min"
+    assert data_fingerprint.DATA_FINGERPRINT_STATEMENT_TIMEOUT == "30min"
 
 
 @pytest.mark.parametrize(

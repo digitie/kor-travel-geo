@@ -392,9 +392,11 @@ async def test_after_a_successful_fingerprint_the_paths_own_timeout_is_back(
     engine: AsyncEngine,
 ) -> None:
     """``SET LOCAL`` inside a RELEASEd savepoint would outlive it; the savepoint is rolled back
-    on success too, so the path's 30 min (not the fingerprint's 10 min) governs what follows."""
+    on success too, so the path's own timeout (not the fingerprint's) governs what follows. The
+    path value must differ from ``DATA_FINGERPRINT_STATEMENT_TIMEOUT`` or a leak is invisible."""
+    assert data_fingerprint.DATA_FINGERPRINT_STATEMENT_TIMEOUT != "45min"
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
+        await conn.execute(text("SET LOCAL statement_timeout = '45min'"))
         _, release = await _insert_dataset_snapshot_and_release(
             conn,
             snapshot_state="released",
@@ -405,7 +407,7 @@ async def test_after_a_successful_fingerprint_the_paths_own_timeout_is_back(
         )
         timeout_after = await conn.scalar(text("SHOW statement_timeout"))
     assert release.data_token is not None
-    assert timeout_after == "30min"
+    assert timeout_after == "45min"
 
 
 # --- all four activation paths: token + cache clear --------------------------------------------

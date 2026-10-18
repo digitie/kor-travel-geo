@@ -23,7 +23,7 @@
   (`mv_geocode_target`·`tl_scco_{ctprvn,sig,emd,li}`·`region_radius_parts`·`tl_sppn_makarea`·`tl_spbd_buld_polygon`·
   `tl_sprd_manage`; v1 우편번호 전용 `postal_bulk_delivery`·`tl_kodis_bas`는 제외)의 내용 지문을 `ops.dataset_snapshots.data_fingerprint`
   (Alembic `0029_t325a_data_fingerprint`)에 저장하고 `data_token = "dd1-" + sha256(지문)[:32]`로 공개한다. 같은 데이터의
-  재빌드·restore·rollback은 같은 토큰, 일변동·보조 표 단독 적재는 새 토큰이다. 지문은 10분 안에 못 끝나거나 실패하면
+  재빌드·restore·rollback은 같은 토큰, 일변동·보조 표 단독 적재는 새 토큰이다. 지문은 10분(2026-10-18부터 30분) 안에 못 끝나거나 실패하면
   NULL로 활성화를 통과시키고(fail-open) `serving_releases.notes`에 `data_fingerprint_failed: <code>`를 붙인다(`timeout`·
   `schema_drift:<표>`·`superseded_during_scan`(스캔 중 다른 활성화)·`schema_missing`(0029 이전 DB)·`exception:<Class>`).
   `POST /v2/dataset/version`·`/v2/dataset/history`의 `DatasetVersionEntry.data_token`(지문 없는 릴리스는 생략)과 admin
@@ -36,6 +36,11 @@
   `geo_cache`를 비운다. `--dry-run`은 READ ONLY transaction에서 같은 SQL·같은 timeout으로 경과 시간과 표별 해시만 출력한다.
 
 ### Changed
+
+- **post-load 유지보수 SQL 문장 상한 30분 → 6시간**(`MAINTENANCE_STATEMENT_TIMEOUT`, G-01/#583, ADR-068 개정) — odroid
+  `mv_refresh`가 30분 문장 상한에 취소되던 문제.
+- **데이터 지문 쿼리 상한 10분 → 30분**(`DATA_FINGERPRINT_STATEMENT_TIMEOUT`, 소유자 결정 2026-10-18, ADR-069 D5 개정) —
+  odroid 조용한 실측 240 s로 여유가 2.5배뿐이라 경합 시 NULL `data_token`(소비자 "판정 불가")을 줄인다.
 - Dagster 구성요소가 Common의 선택 gRPC 상태 조회 CLI를 설치하도록 준비한다.
   live는 순수 생존 확인이며 정의/worker/DB readiness·자동 복구를 보장하지 않는다.
   실제 Manager 선언 적용과 운영 효과 검증은 후속이다.
