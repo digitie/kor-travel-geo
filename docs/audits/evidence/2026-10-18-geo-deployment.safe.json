@@ -1,0 +1,427 @@
+{
+  "recorded_at_utc": "2026-10-18T08:17:54.377214+00:00",
+  "source": "d3dedb478bfcac026e3c51a44336109fd1662ee0",
+  "images": {
+    "cs": "sha256:3b21fc5e8fcd90ebb3f583cb413349f995665b3f6fd5681efcf913ef353dc3a5",
+    "api": "sha256:e5ca22c96f40889d2463663e5f8123d07e473f6b1bff5b2342c77dacdbef703c"
+  },
+  "refs": {
+    "api": "kor-travel-geo-api:d3dedb47-a-4f67164c",
+    "cs": "kor-travel-geo-dagster:d3dedb47-a-4f67164c"
+  },
+  "versions": {
+    "api": {
+      "kor-travel-geo": "0.1.0",
+      "kortravelgeo-dagster": null,
+      "kor-travel-common": "0.1.0.dev0",
+      "sqlalchemy": "2.1.5",
+      "psycopg": "3.3.6",
+      "GDAL": "3.10.3",
+      "fiona": "1.10.1",
+      "dagster": null,
+      "dagster-postgres": null
+    },
+    "cs": {
+      "kor-travel-geo": "0.1.0",
+      "kortravelgeo-dagster": "0.1.0",
+      "kor-travel-common": "0.1.0.dev0",
+      "sqlalchemy": "2.1.1",
+      "psycopg": "3.3.6",
+      "GDAL": "3.10.3",
+      "fiona": "1.10.1",
+      "dagster": "1.13.24",
+      "dagster-postgres": "0.29.24"
+    }
+  },
+  "installed_source": {
+    "api": {
+      "kortravelgeo": {
+        "git_exact_files": 168,
+        "origin": "/app/src/kortravelgeo",
+        "mismatches": 0
+      }
+    },
+    "cs": {
+      "kortravelgeo": {
+        "git_exact_files": 168,
+        "origin": "/usr/local/lib/python3.12/site-packages/kortravelgeo",
+        "mismatches": 0
+      },
+      "kortravelgeo_dagster": {
+        "git_exact_files": 16,
+        "origin": "/usr/local/lib/python3.12/site-packages/kortravelgeo_dagster",
+        "mismatches": 0
+      }
+    }
+  },
+  "build_seconds": {
+    "api": 2207.284485460026,
+    "cs": 2445.647938476992
+  },
+  "compile_seconds": {
+    "api_gdal": 525.71,
+    "api_fiona": 1163.6,
+    "cs_gdal": 525.3,
+    "cs_fiona": 1101.5
+  },
+  "rollout": {
+    "attempt": "4df684f4-a7da-43d9-9b98-cb18c2deb2d6",
+    "status": "PASS",
+    "targets": [
+      {
+        "role": "cs",
+        "new_cid": "da95a61826569c4ea882943d771945e0e0478bb01df29b5f08bac86da90b1d7d",
+        "status": "READY"
+      },
+      {
+        "role": "api",
+        "new_cid": "894507e8696a35815e7b2560be99a4973629f44c519f46eb91f12ebedb18ef9d",
+        "status": "READY"
+      }
+    ],
+    "daemon_off": true,
+    "queue_unchanged": true
+  },
+  "initial_prepare": {
+    "attempt": "74fe2beb-7d60-4d3d-9a54-0e9e586df453",
+    "status": "UNKNOWN_NO_REPLAY",
+    "before_runtime_mutation": true,
+    "cause": "wrong Compose cs service literal",
+    "fixed_controller_sha256": "46dd455237cc6795aceeaf5644c001cb99fba97597170fe06e6fbab80a790727",
+    "replacement_prepare_status": "PASS",
+    "runtime_replay": false
+  },
+  "evidence_sha256": {
+    "geo589-591-native-images-a-20261018.safe.json": "a97b7c439b7082ae26ca423840f1a34b2240cdf063c2fbdc42ed81e376f7dae4",
+    "geo589-591-native-probes-a-20261018.safe.json": "24f57dc66b4037b8768b6ce05cf4ce6b793d4b3f03e0029afb88d28a08e47d55",
+    "geo589-4df684f4-a7da-43d9-9b98-cb18c2deb2d6.safe.jsonl": "45e510116155c9c18965d17dbfa0775d85fa8e04c4edf61e8845672a0b9b11e5",
+    "geo589-591-rollout-a-r2-20261018.remote.py": "46dd455237cc6795aceeaf5644c001cb99fba97597170fe06e6fbab80a790727",
+    "geo589-odroid-official-store-root-20261018.safe.json": "0df67a0ce58fca6167c19546b2e1d129c60383e5a644ec87e642cdfec5f046b3",
+    "geo589-fingerprint-comparison-root-20261018.safe.json": "cc751c8e737ef0f2058c6021270d8e9e5478209d4db43abece2424f851ecc624",
+    "geo589-post-store-verify-250fe92c-329a-467e-9e1f-59757c4db9e8.safe.json": "fe7e438f5a4ce32627f0251e34a9964072637bc2aa717c8cc63aecf1b154c30f",
+    "geo589-postdeploy-admin-ui-66efaadf-17d2-4690-96a2-08ffde7eb885.safe.json": "69b0d74129451fb38ec5ad1d0a4ccb226af0b047985061afcfa34739b940d7c8",
+    "geo589-postdeploy-ui-diagnostic-a-3de31b0c-2a51-49b6-b7fb-9a7e0580001e.safe.json": "5ba6c22ec82ce26ce3998eddfb1c29455aa998378311ea361a4126b2885c0d77",
+    "geo589-postdeploy-admin-ui-735478cb-92c7-4397-b433-366bbc89cdef.safe.json": "d4ef9f945273c08e1ba85586783c14912558749bab4d1d35a5626c1b96f6d516",
+    "geo589-postdeploy-admin-ui-49fc068a-114b-4d69-881a-1dbf7780a3cd.safe.json": "e5f277a5c8c99bced35b72cb0e126c80d6e552528dba1952b3a8dd3065f171cb",
+    "geo589-webgl-browser-probe-a-r1-20261018.safe.json": "30f6b6ce1701058177bf98cec3fc3f579b77a146a6b7f1fb3363d005ec6f848c"
+  },
+  "fingerprint_store": {
+    "attempt": "2fe59564-14d6-4237-8301-6bffeb85defa",
+    "status": "PASS",
+    "mode": "store",
+    "elapsed_seconds": 227.521,
+    "result": {
+      "dry_run": false,
+      "active_release": true,
+      "elapsed_s": 227.521,
+      "error_code": null,
+      "data_token": "dd1-2f2ec5207609a2c1de57cbb64bebcb8f",
+      "stored": true,
+      "table_hashes": {
+        "mv_geocode_target": "-11923194876134611017483",
+        "tl_scco_ctprvn": "-10107265035421310630",
+        "tl_scco_emd": "-194759265814368712577",
+        "tl_scco_li": "-834505818398317655062",
+        "tl_scco_sig": "-14503153322752047224",
+        "tl_spbd_buld_polygon": "8841767741302247572437",
+        "tl_sppn_makarea": "-904252174202761941146",
+        "tl_sprd_manage": "-5359670298160833349113"
+      },
+      "fingerprint_sha256": "2f2ec5207609a2c1de57cbb64bebcb8f08ac17007b4bbe6715a2d0d4549607e2"
+    },
+    "lifecycle_unchanged": true,
+    "daemon_off": true
+  },
+  "n150_comparison": {
+    "status": "MATCH",
+    "tables": 8,
+    "different_tables": [],
+    "old_token": "dd1-2f2ec5207609a2c1de57cbb64bebcb8f",
+    "new_token": "dd1-2f2ec5207609a2c1de57cbb64bebcb8f",
+    "old_proof_sha256": "0f7549b2c04f7939982e3f21e5f1ba5ee8aca09b2c62cc77388d1ccc0d40783d",
+    "new_proof_sha256": "0df67a0ce58fca6167c19546b2e1d129c60383e5a644ec87e642cdfec5f046b3"
+  },
+  "postdeploy_live_ui": {
+    "status": "PASS",
+    "runtime": "n150 Chromium1228",
+    "started_at": "2026-10-18T08:26:52.216Z",
+    "finished_at": "2026-10-18T08:26:58.357Z",
+    "error_type": null,
+    "error_code": null,
+    "navigation_stage": "geocode",
+    "initial_example_correct": true,
+    "probes": [
+      {
+        "include_geometry": false,
+        "milliseconds": 183,
+        "status": 200,
+        "response_status": "OK",
+        "error_code": null,
+        "candidate_count": 1,
+        "has_point": true,
+        "geometry_kind": null,
+        "alert_visible": false,
+        "pass": true,
+        "map_settle_stage": "canvas-visible",
+        "map_settle_pass": true,
+        "map_settle_milliseconds": 942,
+        "map_diagnostics": {
+          "canvas_count": 1,
+          "canvas_visible": true,
+          "fallback_counts": {
+            "webgl2_unsupported": false,
+            "map_failed": false,
+            "map_loading": false,
+            "key_missing": false,
+            "key_loading": false,
+            "map_idle": false,
+            "tile_auth": false,
+            "tile_delayed": false
+          }
+        }
+      },
+      {
+        "include_geometry": true,
+        "milliseconds": 415,
+        "status": 200,
+        "response_status": "OK",
+        "error_code": null,
+        "candidate_count": 1,
+        "has_point": true,
+        "geometry_kind": "building",
+        "alert_visible": false,
+        "pass": true,
+        "map_settle_stage": "canvas-visible",
+        "map_settle_pass": true,
+        "map_settle_milliseconds": 154,
+        "map_diagnostics": {
+          "canvas_count": 1,
+          "canvas_visible": true,
+          "fallback_counts": {
+            "webgl2_unsupported": false,
+            "map_failed": false,
+            "map_loading": false,
+            "key_missing": false,
+            "key_loading": false,
+            "map_idle": false,
+            "tile_auth": false,
+            "tile_delayed": false
+          }
+        }
+      }
+    ],
+    "map_canvas_visible": true,
+    "diagnostics": {
+      "console_classes": {
+        "error:resource": 5
+      },
+      "page_error_classes": {},
+      "request_failure_classes": {
+        "other:net::ERR_BLOCKED_BY_CLIENT": 5,
+        "other:net::ERR_ABORTED": 2
+      },
+      "origin_category": "remote",
+      "origin_scheme": "https:",
+      "base_has_path": false,
+      "load_condition": "Transport Admin build may overlap; no isolated performance claim",
+      "blank_webgl2": true,
+      "webgl2": true,
+      "runtime_key": {
+        "status": 200,
+        "present": true
+      }
+    },
+    "unexpected_writes_blocked": 0,
+    "source_sha256": "8d53f9502b96a6f3708b463b8f830721f309bbcc51212fb8bc6f49d6ba44ab1f",
+    "attempt": "49fc068a-114b-4d69-881a-1dbf7780a3cd"
+  },
+  "runtime_cpu_rss_measurement": "NOT_RUN",
+  "post_store_db_api_verification": {
+    "status": "PASS",
+    "active_release_count": 1,
+    "api_requests": 1,
+    "data_token": "dd1-2f2ec5207609a2c1de57cbb64bebcb8f",
+    "fingerprint_sha256": "2f2ec5207609a2c1de57cbb64bebcb8f08ac17007b4bbe6715a2d0d4549607e2",
+    "lifecycle_unchanged": true,
+    "read_only": true,
+    "stored_api_expected_tokens_equal": true
+  },
+  "postdeploy_live_ui_history": [
+    {
+      "role": "root_initial",
+      "proof": "geo589-postdeploy-admin-ui-66efaadf-17d2-4690-96a2-08ffde7eb885.safe.json",
+      "result": {
+        "status": "FAIL",
+        "runtime": "n150 Chromium1228",
+        "started_at": "2026-10-18T08:19:00.157Z",
+        "finished_at": "2026-10-18T08:19:09.977Z",
+        "initial_example_correct": true,
+        "probes": [
+          {
+            "include_geometry": false,
+            "milliseconds": 728,
+            "status": 200,
+            "response_status": "OK",
+            "error_code": null,
+            "candidate_count": 1,
+            "has_point": true,
+            "geometry_kind": null,
+            "alert_visible": false,
+            "pass": false,
+            "map_settle_pass": false,
+            "map_settle_error": "TimeoutError"
+          }
+        ],
+        "map_canvas_visible": null,
+        "unexpected_writes_blocked": 0,
+        "source_sha256": "598150bcb683569d5835e665696783bdb60cd5571b0f5020bb93c18b9f2ea9b5",
+        "attempt": "66efaadf-17d2-4690-96a2-08ffde7eb885",
+        "geometry_true": "NOT_RUN"
+      }
+    },
+    {
+      "role": "owned_diagnostic",
+      "proof": "geo589-postdeploy-ui-diagnostic-a-3de31b0c-2a51-49b6-b7fb-9a7e0580001e.safe.json",
+      "result": {
+        "status": "FAIL",
+        "runtime": null,
+        "started_at": "2026-10-18T08:22:41.131Z",
+        "finished_at": "2026-10-18T08:22:42.063Z",
+        "error_type": "Error",
+        "error_code": null,
+        "navigation_stage": null,
+        "initial_example_correct": null,
+        "probes": [],
+        "map_canvas_visible": null,
+        "diagnostics": {
+          "console_classes": {},
+          "page_error_classes": {},
+          "request_failure_classes": {
+            "other": 1
+          },
+          "load_condition": "Transport Admin build may overlap; no isolated performance claim"
+        },
+        "unexpected_writes_blocked": 0,
+        "source_sha256": "0a01d91195e16678e020625f8b4176d4f14ebbbcbf0fd889cb35308c07879bb8",
+        "attempt": "3de31b0c-2a51-49b6-b7fb-9a7e0580001e"
+      }
+    },
+    {
+      "role": "owned_diagnostic",
+      "proof": "geo589-postdeploy-admin-ui-735478cb-92c7-4397-b433-366bbc89cdef.safe.json",
+      "result": {
+        "status": "FAIL",
+        "runtime": "n150 Chromium1228",
+        "started_at": "2026-10-18T08:23:43.163Z",
+        "finished_at": "2026-10-18T08:23:58.482Z",
+        "error_type": null,
+        "error_code": null,
+        "navigation_stage": "geocode",
+        "initial_example_correct": true,
+        "probes": [
+          {
+            "include_geometry": false,
+            "milliseconds": 237,
+            "status": 200,
+            "response_status": "OK",
+            "error_code": null,
+            "candidate_count": 1,
+            "has_point": true,
+            "geometry_kind": null,
+            "alert_visible": false,
+            "pass": false,
+            "map_settle_stage": "canvas-visible",
+            "map_settle_pass": false,
+            "map_settle_error": "TimeoutError",
+            "map_diagnostics": {
+              "canvas_count": 0,
+              "canvas_visible": false,
+              "fallback_counts": {
+                "webgl2_unsupported": true,
+                "map_failed": false,
+                "map_loading": false,
+                "key_missing": false,
+                "key_loading": false,
+                "map_idle": false,
+                "tile_auth": false,
+                "tile_delayed": false
+              }
+            }
+          },
+          {
+            "include_geometry": true,
+            "milliseconds": 609,
+            "status": 200,
+            "response_status": "OK",
+            "error_code": null,
+            "candidate_count": 1,
+            "has_point": true,
+            "geometry_kind": "building",
+            "alert_visible": false,
+            "pass": false,
+            "map_settle_stage": "canvas-visible",
+            "map_settle_pass": false,
+            "map_settle_error": "TimeoutError",
+            "map_diagnostics": {
+              "canvas_count": 0,
+              "canvas_visible": false,
+              "fallback_counts": {
+                "webgl2_unsupported": true,
+                "map_failed": false,
+                "map_loading": false,
+                "key_missing": false,
+                "key_loading": false,
+                "map_idle": false,
+                "tile_auth": false,
+                "tile_delayed": false
+              }
+            }
+          }
+        ],
+        "map_canvas_visible": false,
+        "diagnostics": {
+          "console_classes": {
+            "error:resource": 6,
+            "error:webgl": 2
+          },
+          "page_error_classes": {},
+          "request_failure_classes": {
+            "other:net::ERR_BLOCKED_BY_CLIENT": 6,
+            "other:net::ERR_ABORTED": 5,
+            "runtime_config:net::ERR_ABORTED": 1
+          },
+          "origin_category": "remote",
+          "origin_scheme": "https:",
+          "base_has_path": false,
+          "load_condition": "Transport Admin build may overlap; no isolated performance claim",
+          "blank_webgl2": false,
+          "webgl2": false,
+          "runtime_key": {
+            "status": 200,
+            "present": true
+          }
+        },
+        "unexpected_writes_blocked": 0,
+        "source_sha256": "58835c54b6a73a0fa2b07843ca0592ee50f9fb1528655ee6554ecc2297a468c1",
+        "attempt": "735478cb-92c7-4397-b433-366bbc89cdef"
+      }
+    }
+  ],
+  "browser_environment": {
+    "platform": "n150 Linux",
+    "browser": "Chromium1228 / Chrome149.0.7827.55",
+    "donor_webgl2_supported": false,
+    "tested_successful_args": [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+      "--ignore-gpu-blocklist",
+      "--disable-gpu-sandbox"
+    ],
+    "successful_webgl2_supported": true,
+    "product_code_changed": false,
+    "criteria_weakened": false,
+    "screenshots": "private stage only",
+    "timing_limit": "Transport Admin build may overlap; no performance claim"
+  }
+}
