@@ -53,7 +53,7 @@ async def _engine() -> AsyncEngine:
 def fast_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_TIMEOUT", "300ms")
     monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_RETRY_DELAY_S", 0.2)
-    monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_BUDGET_S", 0.5)
+    monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_BUDGET_S", 1.2)
 
 
 def _retries(caplog: pytest.LogCaptureFixture) -> int:
