@@ -1,5 +1,13 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #590 재시도 예산 입구 재검사
+
+#590 재시도 sleep이 예산을 넘겨 재개되면 새 transaction 전에 거절하도록 보강했다.
+원 반례와 새 경계 회귀 RED→GREEN, 관련14·Dagster149·Ruff PASS이며 실제 PG/
+운영은 미실행이다. 고정 lock/delay/budget값·D4=21600·Daemon OFF는 그대로다.
+독립 post-fix 두 리뷰·새 CI·root merge/배포 수용이 남아 있다.
+
+
 ## 2026-10-18 — #590 main 통합 후보
 
 main535e26b와 기존 lock 대기 보강을 합쳤다. D4=21600 확정·Daemon OFF와

@@ -1,5 +1,18 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-18 — #590 재시도 예산 입구 재검사
+
+독립 P2에서 첫 lock55P03 뒤 sleep의 실제 재개가 3600초 예산을 넘겨도
+새 transaction/rebuild가 가능함을 확인했다. 원 지적 fixture는1 FAIL/5 PASS,
+새 집중 회귀는 예산 경계3600·초과4002초에서2 FAIL/정상32초1 PASS였다.
+마지막 lock 오류를 보존하고 재시도 loop 입구에서 deadline을 다시 확인하는 최소수정으로
+원 오류를 반환하며 새 transaction/LOCK/재생성·publication guard 실행을 막는다.
+개별 lock2초·delay30초·예산3600초·재생성 보유 시간·다른 SQL예외 정책은 바꾸지 않았다.
+수정 후 집중+관련14 PASS(1.23초), 지적 fixture6 PASS(1.16초), 전체 Dagster149 PASS
+(7.67초)·Ruff PASS. 실제 PG/운영 검증은 NOT_RUN이며 원 실패/초기 freeze는 보존한다.
+독립 post-fix2리뷰와 정확 새 head CI는 별도다.
+
+
 ## 2026-10-18 — #590 main 정합(Codex 인계)
 
 사용자 takeover 위임으로 기존54a65ff에 main535e26b를 일반 merge했다.

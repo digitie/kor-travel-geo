@@ -146,7 +146,11 @@ async def refresh_region_radius_parts(
     """
     deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
     attempt = 0
+    last_lock_error: DBAPIError | None = None
     while True:
+        # sleep 재개가 늦어졌다면 새 transaction/LOCK 시도 전에 예산을 다시 확인한다.
+        if last_lock_error is not None and time.monotonic() >= deadline:
+            raise last_lock_error from None
         attempt += 1
         try:
             async with engine.begin() as conn:
@@ -167,6 +171,7 @@ async def refresh_region_radius_parts(
                 attempt,
                 REGION_RADIUS_LOCK_RETRY_DELAY_S,
             )
+            last_lock_error = busy.cause
             await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
 
 
