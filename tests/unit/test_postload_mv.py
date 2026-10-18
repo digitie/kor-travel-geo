@@ -133,3 +133,13 @@ async def test_refresh_mv_forwards_owner_guard_to_radius_parts(monkeypatch):
         radius.reset_mock()
         await postload.refresh_mv(engine, strategy=strategy, publication_guard=guard)
         radius.assert_awaited_once_with(engine, publication_guard=guard)
+
+
+def test_region_radius_rebuild_caps_its_lock_wait() -> None:
+    # G-01 follow-up a: the TRUNCATE must not queue radius readers for the 6 h ceiling.
+    source = inspect.getsource(postload.refresh_region_radius_parts)
+
+    assert "SET LOCAL lock_timeout" in source
+    assert source.index("SET LOCAL lock_timeout") < source.index("REGION_RADIUS_PARTS_REFRESH_SQL")
+    assert postload.REGION_RADIUS_LOCK_TIMEOUT == "5s"
+    assert postload.REGION_RADIUS_LOCK_ATTEMPTS == 3

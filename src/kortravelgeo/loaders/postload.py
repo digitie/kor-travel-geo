@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import warnings
 from typing import Any, Literal
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.infra.cache import GeoCacheRepository
@@ -102,17 +104,51 @@ async def refresh_mv(
     await GeoCacheRepository(engine).clear()
 
 
+#: Lock-wait cap for the ``region_radius_parts`` rebuild (G-01 follow-up a). Its TRUNCATE takes
+#: ACCESS EXCLUSIVE; while it waits behind a long reader (e.g. ``pg_dump``) every new radius
+#: lookup queues behind it. Capped at the serving statement timeout (5 s) so a queued API read is
+#: never held longer than it would wait anyway; a lost wait rolls back (old rows stay) and retries.
+REGION_RADIUS_LOCK_TIMEOUT = "5s"
+REGION_RADIUS_LOCK_ATTEMPTS = 3
+REGION_RADIUS_LOCK_RETRY_DELAY_S = 10.0
+_LOCK_NOT_AVAILABLE = "55P03"
+
+
+def _is_lock_timeout(exc: DBAPIError) -> bool:
+    return getattr(exc.orig, "sqlstate", None) == _LOCK_NOT_AVAILABLE
+
+
 async def refresh_region_radius_parts(
     engine: AsyncEngine, *, publication_guard: PublicationGuard | None = None
 ) -> None:
-    """Rebuild subdivided administrative-region geometry for radius lookup."""
-    async with engine.begin() as conn:
-        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
-        for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
-            await conn.execute(text(sql))
-        # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
-        if publication_guard is not None:
-            await publication_guard(conn)
+    """Rebuild subdivided administrative-region geometry for radius lookup.
+
+    The lock wait is capped (``REGION_RADIUS_LOCK_TIMEOUT``) and a lost wait is retried a bounded
+    number of times; anything else propagates unchanged.
+    """
+    for attempt in range(1, REGION_RADIUS_LOCK_ATTEMPTS + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(_SET_MAINTENANCE_TIMEOUT)
+                await conn.execute(
+                    text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'")
+                )
+                for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
+                    await conn.execute(text(sql))
+                # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
+                if publication_guard is not None:
+                    await publication_guard(conn)
+            return
+        except DBAPIError as exc:
+            if not _is_lock_timeout(exc) or attempt == REGION_RADIUS_LOCK_ATTEMPTS:
+                raise
+            LOGGER.warning(
+                "region_radius_parts 재생성이 lock 대기 %s를 넘었다(%d/%d) — 재시도",
+                REGION_RADIUS_LOCK_TIMEOUT,
+                attempt,
+                REGION_RADIUS_LOCK_ATTEMPTS,
+            )
+            await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:
