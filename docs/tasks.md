@@ -192,6 +192,7 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     최대 1 h 재시도 — 백업(`pg_dump`의 ACCESS SHARE)과 겹쳐도 reader를 한 번에 2 s 이상 줄 세우지 않고 끝까지 기다린다). **남은 것**:
     획득 뒤 보유(재생성~commit, 6 h 문장 상한) — `_next` 표 재생성 뒤 rename swap으로 줄이는 것은 별도 후속(아래 a2). 원문: `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
+  - [ ] **G-01 후속 a2** — `region_radius_parts`를 `_next` 표에 재생성하고 짧은 rename으로 교체(보유 시간·백업 충돌 제거).
   - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
     SQL을 `pg_cancel_backend`로 끊게 할지.
   - [x] **G-01 후속 c** — 데이터 지문 savepoint `10min` → `30min`(소유자 결정 2026-10-18; ADR-069 D5 개정).
