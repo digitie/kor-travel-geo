@@ -229,8 +229,8 @@ def test_schema_drift_detects_missing_extra_and_absent_tables() -> None:
     }
     assert data_fingerprint.schema_drift(live) is None
     assert data_fingerprint.schema_drift({**live, "tl_scco_li": ["li_cd", "geom"]}) == "tl_scco_li"
-    absent = {k: v for k, v in live.items() if k != "region_radius_parts"}
-    assert data_fingerprint.schema_drift(absent) == "region_radius_parts"
+    absent = {k: v for k, v in live.items() if k != "tl_sprd_manage"}
+    assert data_fingerprint.schema_drift(absent) == "tl_sprd_manage"
 
 
 @pytest.mark.asyncio

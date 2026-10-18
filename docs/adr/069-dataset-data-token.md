@@ -104,7 +104,7 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 ### D2 — 지문 표 집합은 손으로 고르지 않고 유도한다
 
 정의: **"v2 응답을 만드는 infra repo(`reverse_repo`·`zip_repo`·`geometry_repo`·`geocode_repo`·
-`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표 — 1차 리뷰 뒤 v1 전용 두 표를 빼 9표, 구현 기록 12):
+`search_repo`)의 SQL이 `FROM`/`JOIN`하는 표 집합"**. 2026-10-13 head에서 유도한 집합(11표 — 1차 리뷰 뒤 v1 전용 두 표를 빼 9표, 구현 기록 12; **2026-10-18 개정으로 `region_radius_parts`를 빼 8표** — 아래 "개정" 절):
 
 | 표 | 읽는 repo | 지문에 넣는 열 |
 |---|---|---|
@@ -428,6 +428,24 @@ rollback·standalone 적재 활성화는 이력상 0회; (b) 485.8 s도 성공�
     `COLLATE "C"` — 그래도 PostGIS 버전·바이트 순서가 바뀌면(odroid aarch64 이전 등) `Box2D` 텍스트·`ST_AsBinary`가 달라져
     토큰이 한 번 바뀔 수 있다(ADR-070 D8과 같은 "전량 재계획 1회"). admin `ServingRelease.data_token`도 `dd1-` 패턴.
     backfill CLI는 lock 대기·UPDATE·DELETE를 `statement_timeout 5min`으로 한다(세션 기본 5 s).
+
+## 개정 (2026-10-18) — `region_radius_parts`를 지문에서 뺀다(파생 표, 소유자 결정)
+
+- **관측.** odroid standalone `mv_refresh`(2026-10-18, 원천 무변경) 뒤 `data_token`이 바뀌었다. 같은 지문 SQL을 n150 옛 DB와 odroid에
+  돌려 표별로 비교하면 9표 중 `region_radius_parts`만 달랐다(나머지 8표 동일 — journal 2026-10-18).
+- **원인.** 이 표는 refresh마다 `tl_scco_ctprvn`·`tl_scco_sig`·`tl_scco_emd`(셋 다 지문 대상)에서 `ST_Subdivide(geom, 256)` +
+  `row_number() OVER (… ORDER BY ST_Area DESC)`로 **다시 만든다**(`infra/sql.py` `REGION_RADIUS_PARTS_REFRESH_SQL`). 조각 경계는
+  PostGIS/GEOS·아키텍처에 따라, `part_no`는 면적 동률에서 실행마다 달라질 수 있다. 원천 정보는 이미 원천 3표의 해시에 들어 있으므로
+  이 표는 원천 변화 외에 **재구축 잡음만** 더한다.
+- **결정.** D2의 지문 표에서 빼고 `DATA_FINGERPRINT_ALLOWLIST`에 이유와 함께 둔다(9 → 8표). D2의 "v2 repo가 읽는 표" 유도 lint는
+  그대로 통과한다(허용 목록 경로). 규칙을 테스트로 고정: refresh가 다시 만드는 표(`mv_geocode_target`·`mv_geocode_text_search`·
+  `region_radius_parts`)의 출처가 **전부** 지문 표면 그 표는 지문에서 빠져야 하고, 아니면 들어가야 한다
+  (`tests/unit/test_data_fingerprint_covers_serving_tables.py` — 다시 넣거나 `mv_geocode_target`을 빼면 빨강). 통합 테스트: 이 표만
+  바꾸면 토큰 불변, 원천(`tl_scco_sig`)을 바꾸고 다시 만들면 토큰 변경.
+- **영향.** 지문 정의가 바뀌므로 같은 데이터라도 토큰이 **한 번** 바뀐다(D1 "열 추가 = 토큰 변경 1회"와 같은 성격; 접두 `dd1-`는
+  유지). 이미 저장된 과거 릴리스 지문은 옛 정의 값이라 새 활성 지문과 비교하면 "다름"이다 — 소비자 기준선(Map·concierge)은
+  2026-10-18 현재 0건이라 영향 없고, 기준선 기록·센서 가동은 이 개정 배포 뒤에 한다. 활성 릴리스는 배포 직후 D9 CLI
+  (`ktgctl serving fingerprint-active`)로 다시 계산한다.
 
 ## 후속
 
