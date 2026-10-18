@@ -124,7 +124,8 @@ DATA_FINGERPRINT_ALLOWLIST: Mapping[str, str] = {
         "definition only changes with a code release"
     ),
     "region_radius_parts": (
-        "derived on every refresh from tl_scco_ctprvn/tl_scco_sig/tl_scco_emd (all hashed, geometry "
+        "derived on every refresh from tl_scco_ctprvn/tl_scco_sig/tl_scco_emd (all hashed, "
+        "geometry "
         "as the D3 summary) by ST_Subdivide + row_number() over ST_Area; its parts are rebuild "
         "noise that moved data_token with unchanged sources (ADR-069 amendment 2026-10-18). "
         "Relies on ADR-043: the parts are rebuilt in the same release as their sources"
