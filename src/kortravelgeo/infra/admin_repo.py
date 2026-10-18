@@ -885,7 +885,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             if dry_run:
                 await conn.execute(text("SET TRANSACTION READ ONLY"))
             else:
-                # The scan sets its own 10 min inside a savepoint; this covers the lock wait,
+                # The scan sets its own 30 min inside a savepoint; this covers the lock wait,
                 # UPDATE and geo_cache DELETE that follow (the session default is 5 s).
                 await conn.execute(text("SET LOCAL statement_timeout = '5min'"))
             snapshot_id = await _active_release_snapshot_id_for_conn(conn)
@@ -3129,7 +3129,7 @@ async def _insert_dataset_snapshot_and_release(
     fingerprint_attempt: FingerprintAttempt | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
     # T-325a (ADR-069 D4/D5): fingerprint the served content BEFORE the activation lock, so a
-    # concurrent activation never waits out the (up to 10 min) scan. Callers that hold other
+    # concurrent activation never waits out the (up to 30 min) scan. Callers that hold other
     # locks later in the transaction (publication_guard, hot-swap rename) scan earlier and pass
     # ``fingerprint_attempt``; ``data_fingerprint`` is a test-only override. Same rule as
     # mv_hash below: only an active release is fingerprinted. Fail-open: a failed fingerprint

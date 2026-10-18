@@ -1242,7 +1242,7 @@ def serving_fingerprint_active(
 
     Without --dry-run, stores it on the active snapshot and clears geo_cache (one-time backfill
     for the release that was active before T-325a). --dry-run runs the same SQL under the same
-    10 min timeout in a READ ONLY transaction and prints the elapsed time and per-table hashes.
+    30 min timeout in a READ ONLY transaction and prints the elapsed time and per-table hashes.
     """
 
     from kortravelgeo.core.dataset_version import derive_data_token

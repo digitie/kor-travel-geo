@@ -170,7 +170,7 @@ data_token       = "dd1-" + sha256(data_fingerprint)[:32]
 **위치는 advisory lock 획득 전이다.** 지문 SELECT는 같은 transaction 안이되
 `pg_advisory_xact_lock(SERVING_RELEASE_ACTIVATION)`(`:3042-3049`) **앞**에서(savepoint 안, D5) 실행한다.
 lock은 원장 read-decide-write만 직렬화하고 데이터 적재는 직렬화하지 않으므로 지문 결과는 lock 안에서
-계산한 것과 같고, lock 보유 시간은 지문 시간(≤10 min)만큼 늘지 않는다 — 동시 활성화 호출자
+계산한 것과 같고, lock 보유 시간은 지문 시간(≤10 min, 2026-10-18부터 ≤30 min)만큼 늘지 않는다 — 동시 활성화 호출자
 (restore·hot-swap·rollback은 `statement_timeout=0`이라 무기한, admin API 경로는 기본 timeout으로
 lock 대기 중 실패)가 지문을 기다리는 일이 없다. `DELETE FROM geo_cache`는 쓰기이므로 lock 뒤 원장
 INSERT와 같은 자리에서 실행한다.
