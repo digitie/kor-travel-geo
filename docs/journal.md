@@ -1,5 +1,12 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-18 — #591 제품 검증 정산
+
+제품78ea197의 CI 5개 성공과 독립 두 리뷰의 P2 해소를 확인했다. CHANGELOG에
+유지보수 연결 검사 10초의 범위와 한계를 추가했다. 배포/실제 운영 수용은 남아 있다.
+[원문과 CI 근거](reviews/2026-10-18-worker-connection-closure/README.md)를 보존한다.
+
+
 ## 2026-10-18 — #591 통합시험 child의 DSN argv 제거
 
 독립 P2에 따라 dead-client 통합시험의 password-bearing DSN을 child argv에서
