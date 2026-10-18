@@ -116,7 +116,7 @@ WSL 직접 ssh·NOPASSWD sudo·docker 그룹·NTP 수동 동기까지 완료, ti
    **`target_database`를 주지 않는다**(빈 호스트에는 보호할 MV가 없다). 소스 절대경로는 `/app/data/source/...`. run은 Dagster UI(odroid plane)에서 관찰; cancel 없이
    SUCCESS가 수용 기준. 이 한 run이 로더 → `consistency_check` → ERROR 게이트 → **`mv_refresh` child**까지 돈다
    (`src/kortravelgeo/loaders/batch_dag.py:3-4,22`, ADR-017) — 별도 mv_refresh 단계는 없고 child 소요를 소요 표에 기록한다.
-4. **standalone `mv_refresh` 1회**(ADR-070 D4 입력 — batch child가 아니라 이 run의 wall clock; 상한 6 h, A55 ×3 가정 3.7~4.8 h):
+4. **standalone `mv_refresh` 1회**(ADR-070 D4 입력 — batch child가 아니라 이 run의 wall clock; 작성 당시 상한 6 h·A55 ×3 가정 3.7~4.8 h — 2026-10-18 odroid 실측 2156.9 s, ADR-070 D4 결정 절):
    야간 schedule을 기다리거나 `POST /v1/admin/maintenance/refresh-mv`(`routers/admin.py:1867`; `/v1/admin/loads`에 `kind=mv_refresh`는
    source-load op로 가므로 쓰지 않는다)로 기동 → 소요 기록.
 5. **키 정책 적용**(ADR-070 D2, URL 전환 **전** 필수): (나) 발급(추천) — odroid 로컬 admin API에서 소비자별 발급 → Map root

@@ -17,6 +17,9 @@ LOCATION_NAME = environ.get(
 )
 LONG_JOBS = frozenset({"full_load_batch", "load_source", "db_restore", "backup_restore_drill"})
 IDEMPOTENT_RETRY_JOBS = frozenset({"backup_verify"})
+#: ADR-070 D4 (ii): measured job-specific run caps = round(standalone wall s x 1.5). mv_refresh:
+#: odroid standalone run 2026-10-18 (Dagster run 2bd07f07, quiet window) 2156.9 s -> 3235 s.
+MAX_RUNTIME_OVERRIDES: dict[str, int] = {"mv_refresh": 3235}
 GEO_EXECUTOR = multiprocess_executor.configured({"max_concurrent": 1})
 
 
@@ -44,8 +47,9 @@ def native_recovery_sensors() -> list[SensorDefinition]:
 def policy_for_job(name: str) -> RecoveryPolicy:
     """24시간이 필요한 작업과 비멱등 작업의 재시도 금지를 보존한다."""
     safe_retry = name in IDEMPOTENT_RETRY_JOBS
+    default_runtime = 86400 if name in LONG_JOBS else 21600
     return RecoveryPolicy(
-        max_runtime_seconds=86400 if name in LONG_JOBS else 21600,
+        max_runtime_seconds=MAX_RUNTIME_OVERRIDES.get(name, default_runtime),
         idempotent=safe_retry,
         infrastructure_retries=1 if safe_retry else 0,
     )

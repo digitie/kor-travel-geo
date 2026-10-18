@@ -227,6 +227,16 @@ fact base §E1; 런북 전제 `docs/deploy/staging-full-load.md:31-33`는 운영
 - 수용 기준(효과로 결박 — "소요 < 상한의 70 %"는 (ⅱ)에서 정의상 참(66.7 %)이라 쓰지 않는다): 풀로드 run이 cancel 없이
   SUCCESS; (ⅱ)면 태그 값 == `round(실측 s × 1.5)`이고 `test_definitions.py` 기대값이 그 숫자와 같으며 한 줄 바꾸면 빨갛다;
   (ⅰ)은 실측(또는 ×3 산식 근거)이 21600 s를 **넘었을 때만** 고르고 그 숫자를 journal에 적는다 — 넘지 않으면 (ⅰ)을 고르지 않는다.
+- **결정(2026-10-18, 소유자 지시 실행)**: odroid standalone `mv_refresh` 1회(조용한 창, daemon OFF라 geo code-server 안
+  `dagster job execute`로 queue 밖 실행 — Dagster run `2bd07f07…` SUCCESS) **2156.9 s**(load_jobs 2134 s: 링크 해소+ANALYZE
+  194 s, MV CONCURRENTLY 2개 1623 s, 릴리스 기록·지문 317 s) → 21600 s 미만이므로 **(ⅱ)**: `MAX_RUNTIME_OVERRIDES =
+  {"mv_refresh": 3235}`(= round(2156.9 × 1.5), `recovery.py`), `test_definitions.py`가 그 산식에 결박. 주의: 2026-10-15 경합(load
+  ≈20) 시 한 문장이 30분을 넘었다. **이 값은 기록된 모든 운영 `mv_refresh`보다 짧다**(n150 concurrent 96 min=5760 s·swap 73 min=
+  4380 s, Dagster 1.22 h, load_jobs 1.59 h) — 표본은 n=1·조용한 창·concurrent·원천 무변경이고 swap(`docs/t028-daily-juso-delta.md`
+  권장)은 odroid에서 잰 적이 없다. 상한은 공용 daemon이 켜져 run monitoring이 돌 때만 집행된다(`mv_refresh` schedule은 없다 —
+  발화는 admin `refresh-mv`). 또 3235 s와 지문 30 min(ADR-069 D5)이 겹치면 MV commit 뒤·릴리스 기록 전에 run이 끊겨 새 MV가 옛
+  `data_token` 아래 서빙되는 창이 생긴다(MV·region_radius·릴리스가 각자 commit). **따라서 소유자 재확인 전에는 이 값을 머지하지
+  않고, daemon을 켜기 전 tasks.md "G-01 daemon ON 전제"를 닫는다.**
 
 ### D5 — odroid에서 geo 백업·restore drill은 off(켜지 않는다)
 
@@ -337,7 +347,8 @@ PG cgroup anon도 같은 창에 찍지만 그것은 이 게이트가 아니라 M
 - `full_load_batch` 12 h+(가정; 로더 + 게이트 + `mv_refresh` child를 **한 run에** 포함 — 별도 합산 없음) 하루 창 + (ADR-069
   구현 뒤) Track 1 전량 재지오코딩 ≈2.5 h+(수용) — n150 geo-api는 9단계까지 serving하므로 데이터 공백은 9단계의 짧은 창뿐이고,
   소비자 URL 전환은 batch SUCCESS 다음 날이다.
-- standalone `mv_refresh`가 6 h 상한의 61~80 %(가정; 설계 표기 70~85 %)라 실측 전에는 상한 결정을 못 한다(D4).
+- standalone `mv_refresh`가 6 h 상한의 61~80 %(가정; 설계 표기 70~85 %)라 실측 전에는 상한 결정을 못 한다(D4). — 2026-10-18
+  실측 2156.9 s(D4 결정 절).
 - 풀로드 재적재·장애 재배포마다 키 재발급(D2 (나)) — Map `.env` + Map 전부 재생성 + concierge DB 설정, 3곳.
 - odroid 메모리 최악 창(geo run ‖ weather 적재 ‖ Opinet)은 RAM을 넘는다 — memswap 정책으로 run FAILURE가
   되게 두는 것이고, 그 run은 재실행이다. geo 백업·drill이 없어 복구 수단은 재적재뿐(비범위 승인).

@@ -19,6 +19,7 @@ from kortravelgeo_dagster.definitions import (
     defs,
 )
 from kortravelgeo_dagster.mv import mv_refresh_job, run_mv_refresh_op
+from kortravelgeo_dagster.recovery import LONG_JOBS
 from kortravelgeo_dagster.run_tags import LONG_RUN_TAGS, MAX_RUNTIME_TAG
 
 
@@ -83,7 +84,8 @@ _EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
     "db_restore": "86400",
     "full_load_batch": "86400",
     "load_source": "86400",
-    "mv_refresh": "21600",
+    # ADR-070 D4 (ii): round(2156.9 s odroid standalone wall x 1.5), measured 2026-10-18.
+    "mv_refresh": "3235",
     "scheduled_backup_run_due": "21600",
     "source_rebuild_db": "21600",
 }
@@ -96,6 +98,18 @@ def test_every_job_declares_its_max_runtime() -> None:
         if not job.name.startswith("__")
     }
     assert declared == _EXPECTED_MAX_RUNTIME_TAG
+
+
+#: ADR-070 D4 input: the odroid standalone mv_refresh Dagster run wall (2026-10-18, run 2bd07f07).
+_MV_REFRESH_STANDALONE_WALL_S = 2156.9
+
+
+def test_mv_refresh_run_cap_is_measured_wall_times_one_and_a_half() -> None:
+    # ADR-070 D4 (ii) acceptance: tag == round(measured s x 1.5), bound to the measurement.
+    tag = int(defs.get_job_def("mv_refresh").tags[MAX_RUNTIME_TAG])
+    assert tag == round(_MV_REFRESH_STANDALONE_WALL_S * 1.5)
+    assert "mv_refresh" not in LONG_JOBS  # (i) only when the measurement exceeds 21600 s
+    assert _MV_REFRESH_STANDALONE_WALL_S < 21600
 
 
 def test_maintenance_statement_ceiling_covers_the_mv_refresh_run_cap() -> None:

@@ -7,7 +7,12 @@ from dagster import DagsterInstance, DagsterRunStatus
 from kortravelcommon.dagster import PROJECT_TAG
 
 from kortravelgeo_dagster.definitions import defs
-from kortravelgeo_dagster.recovery import LONG_JOBS, policy_for_job, schedule_eligible
+from kortravelgeo_dagster.recovery import (
+    LONG_JOBS,
+    MAX_RUNTIME_OVERRIDES,
+    policy_for_job,
+    schedule_eligible,
+)
 
 
 def test_only_read_only_verify_allows_infrastructure_retry() -> None:
@@ -16,7 +21,8 @@ def test_only_read_only_verify_allows_infrastructure_retry() -> None:
         assert policy.idempotent is (job.name == "backup_verify")
         assert job.tags["dagster/max_retries"] == ("1" if policy.idempotent else "0")
         assert job.tags["dagster/retry_on_asset_or_op_failure"] == "false"
-        assert int(job.tags["dagster/max_runtime"]) == (86400 if job.name in LONG_JOBS else 21600)
+        default = 86400 if job.name in LONG_JOBS else 21600
+        assert int(job.tags["dagster/max_runtime"]) == MAX_RUNTIME_OVERRIDES.get(job.name, default)
         assert job.executor_def.name == "multiprocess"
         result = job.executor_def.apply_config_mapping({"config": {}})
         assert result.success

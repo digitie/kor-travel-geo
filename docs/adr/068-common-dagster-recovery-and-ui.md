@@ -18,7 +18,7 @@ Dagster 조회 장애를 실행 부재로 해석하면 lease가 만료된 정상
 - 별도 Dagster 패키지는 common의 RecoveryPolicy·활성 실행 확인·인프라 재시도 sensor를
   사용한다. 실행당 step 동시성은 1이다. 읽기 전용 backup_verify만 worker 장애 재시도
   1회를 허용하며 op/provider 실패는 제외한다. 비멱등 복원·적재는 자동 재시도하지 않는다.
-- 긴 네 작업은 24시간, 나머지는 6시간의 명시적 run 예산을 가진다. instance의 run
+- 긴 네 작업은 24시간, 나머지는 6시간의 명시적 run 예산을 가진다(2026-10-18 ADR-070 D4: `mv_refresh`만 실측 기반 값). instance의 run
   monitoring 및 JOB_TAG별 queue limit=1 설정은 별도 운영 전제이며 step 동시성과 다르다.
 - 로그인·메뉴·Dagster 목록/상세 틀은 common UI를 사용한다. geo 고유 실패 승인·백업
   artifact·단계 event 상세는 geo에 남긴다. 공통 목록은 50행씩 표시한다.
@@ -49,14 +49,16 @@ Dagster 1.13.24에서 tick 조회가 전체 이력을 순위 계산하지 않도
 2026-10-15)가 호스트 경합(load ≈20) 중 링크 해소 UPDATE에서 정확히 30분에 `QueryCanceled`로
 실패했다 — Dagster 유지보수 엔진의 세션 값은 `0`인데 리프의 `SET LOCAL '30min'`이 그것을 낮췄다.
 조용한 odroid 실측(2026-10-17, 읽기 전용·rollback): 그 UPDATE 120 s, `mv_geocode_target` 정의 쿼리
-510 s — 평시엔 30분 안이지만 경합 시 한 문장이 넘을 수 있다. 6시간은 `mv_refresh` run 상한(ADR-070
+510 s — 평시엔 30분 안이지만 경합 시 한 문장이 넘을 수 있다. 6시간은 (작성 당시) `mv_refresh` run 상한(ADR-070
 D4, 21600 s)과 같아 `mv_refresh`에서는 한 문장이 run 예산 전체를 쓸 수 있되(`full_load_batch` 24 h 안의
 같은 리프에는 문장당 6 h가 그대로 걸린다), run 감시(daemon)가 꺼져 있거나 worker가 죽어도 PostgreSQL이 **6 h 뒤에는**
 취소한다(무한 상한 0은 고르지 않았다). 한계: 상한은 문장 단위라 daemon OFF 동안 run 전체 시간은 묶이지 않고,
 `client_connection_check_interval`이 없어 worker가 죽은 뒤 고아 backend도 최대 6 h 돈다; `region_radius_parts`
 TRUNCATE는 `lock_timeout` 없이 AccessExclusive를 commit까지 쥔다(기존 문제, 최악이 30분→6 h로 커짐) — 둘 다 후속
 과제(tasks.md G-01 후속). 21600 s 자체도 D4 실측 전 잠정값이다. D4가 run 상한을 올리면
-`kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다.
+`kor-travel-geo-dagster/tests/test_definitions.py`의 상한 검사가 빨개져 이 값을 다시 보게 한다. 2026-10-18 D4로
+`mv_refresh` run 상한이 3235 s가 됐다 — 문장 상한 6 h는 그대로(같은 리프를 쓰는 `full_load_batch` 24 h 안에서도 쓰이므로)이고
+검사는 "문장 상한 ≥ run 상한"이다.
 데이터 지문의 savepoint 안 `10min`(ADR-069 D5)은 이 개정에서 바꾸지 않는다 — odroid 조용한 실측 240 s로 여유가
 2.5배뿐이라 경합 시 NULL `data_token`(소비자 "판정 불가")이 될 수 있다. 올릴지는 네 활성화 경로가 공유하는 값이라
 소유자 결정으로 남긴다(tasks.md G-01 후속). → **2026-10-18 소유자 결정: 30 min으로 올린다**(ADR-069 D5 개정,
