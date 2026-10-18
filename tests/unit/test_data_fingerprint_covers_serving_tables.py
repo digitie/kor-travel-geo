@@ -219,8 +219,11 @@ def _refresh_derivations() -> dict[str, str]:
 def assert_no_derived_table_is_hashed(
     derivations: dict[str, str], hashed: frozenset[str] | set[str]
 ) -> None:
-    """A table rebuilt only from hashed tables adds nothing but rebuild noise (``ST_Subdivide``
-    parts, ``row_number`` ties) — it must not be hashed; one built from unhashed sources must be."""
+    """A table rebuilt only from hashed tables adds mostly rebuild noise (``ST_Subdivide`` parts,
+    ``row_number`` ties) — it must not be hashed; one built from unhashed sources must be. Sources
+    are hashed per D3 (geometry as a summary), so this trades a little geometry sensitivity for
+    stability (ADR-069 amendment 2026-10-18). ``_refresh_derivations`` is a hand-kept list: a new
+    refresh-built table must be added there."""
     for target, sql in derivations.items():
         sources = module_tables(sql) - {target}
         assert sources, f"{target}: derivation sources not found — the parse is broken"
