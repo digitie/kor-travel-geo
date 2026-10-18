@@ -2,6 +2,15 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-18 — #585(지문 30 min) odroid geo CS 배포·D4 draft(by claude)
+
+- #585 머지(`1aa18f0`, CI 5/5) 뒤 같은 방식(얇은 layer, `pip --no-index --no-deps --force-reinstall`)으로 geo code-server만 교체:
+  base `claude-local/geo-g01-cs:d8370d0ff61c`(=`48799d51`) → `28f324e6…`(label revision `1aa18f0`), compose CS `image:` 한 줄
+  (백업 `compose.yml.bak-fp30-20261018T015158Z`), 01:53Z healthy·restart 0, 설치 파일이 `1aa18f0`과 전부 일치, 컨테이너 안
+  `DATA_FINGERPRINT_STATEMENT_TIMEOUT == '30min'` 확인. **API는 그대로**(`ed8b2b1`, 지문 10 min) — API 프로세스 안 활성화 경로
+  (rollback 등)는 다음 API 이미지 교체 때 반영된다. geo schedule/sensor 상태 불변, daemon OFF.
+- D4 `mv_refresh` 3235 s는 #586 **draft**(소유자 재확인 대기 — 운영 이력보다 짧음, MV/릴리스 절단 창). 머지·배포하지 않았다.
+
 ## 2026-10-18 — G-01 standalone mv_refresh 실측·D4 상한, 지문 30 min, G-06/G-07 live(by claude)
 
 **실행 방식과 이유.** 소유자 결정(2026-10-18): queue·daemon을 거치지 않고 geo code-server 안에서 1회. 공용 instance가
