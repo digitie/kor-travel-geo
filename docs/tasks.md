@@ -190,7 +190,8 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)와 D4 값(재확인)을 닫는다.
   - [ ] **G-01 후속 a** — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
-  - [ ] **G-01 후속 b** — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
+  - [x] **G-01 후속 b**(2026-10-18, 유지보수 엔진 `client_connection_check_interval=10s`, PR `agent/claude-maint-conn-check`;
+    admin cancel의 `pg_cancel_backend`는 하지 않음 — worker가 죽으면 서버가 끊고, 살아 있으면 run 취소가 프로세스를 끝낸다) — 유지보수 엔진 `client_connection_check_interval`(worker 사망 뒤 고아 backend) + admin cancel이 실행 중
     SQL을 `pg_cancel_backend`로 끊게 할지.
   - [x] **G-01 후속 c** — 데이터 지문 savepoint `10min` → `30min`(소유자 결정 2026-10-18; ADR-069 D5 개정).
 
