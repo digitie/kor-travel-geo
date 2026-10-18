@@ -1,5 +1,19 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #590 연결 지연 예산 및 기존 잠금 정책 복원
+
+두 번째 독립 리뷰에서 연결 풀/transaction 준비 중 예산 초과와 기존 비영
+lock_timeout을 0으로 덮어쓰는 반례를 확인했다. 연결 준비 뒤 재시도 예산을
+재확인하고, 획득 전에 current_setting을 읽어 성공 뒤 transaction-local
+set_config 바인딩으로 원값을 복원한다. 실패 transaction은 기존 rollback 경로를 따른다.
+
+연결/설정 경계 회귀는 수정 전 4 FAIL/5 PASS, 수정 후 관련 25 PASS였다.
+기존 timeout 0·250ms·15s 복원 회귀는 수정 전 2 FAIL/10 PASS, 수정 후
+12 PASS이며 합친 관련 검증 28 PASS(0.61초), 변경 파일 Ruff PASS다.
+D4=21600, lock 2초·재시도 30초·예산 3600초와 daemon 중지는 유지한다.
+실제 PG·운영 배포는 아직 미실행이며 최종 두 리뷰와 새 커밋 CI가 남아 있다.
+
+
 ## 2026-10-18 — #590 재시도 예산 입구 재검사
 
 #590 재시도 sleep이 예산을 넘겨 재개되면 새 transaction 전에 거절하도록 보강했다.

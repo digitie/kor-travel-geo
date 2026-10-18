@@ -126,6 +126,7 @@ class _RegionRadiusLockBusyError(Exception):
 async def _lock_region_radius_parts(conn: Any) -> None:
     if await conn.scalar(text("SELECT to_regclass('region_radius_parts')")) is None:
         return  # first build: nobody can be reading it
+    original_timeout = await conn.scalar(text("SELECT current_setting('lock_timeout')"))
     await conn.execute(text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'"))
     try:
         await conn.execute(text("LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE"))
@@ -133,7 +134,10 @@ async def _lock_region_radius_parts(conn: Any) -> None:
         if getattr(exc.orig, "sqlstate", None) == _LOCK_NOT_AVAILABLE:
             raise _RegionRadiusLockBusyError(exc) from exc
         raise
-    await conn.execute(text("SET LOCAL lock_timeout = 0"))
+    await conn.execute(
+        text("SELECT set_config('lock_timeout', :lock_timeout, true)"),
+        {"lock_timeout": original_timeout},
+    )
 
 
 async def refresh_region_radius_parts(
@@ -155,6 +159,9 @@ async def refresh_region_radius_parts(
         try:
             async with engine.begin() as conn:
                 await conn.execute(_SET_MAINTENANCE_TIMEOUT)
+                # 풀 연결·transaction 준비 중 늦어져도 새 LOCK을 요청하지 않는다.
+                if last_lock_error is not None and time.monotonic() >= deadline:
+                    raise last_lock_error from None
                 await _lock_region_radius_parts(conn)
                 for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
                     await conn.execute(text(sql))

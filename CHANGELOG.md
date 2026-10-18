@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 반경 파생 테이블 재구축의 잠금 획득 대기를 2초로 제한하고, 잠금 충돌만 30초 간격으로 최대 1시간 재시도한다. 연결 준비 중 재시도 예산을 넘겨도 새 잠금을 요청하지 않으며, 획득 후 기존 transaction의 lock_timeout을 복원한다.
+
 ### Added
 - API/CS 이미지 빌드에서 최종 Python의 stdlib checked-hash bytecode를 명시적으로 준비한다.
   API extra에 Common core와 기본 HTTP 생존 확인을 연결하며 Compose override 정산과 운영 효과는 별도다.

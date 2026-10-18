@@ -10,8 +10,14 @@ from sqlalchemy.exc import DBAPIError
 from kortravelgeo.loaders import postload
 
 
-@pytest.mark.parametrize("resume_at", [32.0, 3600.0, 4002.0])
-async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at):
+@pytest.mark.parametrize(
+    ("resume_at", "delay_at", "ready_at"),
+    [(32.0, None, 32.0), (3600.0, None, 3600.0), (4002.0, None, 4002.0)]
+    + [(32.0, stage, ready) for stage in ("pool", "setup") for ready in (3599.0, 3600.0, 4002.0)],
+)
+async def test_radius_retry_checks_budget_after_sleep(
+    monkeypatch, resume_at, delay_at, ready_at
+):
     class LockUnavailableError(Exception):
         sqlstate = "55P03"
 
@@ -23,9 +29,15 @@ async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at):
     sleeps = []
     guard = AsyncMock()
 
-    async def execute(sql):
+    async def execute(sql, parameters=None):
         command = str(sql)
         commands.append(command)
+        if (
+            len(transactions) == 2
+            and delay_at == "setup"
+            and command.startswith("SET LOCAL statement_timeout")
+        ):
+            clock[0] = ready_at
         if command.startswith("LOCK TABLE") and len(transactions) == 1:
             clock[0] = 2.0
             raise original_error
@@ -38,6 +50,8 @@ async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at):
     @asynccontextmanager
     async def begin():
         transactions.append(True)
+        if len(transactions) == 2 and delay_at == "pool":
+            clock[0] = ready_at
         try:
             yield connection
         except BaseException as error:
@@ -55,12 +69,17 @@ async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at):
     monkeypatch.setattr(postload, "iter_sql_statements", lambda _: ("OWNED_REBUILD",))
     engine = SimpleNamespace(begin=begin)
 
-    if resume_at >= postload.REGION_RADIUS_LOCK_BUDGET_S:
+    if max(resume_at, ready_at) >= postload.REGION_RADIUS_LOCK_BUDGET_S:
         with pytest.raises(DBAPIError) as captured:
             await postload.refresh_region_radius_parts(engine, publication_guard=guard)
         assert captured.value is original_error
-        assert len(transactions) == 1
-        assert outcomes == [postload._RegionRadiusLockBusyError]
+        if resume_at >= postload.REGION_RADIUS_LOCK_BUDGET_S:
+            assert len(transactions) == 1
+            assert outcomes == [postload._RegionRadiusLockBusyError]
+        else:
+            assert len(transactions) == 2
+            assert outcomes == [postload._RegionRadiusLockBusyError, DBAPIError]
+        assert sum(command.startswith("LOCK TABLE") for command in commands) == 1
         assert "OWNED_REBUILD" not in commands
         guard.assert_not_awaited()
     else:
@@ -70,3 +89,32 @@ async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at):
         assert commands.count("OWNED_REBUILD") == 1
         guard.assert_awaited_once_with(connection)
     assert sleeps == [postload.REGION_RADIUS_LOCK_RETRY_DELAY_S]
+
+
+@pytest.mark.parametrize("original_timeout", ["0", "250ms", "15s"])
+async def test_radius_lock_restores_inherited_timeout(original_timeout):
+    state = {"timeout": original_timeout}
+    locks = []
+
+    async def scalar(sql):
+        if "to_regclass" in str(sql):
+            return "region_radius_parts"
+        assert "current_setting('lock_timeout')" in str(sql)
+        return state["timeout"]
+
+    async def execute(sql, parameters=None):
+        command = str(sql)
+        if command.startswith("SET LOCAL lock_timeout"):
+            state["timeout"] = "2s" if "'2s'" in command else "0"
+        elif command.startswith("LOCK TABLE"):
+            locks.append(state["timeout"])
+        elif "set_config" in command:
+            assert parameters == {"lock_timeout": original_timeout}
+            assert "true" in command
+            state["timeout"] = parameters["lock_timeout"]
+
+    await postload._lock_region_radius_parts(
+        SimpleNamespace(scalar=scalar, execute=execute)
+    )
+    assert locks == ["2s"]
+    assert state["timeout"] == original_timeout
