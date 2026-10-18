@@ -1,5 +1,45 @@
 # RESUME — 작업 재개 가이드
 
+## 2026-10-18 — #590 최종 제품 검증
+
+제품fa3a779의 CI 5개 성공과 독립 두 리뷰 OPEN0을 확인했다.
+[원문과 CI 근거](reviews/2026-10-18-radius-lock-closure/README.md)를 보존한다.
+실제 운영 배포와 측정은 다음 단계이며 daemon은 중지 상태를 유지한다.
+
+
+## 2026-10-18 — #590 연결 지연 예산 및 기존 잠금 정책 복원
+
+추가 독립 경계 검증에서 relation/GUC 조회 await도 예산을 넘길 수 있어 실제
+LOCK execute 직전까지 동일 deadline과 원 오류를 전달했다. 세 준비 단계의
+정상·경계·초과 회귀는 직전 코드에서 6 FAIL/15 PASS, 수정 후 관련 37 PASS
+(0.65초)다. 이 검사는 새 잠금 요청의 재시도 예산이며 실행 중인 SQL 취소나
+전체 재구축 시간 상한을 새로 보장하지 않는다.
+
+두 번째 독립 리뷰에서 연결 풀/transaction 준비 중 예산 초과와 기존 비영
+lock_timeout을 0으로 덮어쓰는 반례를 확인했다. 연결 준비 뒤 재시도 예산을
+재확인하고, 획득 전에 current_setting을 읽어 성공 뒤 transaction-local
+set_config 바인딩으로 원값을 복원한다. 실패 transaction은 기존 rollback 경로를 따른다.
+
+연결/설정 경계 회귀는 수정 전 4 FAIL/5 PASS, 수정 후 관련 25 PASS였다.
+기존 timeout 0·250ms·15s 복원 회귀는 수정 전 2 FAIL/10 PASS, 수정 후
+12 PASS이며 합친 관련 검증 28 PASS(0.61초), 변경 파일 Ruff PASS다.
+D4=21600, lock 2초·재시도 30초·예산 3600초와 daemon 중지는 유지한다.
+실제 PG·운영 배포는 아직 미실행이며 최종 두 리뷰와 새 커밋 CI가 남아 있다.
+
+
+## 2026-10-18 — #590 재시도 예산 입구 재검사
+
+#590 재시도 sleep이 예산을 넘겨 재개되면 새 transaction 전에 거절하도록 보강했다.
+원 반례와 새 경계 회귀 RED→GREEN, 관련14·Dagster149·Ruff PASS이며 실제 PG/
+운영은 미실행이다. 고정 lock/delay/budget값·D4=21600·Daemon OFF는 그대로다.
+독립 post-fix 두 리뷰·새 CI·root merge/배포 수용이 남아 있다.
+
+
+## 2026-10-18 — #590 main 통합 후보
+
+main535e26b와 기존 lock 대기 보강을 합쳤다. D4=21600 확정·Daemon OFF와
+lock 획득 대기 보강/a2 보유 시간 잔여를 모두 보존했다. 관련 unit11·Ruff PASS이며
+독립2리뷰·새 head CI·root merge/운영 수용은 후속이다. 이번 작업의 운영 실행은 없다.
 ## 2026-10-18 — #591 제품 검증 정산
 
 제품78ea197의 CI 5개 성공과 독립 두 리뷰의 P2 해소를 확인했다. CHANGELOG에

@@ -189,8 +189,11 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     차이를 구분해 검증한다. 이번 소스 머지는 운영 완료가 아니다. daemon OFF·센서 비활성 유지.
   - [ ] **G-01 daemon ON 전제** — 공용 daemon을 켜면 `dagster/max_runtime`이 집행된다(mv_refresh schedule은 없고 발화는
     admin `refresh-mv`). 켜기 전에 후속 a(region_radius TRUNCATE lock)·b(고아 backend)를 닫는다. D4는 21600 유지로 닫혔고 daemon OFF 지시는 계속 유효하다.
-  - [ ] **G-01 후속 a** — `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
+  - [x] **G-01 후속 a — lock 대기**(2026-10-18, #590: `LOCK TABLE … ACCESS EXCLUSIVE`를 먼저 `lock_timeout 2s`로, 그 획득만 30 s 간격
+    최대 1 h 재시도 — 백업(`pg_dump`의 ACCESS SHARE)과 겹쳐도 reader를 한 번에 2 s 이상 줄 세우지 않고 끝까지 기다린다). **남은 것**:
+    획득 뒤 보유(재생성~commit, 6 h 문장 상한) — `_next` 표 재생성 뒤 rename swap으로 줄이는 것은 별도 후속(아래 a2). 원문: `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
+  - [ ] **G-01 후속 a2** — `region_radius_parts`를 `_next` 표에 재생성하고 짧은 rename으로 교체(보유 시간·백업 충돌 제거).
   - [x] **G-01 후속 b**(2026-10-18, #591: Dagster 유지보수 엔진(`client` resource) 세션에 `client_connection_check_interval=10s` —
     worker 프로세스가 죽어 소켓이 닫히면 서버가 실행 중 문장을 ~10 s 안에 끝낸다). **덮지 못하는 것**(6 h 문장 상한만 남음): 살아
     있지만 멈춘 worker·`terminateRun` 실패·네트워크 단절(FIN 없음 — tcp keepalive 미설정); `make_async_engine`을 거치지 않는 접속 —
