@@ -1,5 +1,20 @@
 # RESUME — 작업 재개 가이드
 
+
+## 2026-10-19 — Track 수용 검증 진행
+
+- 릴리스 UI는 n150 Chromium/Firefox × 데스크톱/모바일 총24건 PASS다. 실제 preview와
+  response fixture로 재현한 지문 동일/누락·503을 구분하고 초기 도움말 조작 실패도 보존했다.
+- 소유 격리 PostGIS에서 지문/캐시 관련33건 PASS, 새 원자성2건의 clear 제거 반례2FAIL,
+  복원2PASS/Ruff PASS다. 운영 활성화나 DDL은 하지 않았다.
+- [증거와 한계](audits/2026-10-19-geo-track-acceptance.md)를 따른다. 과거 backfill 직후
+  캐시0행 로그가 없다는 사실과 현재 코드의 transaction 회귀 검증은 다르다.
+- [a2 잠금 보유 후속](audits/2026-10-19-radius-lock-hold-followup.md)은 설계 조사만 했다.
+  실제 n150 소비자 reverse200/200 PASS(p50 109.042ms, p95 218.966ms)다.
+- n150 Geo API/UI/CS는 이미24시간 이상 정지했고 Manager의 로컬 기동 계획·소비자 계약44건 PASS다.
+  정지 전24시간 peer0과 과거 base 성능 비교는 미입증으로 구분한다. daemon OFF·D4=21600 유지.
+
+
 ## 2026-10-18 — #589·590·591 공식 이미지 운영 배포
 
 - source d3dedb47 공식 API·CS ARM64 빌드와 격리검사 PASS, root 두이미지 rollout4df684f4 PASS. daemon OFF·기존큐 전후동일·D4=21600을 보존했다.

@@ -1,0 +1,1909 @@
+{
+  "source": "11bbd50",
+  "ui": [
+    {
+      "status": "FAIL",
+      "runtime": "n150 Chromium1228",
+      "cases": [
+        {
+          "name": "table-token-and-actual-preview",
+          "width": 1440,
+          "kind": "LIVE",
+          "status": "PASS"
+        },
+        {
+          "name": "503-clears-stale-preview",
+          "width": 1440,
+          "kind": "MOCK_FAULT_ON_LIVE_UI",
+          "status": "PASS"
+        },
+        {
+          "name": "live-preview-recovers",
+          "width": 1440,
+          "kind": "LIVE_AFTER_MOCK_FAULT",
+          "status": "PASS"
+        },
+        {
+          "name": "same-token-badge",
+          "width": 1440,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        }
+      ],
+      "runtime_unchanged": true,
+      "daemon_off": true,
+      "source_sha256": "7bd8ede0da1c6e79b1f3fefafede0d95d36c011d3658755b26e6660ab1ee7ec1",
+      "started_at": "2026-10-18T21:55:51.516Z",
+      "finished_at": "2026-10-18T21:56:06.888Z",
+      "raw_sha256": "942c782e948e843e5c523d9ccaf6bf002a564940f4a5d54eda4a9dbc36579d9c"
+    },
+    {
+      "status": "PASS",
+      "runtime": "n150 Chromium1228",
+      "cases": [
+        {
+          "name": "table-token-and-actual-preview",
+          "width": 1440,
+          "kind": "LIVE",
+          "status": "PASS"
+        },
+        {
+          "name": "503-clears-stale-preview",
+          "width": 1440,
+          "kind": "MOCK_FAULT_ON_LIVE_UI",
+          "status": "PASS"
+        },
+        {
+          "name": "live-preview-recovers",
+          "width": 1440,
+          "kind": "LIVE_AFTER_MOCK_FAULT",
+          "status": "PASS"
+        },
+        {
+          "name": "same-token-badge",
+          "width": 1440,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "missing-token-banner-and-failure-tooltip",
+          "width": 1440,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "viewport-no-page-overflow",
+          "width": 1440,
+          "kind": "LIVE_UI_MOCK_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "table-token-and-actual-preview",
+          "width": 375,
+          "kind": "LIVE",
+          "status": "PASS"
+        },
+        {
+          "name": "503-clears-stale-preview",
+          "width": 375,
+          "kind": "MOCK_FAULT_ON_LIVE_UI",
+          "status": "PASS"
+        },
+        {
+          "name": "live-preview-recovers",
+          "width": 375,
+          "kind": "LIVE_AFTER_MOCK_FAULT",
+          "status": "PASS"
+        },
+        {
+          "name": "same-token-badge",
+          "width": 375,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "missing-token-banner-and-failure-tooltip",
+          "width": 375,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "viewport-no-page-overflow",
+          "width": 375,
+          "kind": "LIVE_UI_MOCK_HISTORY",
+          "status": "PASS"
+        }
+      ],
+      "runtime_unchanged": true,
+      "daemon_off": true,
+      "source_sha256": "982226645ee89ed35863022d535add7b3654e2a6e3c32486d64dedd0dec04614",
+      "started_at": "2026-10-18T21:56:35.754Z",
+      "finished_at": "2026-10-18T21:56:52.750Z",
+      "raw_sha256": "df2938964fb2e76491a46694c73e0b0b28688829ddcfd82b53988bee78dfe90c"
+    },
+    {
+      "status": "PASS",
+      "runtime": "n150 Firefox1532",
+      "cases": [
+        {
+          "name": "table-token-and-actual-preview",
+          "width": 1440,
+          "kind": "LIVE",
+          "status": "PASS"
+        },
+        {
+          "name": "503-clears-stale-preview",
+          "width": 1440,
+          "kind": "MOCK_FAULT_ON_LIVE_UI",
+          "status": "PASS"
+        },
+        {
+          "name": "live-preview-recovers",
+          "width": 1440,
+          "kind": "LIVE_AFTER_MOCK_FAULT",
+          "status": "PASS"
+        },
+        {
+          "name": "same-token-badge",
+          "width": 1440,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "missing-token-banner-and-failure-tooltip",
+          "width": 1440,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "viewport-no-page-overflow",
+          "width": 1440,
+          "kind": "LIVE_UI_MOCK_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "table-token-and-actual-preview",
+          "width": 375,
+          "kind": "LIVE",
+          "status": "PASS"
+        },
+        {
+          "name": "503-clears-stale-preview",
+          "width": 375,
+          "kind": "MOCK_FAULT_ON_LIVE_UI",
+          "status": "PASS"
+        },
+        {
+          "name": "live-preview-recovers",
+          "width": 375,
+          "kind": "LIVE_AFTER_MOCK_FAULT",
+          "status": "PASS"
+        },
+        {
+          "name": "same-token-badge",
+          "width": 375,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "missing-token-banner-and-failure-tooltip",
+          "width": 375,
+          "kind": "MOCK_RELEASE_HISTORY",
+          "status": "PASS"
+        },
+        {
+          "name": "viewport-no-page-overflow",
+          "width": 375,
+          "kind": "LIVE_UI_MOCK_HISTORY",
+          "status": "PASS"
+        }
+      ],
+      "runtime_unchanged": true,
+      "daemon_off": true,
+      "source_sha256": "53e19515f4f8849be56beb964024ba4d9ab36552d602a4a1629e5982dc14f348",
+      "started_at": "2026-10-18T21:58:31.533Z",
+      "finished_at": "2026-10-18T21:58:49.566Z",
+      "raw_sha256": "854e0d74eaf37de3e20132b36c5327626b3a106d2b6b4f8649e51c3fb03f617d"
+    }
+  ],
+  "cache": {
+    "postgres": "16 + PostGIS 3.5",
+    "green": "33 passed, 6 warnings in 17.38s",
+    "mutation": "transactional clear_on removed: 2 failed in 11.42s",
+    "restored": "2 passed in 1.24s",
+    "owned_removed": true,
+    "logs_sha256": {
+      "green.log": "8cd3765e0ada2740ac0ee9682f799ad9a861b07069970eea21e8e89a928913fb",
+      "red.log": "5eed317e18539105bc63bb8063f829bb9cd62cdfe7375cce08c1a8737fc34364",
+      "restored.log": "2f717867ddaaf34abecde809a533c23d67578d2f53678c740b591a5a8f9eaa35"
+    }
+  },
+  "reverse": {
+    "kind": "N200_CURRENT_RUNTIME_ONLY",
+    "count": 200,
+    "concurrency": 1,
+    "max_start_rate_per_second": 2,
+    "retries": 0,
+    "cache_policy": "existing server cache retained; repeated point warm-up absent",
+    "points_sha256": "095d83576b561786fc76377b6fff79790fd8b0fcee335471b3f7f68cd34418d3",
+    "samples": [
+      {
+        "index": 0,
+        "http": 200,
+        "status": "OK",
+        "ms": 736.93563695997,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 1,
+        "http": 200,
+        "status": "OK",
+        "ms": 609.10137090832,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 2,
+        "http": 200,
+        "status": "OK",
+        "ms": 449.73805686458945,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 3,
+        "http": 200,
+        "status": "OK",
+        "ms": 282.7374110929668,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 4,
+        "http": 200,
+        "status": "OK",
+        "ms": 388.881079852581,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 5,
+        "http": 200,
+        "status": "OK",
+        "ms": 196.1718387901783,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 6,
+        "http": 200,
+        "status": "OK",
+        "ms": 123.3007493428886,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 7,
+        "http": 200,
+        "status": "OK",
+        "ms": 117.43525415658951,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 8,
+        "http": 200,
+        "status": "OK",
+        "ms": 128.4539378248155,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 9,
+        "http": 200,
+        "status": "OK",
+        "ms": 103.07439928874373,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 10,
+        "http": 200,
+        "status": "OK",
+        "ms": 153.2740220427513,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 11,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.94560680165887,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 12,
+        "http": 200,
+        "status": "OK",
+        "ms": 176.96207389235497,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 13,
+        "http": 200,
+        "status": "OK",
+        "ms": 189.40039491280913,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 14,
+        "http": 200,
+        "status": "OK",
+        "ms": 201.01238088682294,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 15,
+        "http": 200,
+        "status": "OK",
+        "ms": 107.51213505864143,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 16,
+        "http": 200,
+        "status": "OK",
+        "ms": 121.20730709284544,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 17,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.50967390835285,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 18,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.4465642310679,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 19,
+        "http": 200,
+        "status": "OK",
+        "ms": 122.2192170098424,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 20,
+        "http": 200,
+        "status": "OK",
+        "ms": 123.66221845149994,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 21,
+        "http": 200,
+        "status": "OK",
+        "ms": 178.88299375772476,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 22,
+        "http": 200,
+        "status": "OK",
+        "ms": 193.88486398383975,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 23,
+        "http": 200,
+        "status": "OK",
+        "ms": 122.27105116471648,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 24,
+        "http": 200,
+        "status": "OK",
+        "ms": 115.45570520684123,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 25,
+        "http": 200,
+        "status": "OK",
+        "ms": 106.97600385174155,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 26,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.53755817189813,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 27,
+        "http": 200,
+        "status": "OK",
+        "ms": 117.1449301764369,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 28,
+        "http": 200,
+        "status": "OK",
+        "ms": 93.52775197476149,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 29,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.67872979864478,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 30,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.60855472832918,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 31,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.04123308882117,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 32,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.99224396049976,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 33,
+        "http": 200,
+        "status": "OK",
+        "ms": 218.96627312526107,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 34,
+        "http": 200,
+        "status": "OK",
+        "ms": 128.6955727264285,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 35,
+        "http": 200,
+        "status": "OK",
+        "ms": 140.7766193151474,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 36,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.56805181130767,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 37,
+        "http": 200,
+        "status": "OK",
+        "ms": 94.2737408913672,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 38,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.89721273630857,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 39,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.7911988645792,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 40,
+        "http": 200,
+        "status": "OK",
+        "ms": 95.99841618910432,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 41,
+        "http": 200,
+        "status": "OK",
+        "ms": 108.63237082958221,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 42,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.7396840415895,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 43,
+        "http": 200,
+        "status": "OK",
+        "ms": 134.44461720064282,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 44,
+        "http": 200,
+        "status": "OK",
+        "ms": 145.91310918331146,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 45,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.12820492312312,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 46,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.17387994006276,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 47,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.27000382170081,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 48,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.58136498183012,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 49,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.75674187019467,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 50,
+        "http": 200,
+        "status": "OK",
+        "ms": 112.56224475800991,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 51,
+        "http": 200,
+        "status": "OK",
+        "ms": 124.59073774516582,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 52,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.92700579762459,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 53,
+        "http": 200,
+        "status": "OK",
+        "ms": 148.190476000309,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 54,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.77687810733914,
+        "candidates": 7,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 55,
+        "http": 200,
+        "status": "OK",
+        "ms": 172.93334612622857,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 56,
+        "http": 200,
+        "status": "OK",
+        "ms": 183.4760089404881,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 57,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.44460809975863,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 58,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.2667051628232,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 59,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.41891121119261,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 60,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.98676605895162,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 61,
+        "http": 200,
+        "status": "OK",
+        "ms": 95.98924685269594,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 62,
+        "http": 200,
+        "status": "OK",
+        "ms": 124.54803613945842,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 63,
+        "http": 200,
+        "status": "OK",
+        "ms": 127.98245204612613,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 64,
+        "http": 200,
+        "status": "OK",
+        "ms": 93.49162597209215,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 65,
+        "http": 200,
+        "status": "OK",
+        "ms": 188.238434959203,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 66,
+        "http": 200,
+        "status": "OK",
+        "ms": 110.82116002216935,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 67,
+        "http": 200,
+        "status": "OK",
+        "ms": 108.78505418077111,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 68,
+        "http": 200,
+        "status": "OK",
+        "ms": 94.01687001809478,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 69,
+        "http": 200,
+        "status": "OK",
+        "ms": 131.48897606879473,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 70,
+        "http": 200,
+        "status": "OK",
+        "ms": 143.14490696415305,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 71,
+        "http": 200,
+        "status": "OK",
+        "ms": 154.66852765530348,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 72,
+        "http": 200,
+        "status": "OK",
+        "ms": 166.77544172853231,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 73,
+        "http": 200,
+        "status": "OK",
+        "ms": 181.54676305130124,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 74,
+        "http": 200,
+        "status": "OK",
+        "ms": 191.02256698533893,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 75,
+        "http": 200,
+        "status": "OK",
+        "ms": 98.8555857911706,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 76,
+        "http": 200,
+        "status": "OK",
+        "ms": 112.0533486828208,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 77,
+        "http": 200,
+        "status": "OK",
+        "ms": 86.00813336670399,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 78,
+        "http": 200,
+        "status": "OK",
+        "ms": 92.20506064593792,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 79,
+        "http": 200,
+        "status": "OK",
+        "ms": 94.82867131009698,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 80,
+        "http": 200,
+        "status": "OK",
+        "ms": 93.37247302755713,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 81,
+        "http": 200,
+        "status": "OK",
+        "ms": 170.57013791054487,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 82,
+        "http": 200,
+        "status": "OK",
+        "ms": 183.06205701082945,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 83,
+        "http": 200,
+        "status": "OK",
+        "ms": 194.60174534469843,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 84,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.84236635640264,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 85,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.92829420417547,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 86,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.23677168786526,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 87,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.63105260208249,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 88,
+        "http": 200,
+        "status": "OK",
+        "ms": 105.80423986539245,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 89,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.60746398568153,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 90,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.53403122723103,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 91,
+        "http": 200,
+        "status": "OK",
+        "ms": 116.53274716809392,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 92,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.19768501073122,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 93,
+        "http": 200,
+        "status": "OK",
+        "ms": 106.43313219770789,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 94,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.82019101455808,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 95,
+        "http": 200,
+        "status": "OK",
+        "ms": 131.48677395656705,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 96,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.07329789549112,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 97,
+        "http": 200,
+        "status": "OK",
+        "ms": 153.3205513842404,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 98,
+        "http": 200,
+        "status": "OK",
+        "ms": 167.3812079243362,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 99,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.92404520884156,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 100,
+        "http": 200,
+        "status": "OK",
+        "ms": 190.51635405048728,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 101,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.92278613895178,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 102,
+        "http": 200,
+        "status": "OK",
+        "ms": 111.47764325141907,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 103,
+        "http": 200,
+        "status": "OK",
+        "ms": 125.50313817337155,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 104,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.70809295028448,
+        "candidates": 5,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 105,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.21151033043861,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 106,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.88213462382555,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 107,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.60975273698568,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 108,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.14772407338023,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 109,
+        "http": 200,
+        "status": "OK",
+        "ms": 194.76998038589954,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 110,
+        "http": 200,
+        "status": "OK",
+        "ms": 206.20387373492122,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 111,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.50225589796901,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 112,
+        "http": 200,
+        "status": "OK",
+        "ms": 126.79844722151756,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 113,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.75496499240398,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 114,
+        "http": 200,
+        "status": "OK",
+        "ms": 88.88322813436389,
+        "candidates": 9,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 115,
+        "http": 200,
+        "status": "OK",
+        "ms": 162.4740962870419,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 116,
+        "http": 200,
+        "status": "OK",
+        "ms": 174.4029438123107,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 117,
+        "http": 200,
+        "status": "OK",
+        "ms": 110.74370611459017,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 118,
+        "http": 200,
+        "status": "OK",
+        "ms": 99.68718886375427,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 119,
+        "http": 200,
+        "status": "OK",
+        "ms": 118.10282804071903,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 120,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.73307269439101,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 121,
+        "http": 200,
+        "status": "OK",
+        "ms": 95.33231193199754,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 122,
+        "http": 200,
+        "status": "OK",
+        "ms": 86.3474179059267,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 123,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.3228788934648,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 124,
+        "http": 200,
+        "status": "OK",
+        "ms": 83.18185107782483,
+        "candidates": 9,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 125,
+        "http": 200,
+        "status": "OK",
+        "ms": 177.9187647625804,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 126,
+        "http": 200,
+        "status": "OK",
+        "ms": 103.50582608953118,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 127,
+        "http": 200,
+        "status": "OK",
+        "ms": 202.34652841463685,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 128,
+        "http": 200,
+        "status": "OK",
+        "ms": 109.88675523549318,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 129,
+        "http": 200,
+        "status": "OK",
+        "ms": 101.76067659631371,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 130,
+        "http": 200,
+        "status": "OK",
+        "ms": 112.11405182257295,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 131,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.11545316874981,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 132,
+        "http": 200,
+        "status": "OK",
+        "ms": 158.54307776317,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 133,
+        "http": 200,
+        "status": "OK",
+        "ms": 171.94703593850136,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 134,
+        "http": 200,
+        "status": "OK",
+        "ms": 181.8275721743703,
+        "candidates": 9,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 135,
+        "http": 200,
+        "status": "OK",
+        "ms": 193.03846219554543,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 136,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.95424476638436,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 137,
+        "http": 200,
+        "status": "OK",
+        "ms": 99.33419805020094,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 138,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.05371481180191,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 139,
+        "http": 200,
+        "status": "OK",
+        "ms": 89.25282396376133,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 140,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.84313006699085,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 141,
+        "http": 200,
+        "status": "OK",
+        "ms": 161.80881392210722,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 142,
+        "http": 200,
+        "status": "OK",
+        "ms": 173.94978180527687,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 143,
+        "http": 200,
+        "status": "OK",
+        "ms": 185.76842918992043,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 144,
+        "http": 200,
+        "status": "OK",
+        "ms": 91.09067311510444,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 145,
+        "http": 200,
+        "status": "OK",
+        "ms": 106.86199134215713,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 146,
+        "http": 200,
+        "status": "OK",
+        "ms": 100.42903432622552,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 147,
+        "http": 200,
+        "status": "OK",
+        "ms": 129.7525088302791,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 148,
+        "http": 200,
+        "status": "OK",
+        "ms": 93.30581314861774,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 149,
+        "http": 200,
+        "status": "OK",
+        "ms": 106.155957095325,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 150,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.72804730385542,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 151,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.35612500458956,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 152,
+        "http": 200,
+        "status": "OK",
+        "ms": 109.29869906976819,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 153,
+        "http": 200,
+        "status": "OK",
+        "ms": 97.30387898162007,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 154,
+        "http": 200,
+        "status": "OK",
+        "ms": 110.40421761572361,
+        "candidates": 5,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 155,
+        "http": 200,
+        "status": "OK",
+        "ms": 121.8072073534131,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 156,
+        "http": 200,
+        "status": "OK",
+        "ms": 134.34967398643494,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 157,
+        "http": 200,
+        "status": "OK",
+        "ms": 144.757024012506,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 158,
+        "http": 200,
+        "status": "OK",
+        "ms": 157.43726212531328,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 159,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.6684132963419,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 160,
+        "http": 200,
+        "status": "OK",
+        "ms": 284.1100161895156,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 161,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.7244807779789,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 162,
+        "http": 200,
+        "status": "OK",
+        "ms": 85.0761360488832,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 163,
+        "http": 200,
+        "status": "OK",
+        "ms": 113.53155691176653,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 164,
+        "http": 200,
+        "status": "OK",
+        "ms": 128.09044308960438,
+        "candidates": 5,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 165,
+        "http": 200,
+        "status": "OK",
+        "ms": 83.27416982501745,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 166,
+        "http": 200,
+        "status": "OK",
+        "ms": 112.1489480137825,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 167,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.6810560002923,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 168,
+        "http": 200,
+        "status": "OK",
+        "ms": 93.13068632036448,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 169,
+        "http": 200,
+        "status": "OK",
+        "ms": 184.85073978081346,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 170,
+        "http": 200,
+        "status": "OK",
+        "ms": 195.57573879137635,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 171,
+        "http": 200,
+        "status": "OK",
+        "ms": 100.83188023418188,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 172,
+        "http": 200,
+        "status": "OK",
+        "ms": 218.79672026261687,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 173,
+        "http": 200,
+        "status": "OK",
+        "ms": 130.67263830453157,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 174,
+        "http": 200,
+        "status": "OK",
+        "ms": 141.98929211124778,
+        "candidates": 7,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 175,
+        "http": 200,
+        "status": "OK",
+        "ms": 153.43570290133357,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 176,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.80999210104346,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 177,
+        "http": 200,
+        "status": "OK",
+        "ms": 85.16621496528387,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 178,
+        "http": 200,
+        "status": "OK",
+        "ms": 101.27462586387992,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 179,
+        "http": 200,
+        "status": "OK",
+        "ms": 87.76945807039738,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 180,
+        "http": 200,
+        "status": "OK",
+        "ms": 96.52908612042665,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 181,
+        "http": 200,
+        "status": "OK",
+        "ms": 152.3929350078106,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 182,
+        "http": 200,
+        "status": "OK",
+        "ms": 220.82302812486887,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 183,
+        "http": 200,
+        "status": "OK",
+        "ms": 180.5252549238503,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 184,
+        "http": 200,
+        "status": "OK",
+        "ms": 361.5991910919547,
+        "candidates": 9,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 185,
+        "http": 200,
+        "status": "OK",
+        "ms": 270.97487170249224,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 186,
+        "http": 200,
+        "status": "OK",
+        "ms": 282.32323890551925,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 187,
+        "http": 200,
+        "status": "OK",
+        "ms": 192.45684891939163,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 188,
+        "http": 200,
+        "status": "OK",
+        "ms": 100.50709312781692,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 189,
+        "http": 200,
+        "status": "OK",
+        "ms": 112.83452995121479,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 190,
+        "http": 200,
+        "status": "OK",
+        "ms": 104.29378505796194,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 191,
+        "http": 200,
+        "status": "OK",
+        "ms": 136.7037808522582,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 192,
+        "http": 200,
+        "status": "OK",
+        "ms": 148.64413114264607,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 193,
+        "http": 200,
+        "status": "OK",
+        "ms": 161.52075491845608,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 194,
+        "http": 200,
+        "status": "OK",
+        "ms": 171.93785309791565,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 195,
+        "http": 200,
+        "status": "OK",
+        "ms": 184.34098083525896,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 196,
+        "http": 200,
+        "status": "OK",
+        "ms": 102.01501101255417,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 197,
+        "http": 200,
+        "status": "OK",
+        "ms": 84.51476832851768,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 198,
+        "http": 200,
+        "status": "OK",
+        "ms": 105.70279275998473,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      },
+      {
+        "index": 199,
+        "http": 200,
+        "status": "OK",
+        "ms": 90.90280113741755,
+        "candidates": 11,
+        "token_sha256": "1649238b788c3cb424c1e21488a3765a8ce558275f131d962c1d181487222941"
+      }
+    ],
+    "status": "PASS",
+    "p50_ms": 109.04187662526965,
+    "p95_ms": 218.96627312526107,
+    "max_ms": 736.93563695997,
+    "elapsed_s": 100.00964733725414,
+    "scope": "n150 consumer→Odroid authenticated reverse; current latency only, not historical regression proof",
+    "completed_success_count": 200,
+    "odroid_runtime_unchanged": true,
+    "daemon_off": true,
+    "runner_error_type": null,
+    "worker_sha256": "942a4ba768a8510233b398aa1c4ef99b7fbc4cf3caf6370b2257f039ba1a2a8b",
+    "private_original_sha256": "a57eb83634ba2057b9e080e1770f66f01c9400a73f07f38fb1f07758637b9c7a"
+  },
+  "legacy_lifecycle": {
+    "kor-travel-geo-api-latest": {
+      "Status": "exited",
+      "Running": false,
+      "Restarting": false,
+      "StartedAt": "2026-09-30T18:07:21.348945675Z",
+      "FinishedAt": "2026-10-17T15:50:17.282600261Z",
+      "ExitCode": 137,
+      "restart_policy": {
+        "Name": "unless-stopped",
+        "MaximumRetryCount": 0
+      },
+      "restart_count": 0,
+      "earliest_log": "2026-09-30T18:07:26.805704806Z",
+      "latest_log": "2026-10-17T15:50:11.292932085Z"
+    },
+    "kor-travel-geo-ui-latest": {
+      "Status": "exited",
+      "Running": false,
+      "Restarting": false,
+      "StartedAt": "2026-10-07T22:04:46.935362817Z",
+      "FinishedAt": "2026-10-17T15:50:07.588448095Z",
+      "ExitCode": 143,
+      "restart_policy": {
+        "Name": "unless-stopped",
+        "MaximumRetryCount": 0
+      },
+      "restart_count": 0,
+      "earliest_log": "2026-10-07T22:04:51.104402787Z",
+      "latest_log": "2026-10-17T15:50:07.484432051Z"
+    },
+    "kor-travel-geo-dagster-code-server-latest": {
+      "Status": "exited",
+      "Running": false,
+      "Restarting": false,
+      "StartedAt": "2026-10-05T06:02:23.750912815Z",
+      "FinishedAt": "2026-10-15T02:42:40.425261625Z",
+      "ExitCode": 0,
+      "restart_policy": {
+        "Name": "no",
+        "MaximumRetryCount": 0
+      },
+      "restart_count": 0,
+      "earliest_log": "2026-10-05T06:02:27.642762227Z",
+      "latest_log": "2026-10-15T02:42:40.092430627Z"
+    }
+  },
+  "legacy_log_audit": {
+    "at": "2026-10-18T22:07:02.954933+00:00",
+    "window_start": "2026-10-17T22:07:02.954933+00:00",
+    "running": false,
+    "started_at": "2026-09-30T18:07:21.348945675Z",
+    "log_driver": "json-file",
+    "log_options": {},
+    "available_log_bytes": 34958562,
+    "status": "NOT_ASSESSED_LOG_BUDGET",
+    "coverage_24h": false
+  },
+  "manager_contract": {
+    "source": "84c85f3ab4baa3b657ac86da5bd3c763582d0270",
+    "passed": 44,
+    "seconds": 8.0,
+    "mode": "local_plan_and_contract_only_no_operational_ensure",
+    "log_sha256": "2a68b4ba69a311543dc1a4ed9204f9136473ecb4f3dbde8ffa2b53c9dcdfd3cd"
+  }
+}
