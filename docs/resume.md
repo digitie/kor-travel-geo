@@ -6,7 +6,7 @@
 - G-01: odroid `mv_refresh` 30분 취소의 원인은 리프의 `SET LOCAL '30min'`(세션 0을 낮춤). 문장 상한을 6h 상수로(ADR-068
   개정) 고치는 PR(`agent/claude-g01-locsum-link-join`). 실측 UPDATE 120 s·MV 정의 쿼리 510 s·지문 240 s(odroid 조용한 창).
   #583 머지(`d8370d0`)·odroid geo CS 배포 완료(이미지 `48799d51`, API/UI 불변). standalone `mv_refresh` 실측 2156.9 s(code-server
-  안 in-process). 지문 상한 30 min PR. D4 산식값 3235 s는 운영 이력보다 짧아 draft 보류(소유자 재확인). 새 `data_token`은
+  안 in-process). 지문 상한 30 min PR. D4는 21600 s 유지로 닫힘(소유자 결정, #586 닫음). 새 `data_token`은
   `region_radius_parts` 차이로 바뀜(플랫폼 차이 추정, 후속 d — 결정 전 소비자 기준선·센서 금지). daemon ON 전제는 tasks G-01.
 - G-02/03/04/09/10/11 읽기 전용 확인 결과는 journal 2026-10-18.
 

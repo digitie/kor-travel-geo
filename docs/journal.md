@@ -2,6 +2,12 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-10-18 — ADR-070 D4 닫음: mv_refresh 21600 s 유지(소유자 결정, by claude)
+
+- 실측 2,157 s(odroid standalone, Dagster run `2bd07f07…`), n150 이력 최대 5,760 s, 부하 시 한 문장 >30 min 사례, 중간 끊김 시 옛
+  `data_token`으로 서빙될 위험 → 산식값 3,235 s(#586)를 채택하지 않고 21600 s 유지. 코드 변경 없음(`recovery.py`·테스트 기대값 21600).
+  #586은 닫았다. ADR-070 D4 결정 절에 근거를 남겼다.
+
 ## 2026-10-18 — #585(지문 30 min) odroid geo CS 배포·D4 draft(by claude)
 
 - #585 머지(`1aa18f0`, CI 5/5) 뒤 같은 방식(얇은 layer, `pip --no-index --no-deps --force-reinstall`)으로 geo code-server만 교체:
