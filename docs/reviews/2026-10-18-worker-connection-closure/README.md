@@ -18,3 +18,4 @@ D4=21600과 daemon 중지를 유지한다.
 - [geo591-review-popper-r1.md](geo591-review-popper-r1.md) — SHA256 5e98fd83ffb6bd88c030ac245c893f5bfa2cce74a51e9e013b3695f1be76bdb2
 - [geo591-review-popper-r2.md](geo591-review-popper-r2.md) — SHA256 eeec8569f228f05257df867d0a37cfecd994a386cbe61af36aa37ec6f16c43f0
 - [제품 CI](source-ci.json)
+- [A 문서 후속 확인](geo591-review-james-r2-docclosure-20261018.md) — SHA256 cf5dee609e748363bfadac9b23378e53b8c625cceb0d482cb43863fa3495910c
