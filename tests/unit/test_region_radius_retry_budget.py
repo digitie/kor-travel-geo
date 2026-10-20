@@ -24,9 +24,7 @@ from kortravelgeo.loaders import postload
         for ready in (3599.0, 3600.0, 4002.0)
     ],
 )
-async def test_radius_retry_checks_budget_after_sleep(
-    monkeypatch, resume_at, delay_at, ready_at
-):
+async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at, delay_at, ready_at):
     class LockUnavailableError(Exception):
         sqlstate = "55P03"
 
@@ -101,13 +99,13 @@ async def test_radius_retry_checks_budget_after_sleep(
             assert outcomes == [postload._RegionRadiusLockBusyError, DBAPIError]
         assert sum(command.startswith("LOCK TABLE") for command in commands) == 1
         swap.assert_not_awaited()
-        guard.assert_not_awaited()
+        guard.assert_awaited_once_with(connection)  # the pre-lock check only
     else:
         await postload.refresh_region_radius_parts(engine, publication_guard=guard)
         assert len(savepoints) == 2
         assert outcomes == [postload._RegionRadiusLockBusyError, None]
         swap.assert_awaited_once_with(connection, live_exists=True)
-        guard.assert_awaited_once_with(connection)
+        assert guard.await_count == 2  # before the lock, and once more before commit
     # The long build runs once, before any lock attempt, whatever the retries do.
     assert commands.count("OWNED_REBUILD") == 1
     assert commands.index("OWNED_REBUILD") < next(
@@ -138,16 +136,22 @@ async def test_radius_lock_restores_inherited_timeout(original_timeout):
             assert "true" in command
             state["timeout"] = parameters["lock_timeout"]
 
-    assert await postload._lock_region_radius_parts(
-        SimpleNamespace(scalar=scalar, execute=execute)
-    )
+    assert await postload._lock_region_radius_parts(SimpleNamespace(scalar=scalar, execute=execute))
     assert locks == ["2s"]
     assert state["timeout"] == original_timeout
 
 
 def test_next_build_sql_is_the_refresh_sql_retargeted() -> None:
     sql = postload.build_region_radius_parts_next_sql()
-    assert sql.startswith("DROP TABLE IF EXISTS region_radius_parts_next;")
+    # The stale-table DROP runs after the SQL's own search_path, right before a strict CREATE.
+    assert sql.index("SET search_path") < sql.index(
+        "DROP TABLE IF EXISTS region_radius_parts_next;"
+    )
+    assert (
+        "DROP TABLE IF EXISTS region_radius_parts_next;\nCREATE TABLE region_radius_parts_next ("
+        in sql
+    )
+    assert "IF NOT EXISTS region_radius_parts_next " not in sql
     assert "TRUNCATE" not in sql
     # Every live name is retargeted: no statement in the build touches the live table.
     assert "region_radius_parts" not in sql.replace("region_radius_parts_next", "")

@@ -1,11 +1,11 @@
 """``region_radius_parts`` rebuild caps its lock wait and retries (opt-in, G-01 follow-up a).
 
-The rebuild TRUNCATEs the serving table (ACCESS EXCLUSIVE). Without a lock wait cap it queued
-behind any reader for as long as the maintenance statement ceiling (6 h) allowed, and every new
-radius lookup queued behind it. Bound to effects PostgreSQL reports: a held ACCESS SHARE lock makes
-the rebuild give up with SQLSTATE 55P03 in seconds (not hang), and a lock released between attempts
-lets the retry succeed. Only the lock acquisition is retried — a lock timeout anywhere else (here:
-in the publication guard) propagates at once.
+The rebuild swaps the serving table under ACCESS EXCLUSIVE (TRUNCATE before a2). Without a lock
+wait cap it queued behind any reader for as long as the maintenance statement ceiling (6 h)
+allowed, and every new radius lookup queued behind it. Bound to effects PostgreSQL reports: a held
+ACCESS SHARE lock makes the rebuild give up with SQLSTATE 55P03 in seconds (not hang), and a lock
+released between attempts lets the retry succeed. Only the lock acquisition is retried — a lock
+timeout anywhere else (here: in the publication guard) propagates at once.
 
 Needs a disposable scratch DB (tests/integration/_pg_guard.py naming rule) bootstrapped with
 ``ktgctl init-db`` + ``alembic stamp head``::
@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -93,7 +94,6 @@ async def test_a_held_reader_lock_makes_the_rebuild_give_up_instead_of_hanging(
 async def test_a_lock_released_between_attempts_lets_the_retry_succeed(
     fast_retry: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_RETRY_DELAY_S", 1.0)
     monkeypatch.setattr(postload, "REGION_RADIUS_LOCK_BUDGET_S", 20.0)
     engine = await _engine()
     try:
@@ -101,16 +101,15 @@ async def test_a_lock_released_between_attempts_lets_the_retry_succeed(
         async with engine.connect() as holder:
             await _hold(holder, "region_radius_parts")
 
-            async def release_soon() -> None:
-                await asyncio.sleep(0.6)
+            # Release on the first retry sleep — i.e. after a lost wait, whatever the build took
+            # (a timer raced the `_next` build that now precedes the lock, G-01 a2 review).
+            async def release_then_sleep(delay: float) -> None:
                 await holder.execute(text("ROLLBACK"))
+                await asyncio.sleep(0)
 
-            releaser = asyncio.create_task(release_soon())
-            try:
-                with caplog.at_level(logging.WARNING, logger=postload.LOGGER.name):
-                    await asyncio.wait_for(postload.refresh_region_radius_parts(engine), 20)
-            finally:
-                await releaser
+            monkeypatch.setattr(postload, "asyncio", SimpleNamespace(sleep=release_then_sleep))
+            with caplog.at_level(logging.WARNING, logger=postload.LOGGER.name):
+                await asyncio.wait_for(postload.refresh_region_radius_parts(engine), 20)
         assert _retries(caplog) == 1
     finally:
         await engine.dispose()

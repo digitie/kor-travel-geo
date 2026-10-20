@@ -135,7 +135,7 @@ jobs:
               "test_backup_restore_hot_swap_roundtrip": 3,
               "test_maintenance_statement_timeout": 3,
               "test_region_radius_lock_timeout": 3,
-              "test_region_radius_swap": 9,
+              "test_region_radius_swap": 10,
               "test_dead_client_statement_cancel": 2,
           }
           for module, floor in floors.items():

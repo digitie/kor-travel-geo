@@ -211,7 +211,8 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     **소스 진행(2026-10-20, Claude, draft PR `agent/claude-g01-a2-radius-swap`)**: 한 transaction에서 `_next`를 먼저 채우고(라이브 미접촉),
     그 뒤 ACCESS EXCLUSIVE만 2 s·savepoint 재시도(#590 예산 그대로)로 잡아 DROP(무CASCADE)→RENAME→제약·인덱스 이름 복원→commit.
     실패·backend 사망은 전체 rollback(`_next`는 commit된 적 없음 → 재실행 깨끗, pg_dump가 중간 상태를 못 봄). 소유자·권한·트리거/RLS·
-    일반 의존(뷰·FK)이 다르면 교체를 거부. **남은 것**: 머지 뒤 운영 배포(소유자 창) — 운영 DDL·rebuild는 이 PR에서 실행하지 않았다.
+    일반 의존(뷰·FK)이 다르면 교체를 거부. **남은 것**: 머지 뒤 운영 배포(소유자 창) — 배포 전 운영 DB 읽기 전용 카탈로그 확인(소유자=앱 role, relacl·reloptions NULL,
+    트리거·RLS 없음; [조사 문서](audits/2026-10-19-radius-lock-hold-followup.md) 끝 절). 운영 DDL·rebuild는 이 PR에서 실행하지 않았다.
   - [x] **G-01 후속 b**(2026-10-18, #591: Dagster 유지보수 엔진(`client` resource) 세션에 `client_connection_check_interval=10s` —
     worker 프로세스가 죽어 소켓이 닫히면 서버가 실행 중 문장을 ~10 s 안에 끝낸다). **덮지 못하는 것**(6 h 문장 상한만 남음): 살아
     있지만 멈춘 worker·`terminateRun` 실패·네트워크 단절(FIN 없음 — tcp keepalive 미설정); `make_async_engine`을 거치지 않는 접속 —

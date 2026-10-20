@@ -111,6 +111,10 @@ async def refresh_mv(
 #: lookup queues behind it, so the lock is taken explicitly with a short wait; a lost wait rolls
 #: back to a savepoint (the built ``_next`` is kept) and retries until a budget long enough to
 #: outlast a backup. Only that lock wait is retried — any other error propagates.
+#: While it retries, the transaction stays open: it keeps its xid (vacuum horizon), ACCESS SHARE on
+#: the ``tl_scco_*`` sources (a loader TRUNCATE queues behind it) and the rebuild advisory lock —
+#: the same window the blocking reader (usually ``pg_dump``, which holds those locks too) already
+#: imposes. A server ``idle_in_transaction_session_timeout`` under the retry delay would end it.
 REGION_RADIUS_LOCK_TIMEOUT = "2s"
 REGION_RADIUS_LOCK_RETRY_DELAY_S = 30.0
 REGION_RADIUS_LOCK_BUDGET_S = 3600.0
@@ -121,18 +125,34 @@ _RADIUS_NEXT = "region_radius_parts_next"
 _RADIUS_REBUILD_LOCK_KEY = "kortravelgeo:region_radius_parts:rebuild"
 
 #: The swap drops the live table, so whatever hangs off it and is not recreated by the build SQL
-#: would be lost silently (grants, owner, triggers, RLS) or block the DROP (views, foreign keys —
-#: any normal dependency). Checked under ACCESS EXCLUSIVE, so nothing can change in between.
+#: would be lost silently (owner, grants, storage options, an index added outside the build SQL,
+#: triggers, policies) or block the DROP (views, foreign keys — any normal dependency). Checked
+#: under ACCESS EXCLUSIVE, so nothing can change in between.
 _RADIUS_SWAP_CHECK_SQL = text(
     """
 SELECT l.relowner = n.relowner AS same_owner,
        l.relacl IS NOT DISTINCT FROM n.relacl AS same_grants,
-       NOT (l.relhastriggers OR l.relrowsecurity) AS no_triggers_or_rls,
+       l.reloptions IS NOT DISTINCT FROM n.reloptions AS same_options,
+       (SELECT array_agg(d ORDER BY d) FROM (
+          SELECT pg_get_indexdef(i.indexrelid) AS d FROM pg_index i WHERE i.indrelid = l.oid
+        ) li)
+       IS NOT DISTINCT FROM
+       (SELECT array_agg(d ORDER BY d) FROM (
+          SELECT replace(pg_get_indexdef(i.indexrelid), 'region_radius_parts_next',
+                         'region_radius_parts') AS d
+            FROM pg_index i WHERE i.indrelid = n.oid
+        ) ni) AS same_indexes,
+       NOT (l.relhastriggers OR l.relrowsecurity
+            OR EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = l.oid))
+         AS no_triggers_or_policies,
        NOT EXISTS (
          SELECT 1 FROM pg_depend d
           WHERE d.refclassid = 'pg_class'::regclass
             AND d.refobjid = l.oid
             AND d.deptype = 'n'
+            -- the table's own CHECK constraint depends normally on its column; it is rebuilt
+            AND NOT (d.classid = 'pg_constraint'::regclass
+                     AND d.objid IN (SELECT c.oid FROM pg_constraint c WHERE c.conrelid = l.oid))
        ) AS no_dependents
   FROM pg_class l, pg_class n
  WHERE l.oid = to_regclass('region_radius_parts')
@@ -156,10 +176,17 @@ def build_region_radius_parts_next_sql() -> str:
     """
     sql = REGION_RADIUS_PARTS_REFRESH_SQL
     truncate = f"TRUNCATE TABLE {_RADIUS_LIVE};"
-    if sql.count(truncate) != 1:
-        raise RuntimeError("REGION_RADIUS_PARTS_REFRESH_SQL no longer has exactly one TRUNCATE")
+    create = f"CREATE TABLE IF NOT EXISTS {_RADIUS_NEXT} "
+    if _RADIUS_NEXT in sql or sql.count(truncate) != 1:
+        raise RuntimeError("REGION_RADIUS_PARTS_REFRESH_SQL no longer fits the _next rebuild")
     sql = sql.replace(truncate, "").replace(_RADIUS_LIVE, _RADIUS_NEXT)
-    return f"DROP TABLE IF EXISTS {_RADIUS_NEXT};\n{sql}"
+    if sql.count(create) != 1:
+        raise RuntimeError("REGION_RADIUS_PARTS_REFRESH_SQL no longer fits the _next rebuild")
+    # A stale `_next` (committed by hand or an older build) is dropped, never appended to; the
+    # DROP follows the SQL's own `SET search_path` so it resolves where the CREATE does.
+    return sql.replace(
+        create, f"DROP TABLE IF EXISTS {_RADIUS_NEXT};\nCREATE TABLE {_RADIUS_NEXT} "
+    )
 
 
 async def _lock_region_radius_parts(
@@ -238,9 +265,12 @@ async def refresh_region_radius_parts(
     touched, readers keep going), then take ACCESS EXCLUSIVE on the live table with a short wait
     (``REGION_RADIUS_LOCK_TIMEOUT``, retried from a savepoint for up to
     ``REGION_RADIUS_LOCK_BUDGET_S``), drop it, rename ``_next`` in and commit. The exclusive hold
-    is the swap only. A failure anywhere rolls the whole transaction back: the live table is
-    unchanged and no ``_next`` was ever committed, so a re-run starts clean and ``pg_dump`` never
-    sees a half state.
+    is the swap plus the publication guard's re-check (the first check already locked its job
+    rows, so the re-check does not wait). A failure anywhere rolls the whole transaction back: the
+    live table is unchanged and no ``_next`` was ever committed, so a re-run starts clean and
+    ``pg_dump`` never sees a half state. The table's OID changes on every swap: a ``pg_dump`` whose
+    snapshot predates a swap that commits before it locks the table fails loudly (the next backup
+    is unaffected).
     """
     async with engine.begin() as conn:
         await conn.execute(_SET_MAINTENANCE_TIMEOUT)
@@ -250,6 +280,9 @@ async def refresh_region_radius_parts(
         )
         for sql in iter_sql_statements(build_region_radius_parts_next_sql()):
             await conn.execute(text(sql))
+        # 긴 재생성 뒤 소유권을 검증하고 job 행을 commit까지 잠근다 — 배타 잠금을 잡기 전에.
+        if publication_guard is not None:
+            await publication_guard(conn)
         deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
         attempt = 0
         last_lock_error: DBAPIError | None = None
@@ -276,7 +309,7 @@ async def refresh_region_radius_parts(
                 )
                 last_lock_error = busy.cause
                 await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
-        # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
+        # 잠금 재시도 중 들어온 중지 요청을 commit 직전에 다시 본다(job 행은 이미 잠겨 대기 없음).
         if publication_guard is not None:
             await publication_guard(conn)
 

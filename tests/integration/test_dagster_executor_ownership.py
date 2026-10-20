@@ -287,7 +287,8 @@ async def test_radius_parts_commit_checks_owner_after_rebuild(
     monkeypatch.setattr(
         postload,
         "REGION_RADIUS_PARTS_REFRESH_SQL",
-        "CREATE TABLE region_radius_parts (value text); TRUNCATE TABLE region_radius_parts;"
+        "CREATE TABLE IF NOT EXISTS region_radius_parts (value text);"
+        " TRUNCATE TABLE region_radius_parts;"
         " INSERT INTO region_radius_parts VALUES ('new');",
     )
     cancel_event = asyncio.Event()

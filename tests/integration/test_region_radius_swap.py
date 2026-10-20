@@ -57,6 +57,7 @@ _WAIT_S = 30.0
 async def _cleanup(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("DROP VIEW IF EXISTS t_radius_swap_dependent"))
+        await conn.execute(text("DROP INDEX IF EXISTS t_radius_swap_extra"))
         await conn.execute(text("DROP TABLE IF EXISTS region_radius_parts_next"))
         await conn.execute(text("DELETE FROM tl_scco_sig WHERE sig_cd LIKE '99%'"))
         # A granted live table cannot be reset to the default ACL (REVOKE leaves an explicit
@@ -170,6 +171,13 @@ async def _wait_for_lock_waiter(engine: AsyncEngine, relation: str) -> int:
             await asyncio.sleep(0.05)
 
 
+async def _settle(*tasks: asyncio.Task[object]) -> None:
+    """On a failure path, do not leave a rebuild or reader running into the fixture teardown."""
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def _hold_source_lock(holder: AsyncConnection) -> None:
     await holder.execute(text("BEGIN"))
     await holder.execute(text("LOCK TABLE tl_scco_emd IN ACCESS EXCLUSIVE MODE"))
@@ -193,8 +201,11 @@ async def test_readers_are_not_blocked_while_the_rebuild_computes(engine: AsyncE
                 # TRUNCATE-in-place held ACCESS EXCLUSIVE here: this read failed with 55P03.
                 assert await _live_name(reader) == "old"
             assert not rebuild.done()
-        finally:
+        except BaseException:
             await holder.execute(text("ROLLBACK"))
+            await _settle(rebuild)
+            raise
+        await holder.execute(text("ROLLBACK"))
         await asyncio.wait_for(rebuild, _WAIT_S)
     assert await _read_live_name(engine) == "new"
     await _assert_clean_live_table(engine)
@@ -204,20 +215,28 @@ async def test_a_reader_queued_behind_the_swap_reads_the_new_table(engine: Async
     swapped = asyncio.Event()
     release = asyncio.Event()
 
+    calls = 0
+
     async def guard(conn: AsyncConnection) -> None:
-        # Runs after the swap, still holding ACCESS EXCLUSIVE on the live table.
-        swapped.set()
-        await asyncio.wait_for(release.wait(), _WAIT_S)
+        nonlocal calls
+        calls += 1
+        if calls == 2:  # the second call runs after the swap, holding ACCESS EXCLUSIVE
+            swapped.set()
+            await asyncio.wait_for(release.wait(), _WAIT_S)
 
     rebuild = asyncio.create_task(
         postload.refresh_region_radius_parts(engine, publication_guard=guard)
     )
+    reader: asyncio.Task[str | None] | None = None
     try:
         await asyncio.wait_for(swapped.wait(), _WAIT_S)
         reader = asyncio.create_task(_read_live_name(engine))
         await _wait_for_lock_waiter(engine, "region_radius_parts")
-    finally:
+    except BaseException:
         release.set()
+        await _settle(rebuild, *([reader] if reader else []))
+        raise
+    release.set()
     await asyncio.wait_for(rebuild, _WAIT_S)
     # The waiter re-resolves the name after the lock: it reads the swapped-in table, no error.
     assert await asyncio.wait_for(reader, _WAIT_S) == "new"
@@ -228,18 +247,27 @@ async def test_a_failure_leaves_the_live_table_and_a_rerun_succeeds(
     engine: AsyncEngine, failure: str
 ) -> None:
     if failure == "guard_raises_after_swap":
+        calls = 0
 
         async def guard(conn: AsyncConnection) -> None:
-            raise RuntimeError("simulated lost ownership")
+            nonlocal calls
+            calls += 1
+            if calls == 2:  # after the swap: DROP + RENAME are done but not committed
+                raise RuntimeError("simulated lost ownership")
 
         with pytest.raises(RuntimeError, match="simulated lost ownership"):
             await postload.refresh_region_radius_parts(engine, publication_guard=guard)
+        assert calls == 2
     else:
         async with engine.connect() as holder:
             await _hold_source_lock(holder)
             rebuild = asyncio.create_task(postload.refresh_region_radius_parts(engine))
             try:
-                pid = await _wait_for_lock_waiter(engine, "tl_scco_emd")
+                try:
+                    pid = await _wait_for_lock_waiter(engine, "tl_scco_emd")
+                except BaseException:
+                    await _settle(rebuild)
+                    raise
                 async with engine.connect() as killer:
                     assert await killer.scalar(
                         text("SELECT pg_terminate_backend(:pid)"), {"pid": pid}
@@ -275,9 +303,12 @@ async def test_a_stale_committed_next_table_is_replaced(engine: AsyncEngine) -> 
 @pytest.mark.parametrize(
     ("attachment", "refusal"),
     [
-        ("CREATE VIEW t_radius_swap_dependent AS SELECT code FROM region_radius_parts",
-         "no_dependents"),
+        (
+            "CREATE VIEW t_radius_swap_dependent AS SELECT code FROM region_radius_parts",
+            "no_dependents",
+        ),
         ("GRANT SELECT ON region_radius_parts TO PUBLIC", "same_grants"),
+        ("CREATE INDEX t_radius_swap_extra ON region_radius_parts (name)", "same_indexes"),
     ],
 )
 async def test_the_swap_refuses_to_drop_state_it_does_not_rebuild(

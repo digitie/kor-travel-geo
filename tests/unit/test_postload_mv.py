@@ -142,8 +142,10 @@ def test_region_radius_rebuild_caps_its_lock_wait() -> None:
     lock = inspect.getsource(postload._lock_region_radius_parts)
 
     build = source.index("build_region_radius_parts_next_sql()")
-    assert build < source.index("conn.begin_nested()") < source.index(
-        "await _lock_region_radius_parts("
+    assert (
+        build
+        < source.index("conn.begin_nested()")
+        < source.index("await _lock_region_radius_parts(")
     )
     assert "TRUNCATE" not in postload.build_region_radius_parts_next_sql()
     assert "LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE" in lock
