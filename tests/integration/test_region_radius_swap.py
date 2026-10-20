@@ -58,6 +58,12 @@ async def _cleanup(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("DROP VIEW IF EXISTS t_radius_swap_dependent"))
         await conn.execute(text("DROP INDEX IF EXISTS t_radius_swap_extra"))
+        if await conn.scalar(text("SELECT to_regclass('region_radius_parts')")) is not None:
+            await conn.execute(
+                text(
+                    "ALTER TABLE region_radius_parts DROP CONSTRAINT IF EXISTS t_radius_swap_check"
+                )
+            )
         await conn.execute(text("DROP TABLE IF EXISTS region_radius_parts_next"))
         await conn.execute(text("DELETE FROM tl_scco_sig WHERE sig_cd LIKE '99%'"))
         # A granted live table cannot be reset to the default ACL (REVOKE leaves an explicit
@@ -215,14 +221,10 @@ async def test_a_reader_queued_behind_the_swap_reads_the_new_table(engine: Async
     swapped = asyncio.Event()
     release = asyncio.Event()
 
-    calls = 0
-
     async def guard(conn: AsyncConnection) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 2:  # the second call runs after the swap, holding ACCESS EXCLUSIVE
-            swapped.set()
-            await asyncio.wait_for(release.wait(), _WAIT_S)
+        # Runs after the swap, still holding ACCESS EXCLUSIVE on the live table.
+        swapped.set()
+        await asyncio.wait_for(release.wait(), _WAIT_S)
 
     rebuild = asyncio.create_task(
         postload.refresh_region_radius_parts(engine, publication_guard=guard)
@@ -251,13 +253,13 @@ async def test_a_failure_leaves_the_live_table_and_a_rerun_succeeds(
 
         async def guard(conn: AsyncConnection) -> None:
             nonlocal calls
-            calls += 1
-            if calls == 2:  # after the swap: DROP + RENAME are done but not committed
-                raise RuntimeError("simulated lost ownership")
+            calls += 1  # runs once, after the swap: DROP + RENAME are done but not committed
+            assert await conn.scalar(text("SELECT to_regclass('region_radius_parts_next')")) is None
+            raise RuntimeError("simulated lost ownership")
 
         with pytest.raises(RuntimeError, match="simulated lost ownership"):
             await postload.refresh_region_radius_parts(engine, publication_guard=guard)
-        assert calls == 2
+        assert calls == 1
     else:
         async with engine.connect() as holder:
             await _hold_source_lock(holder)
@@ -309,6 +311,10 @@ async def test_a_stale_committed_next_table_is_replaced(engine: AsyncEngine) -> 
         ),
         ("GRANT SELECT ON region_radius_parts TO PUBLIC", "same_grants"),
         ("CREATE INDEX t_radius_swap_extra ON region_radius_parts (name)", "same_indexes"),
+        (
+            "ALTER TABLE region_radius_parts ADD CONSTRAINT t_radius_swap_check CHECK (part_no>0)",
+            "same_constraints",
+        ),
     ],
 )
 async def test_the_swap_refuses_to_drop_state_it_does_not_rebuild(

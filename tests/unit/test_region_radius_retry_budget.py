@@ -99,13 +99,13 @@ async def test_radius_retry_checks_budget_after_sleep(monkeypatch, resume_at, de
             assert outcomes == [postload._RegionRadiusLockBusyError, DBAPIError]
         assert sum(command.startswith("LOCK TABLE") for command in commands) == 1
         swap.assert_not_awaited()
-        guard.assert_awaited_once_with(connection)  # the pre-lock check only
+        guard.assert_not_awaited()  # no job-row lock is taken before the swap lock
     else:
         await postload.refresh_region_radius_parts(engine, publication_guard=guard)
         assert len(savepoints) == 2
         assert outcomes == [postload._RegionRadiusLockBusyError, None]
         swap.assert_awaited_once_with(connection, live_exists=True)
-        assert guard.await_count == 2  # before the lock, and once more before commit
+        guard.assert_awaited_once_with(connection)
     # The long build runs once, before any lock attempt, whatever the retries do.
     assert commands.count("OWNED_REBUILD") == 1
     assert commands.index("OWNED_REBUILD") < next(

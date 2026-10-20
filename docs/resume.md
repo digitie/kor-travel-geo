@@ -6,7 +6,8 @@
 - `refresh_region_radius_parts`는 한 transaction에서 `region_radius_parts_next`를 채운 뒤에만 라이브 표
   ACCESS EXCLUSIVE를 2 s·savepoint 재시도로 잡아 DROP→RENAME→이름 복원한다. 배타 보유는 교체뿐이다.
 - 중간 실패·backend 강제 종료는 전체 rollback이라 라이브 불변·`_next` 잔존 0, 재실행 PASS(격리 PostGIS 통합).
-  소유자·권한·트리거/RLS·뷰/FK 의존이 있으면 교체를 거부한다. 마이그레이션 0015 SQL은 그대로다.
+  소유자·권한·저장 옵션·인덱스/제약 정의가 새 표와 다르거나 트리거·규칙·정책·확장 통계·일반 의존(뷰·FK)이 있으면 교체를 거부한다(첫 격리 실행에서 자기 CHECK 제약의 `n` 의존 오탐을 잡아 제외).
+  guard는 교체 뒤 commit 직전 한 번. 마이그레이션 0015 SQL은 그대로다. 운영 배포 전 읽기 전용 카탈로그 확인 필요.
 - 운영 배포·DDL·rebuild는 하지 않았다. daemon OFF·schedule/sensor 끔 유지.
 
 ## 2026-10-19 — Track 수용 검증 진행

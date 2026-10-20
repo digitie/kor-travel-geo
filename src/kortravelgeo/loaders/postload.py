@@ -125,9 +125,9 @@ _RADIUS_NEXT = "region_radius_parts_next"
 _RADIUS_REBUILD_LOCK_KEY = "kortravelgeo:region_radius_parts:rebuild"
 
 #: The swap drops the live table, so whatever hangs off it and is not recreated by the build SQL
-#: would be lost silently (owner, grants, storage options, an index added outside the build SQL,
-#: triggers, policies) or block the DROP (views, foreign keys — any normal dependency). Checked
-#: under ACCESS EXCLUSIVE, so nothing can change in between.
+#: would be lost silently (owner, grants, storage options, an index or constraint added outside
+#: the build SQL, triggers, rules, policies, extended statistics) or block the DROP (views, foreign
+#: keys — any normal dependency). Checked under ACCESS EXCLUSIVE, so nothing can change in between.
 _RADIUS_SWAP_CHECK_SQL = text(
     """
 SELECT l.relowner = n.relowner AS same_owner,
@@ -142,9 +142,20 @@ SELECT l.relowner = n.relowner AS same_owner,
                          'region_radius_parts') AS d
             FROM pg_index i WHERE i.indrelid = n.oid
         ) ni) AS same_indexes,
-       NOT (l.relhastriggers OR l.relrowsecurity
-            OR EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = l.oid))
-         AS no_triggers_or_policies,
+       (SELECT array_agg(d ORDER BY d) FROM (
+          SELECT c.conname || ' ' || pg_get_constraintdef(c.oid) AS d
+            FROM pg_constraint c WHERE c.conrelid = l.oid
+        ) lc)
+       IS NOT DISTINCT FROM
+       (SELECT array_agg(d ORDER BY d) FROM (
+          SELECT replace(c.conname || ' ' || pg_get_constraintdef(c.oid),
+                         'region_radius_parts_next', 'region_radius_parts') AS d
+            FROM pg_constraint c WHERE c.conrelid = n.oid
+        ) nc) AS same_constraints,
+       NOT (l.relhastriggers OR l.relrowsecurity OR l.relhasrules
+            OR EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = l.oid)
+            OR EXISTS (SELECT 1 FROM pg_statistic_ext s WHERE s.stxrelid = l.oid))
+         AS no_triggers_rules_policies_stats,
        NOT EXISTS (
          SELECT 1 FROM pg_depend d
           WHERE d.refclassid = 'pg_class'::regclass
@@ -265,8 +276,8 @@ async def refresh_region_radius_parts(
     touched, readers keep going), then take ACCESS EXCLUSIVE on the live table with a short wait
     (``REGION_RADIUS_LOCK_TIMEOUT``, retried from a savepoint for up to
     ``REGION_RADIUS_LOCK_BUDGET_S``), drop it, rename ``_next`` in and commit. The exclusive hold
-    is the swap plus the publication guard's re-check (the first check already locked its job
-    rows, so the re-check does not wait). A failure anywhere rolls the whole transaction back: the
+    is the swap plus the publication guard (its job-row ``FOR UPDATE`` waits at most 5 s). A
+    failure anywhere rolls the whole transaction back: the
     live table is unchanged and no ``_next`` was ever committed, so a re-run starts clean and
     ``pg_dump`` never sees a half state. The table's OID changes on every swap: a ``pg_dump`` whose
     snapshot predates a swap that commits before it locks the table fails loudly (the next backup
@@ -280,9 +291,6 @@ async def refresh_region_radius_parts(
         )
         for sql in iter_sql_statements(build_region_radius_parts_next_sql()):
             await conn.execute(text(sql))
-        # 긴 재생성 뒤 소유권을 검증하고 job 행을 commit까지 잠근다 — 배타 잠금을 잡기 전에.
-        if publication_guard is not None:
-            await publication_guard(conn)
         deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
         attempt = 0
         last_lock_error: DBAPIError | None = None
@@ -309,7 +317,8 @@ async def refresh_region_radius_parts(
                 )
                 last_lock_error = busy.cause
                 await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
-        # 잠금 재시도 중 들어온 중지 요청을 commit 직전에 다시 본다(job 행은 이미 잠겨 대기 없음).
+        # 긴 재생성 뒤 commit 직전에 소유권을 검증한다. guard의 job 행 FOR UPDATE는 commit까지
+        # 유지되므로 잠금 재시도(최대 1 h) 전에 잡지 않는다 — lease 갱신·취소를 막는다(ADR-069 D4).
         if publication_guard is not None:
             await publication_guard(conn)
 
