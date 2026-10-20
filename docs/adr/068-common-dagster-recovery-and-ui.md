@@ -37,7 +37,7 @@ lock integrity로 고정하며 출처는 vendor/PROVENANCE.md에 기록한다.
 게시 단계는 자식과 batch root의 running/owner 행을 같은 SQL transaction에서 잠그고,
 실제 MV 교체·release 활성화 직전과 commit 전에 중지 여부를 확인한다. 중지되면 해당
 게시 transaction을 rollback한다. 이전에 commit된 원천 적재와 MV transaction은 보존하며,
-전체 batch를 하나의 transaction으로 묶지는 않는다. 별도 serving 테이블인 region_radius_parts의 TRUNCATE/INSERT도 완료 후 commit 직전에 같은 owner 검증을 거치며, 취소 시 이전 테이블 내용이 유지된다. MV 유지보수·릴리스 SQL에는 30분 상한을 둔다(2026-10-18 개정: 6h — 아래 "개정" 절).
+전체 batch를 하나의 transaction으로 묶지는 않는다. 별도 serving 테이블인 region_radius_parts의 재생성(2026-10-20 G-01 후속 a2부터 `_next` 표 재생성 + 짧은 rename 교체, 그 전엔 TRUNCATE/INSERT)도 완료 후 commit 직전에 같은 owner 검증을 거치며, 취소 시 이전 테이블 내용이 유지된다. MV 유지보수·릴리스 SQL에는 30분 상한을 둔다(2026-10-18 개정: 6h — 아래 "개정" 절).
 관측 조회의 전체 응답 예산은 기본 10초(최대 20초)이고 실행/취소의 기존 제한과 분리한다.
 Dagster 1.13.24에서 tick 조회가 전체 이력을 순위 계산하지 않도록 모든 tick status를
 명시해 최신 3건 제한 조회를 사용한다. 응답 크기와 전체 읽기 시간 제한을 함께 적용한다.

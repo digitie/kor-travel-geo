@@ -208,6 +208,11 @@ NOCREATEDB 롤에서 E0410이라(`infra/db_capabilities.py:3-11`) 수동 `pg_res
     획득 뒤 보유(재생성~commit, 6 h 문장 상한) — `_next` 표 재생성 뒤 rename swap으로 줄이는 것은 별도 후속(아래 a2). 원문: `region_radius_parts` TRUNCATE에 `lock_timeout`(예 30s) 또는 `_next` 테이블 swap(문장 상한 6h로
     최악의 AccessExclusive 보유가 30분→6 h, 2차 리뷰 Major).
   - [ ] **G-01 후속 a2** — `region_radius_parts`를 `_next` 표에 재생성하고 짧은 rename으로 교체(보유 시간·백업 충돌 제거).
+    **소스 진행(2026-10-20, Claude, draft PR `agent/claude-g01-a2-radius-swap`)**: 한 transaction에서 `_next`를 먼저 채우고(라이브 미접촉),
+    그 뒤 ACCESS EXCLUSIVE만 2 s·savepoint 재시도(#590 예산 그대로)로 잡아 DROP(무CASCADE)→RENAME→제약·인덱스 이름 복원→commit.
+    실패·backend 사망은 전체 rollback(`_next`는 commit된 적 없음 → 재실행 깨끗, pg_dump가 중간 상태를 못 봄). 소유자·권한·저장 옵션·인덱스/제약 정의가 새 표와 다르거나 트리거·규칙·정책·확장 통계·일반 의존(뷰·FK)이 있으면
+    교체를 거부. guard는 교체 뒤 commit 직전 한 번(job 행 잠금이 재시도 창을 덮지 않게). **남은 것**: 머지 뒤 운영 배포(소유자 창) — 배포 전 운영 DB 읽기 전용 카탈로그 확인([조사 문서](audits/2026-10-19-radius-lock-hold-followup.md)
+    끝 절의 SQL — 소유자·ACL·옵션·인덱스·제약·정책·통계·의존). 운영 DDL·rebuild는 이 PR에서 실행하지 않았다.
   - [x] **G-01 후속 b**(2026-10-18, #591: Dagster 유지보수 엔진(`client` resource) 세션에 `client_connection_check_interval=10s` —
     worker 프로세스가 죽어 소켓이 닫히면 서버가 실행 중 문장을 ~10 s 안에 끝낸다). **덮지 못하는 것**(6 h 문장 상한만 남음): 살아
     있지만 멈춘 worker·`terminateRun` 실패·네트워크 단절(FIN 없음 — tcp keepalive 미설정); `make_async_engine`을 거치지 않는 접속 —
