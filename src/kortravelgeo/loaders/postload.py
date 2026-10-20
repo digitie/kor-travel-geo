@@ -105,16 +105,40 @@ async def refresh_mv(
     await GeoCacheRepository(engine).clear()
 
 
-#: Lock-wait cap for the ``region_radius_parts`` rebuild (G-01 follow-up a). The rebuild needs
-#: ACCESS EXCLUSIVE; while that request waits behind a long reader (e.g. ``pg_dump``) every new
-#: radius lookup queues behind it. So the lock is taken explicitly first with a short wait, and a
-#: lost wait rolls back (old rows stay) and retries until a budget long enough to outlast a backup.
-#: Only that lock wait is retried — any other error propagates. The hold (rebuild until commit) is
-#: not capped here; rebuilding into a ``_next`` table and swapping is a separate follow-up.
+#: Lock-wait cap for the ``region_radius_parts`` swap (G-01 follow-up a/a2). The rebuild fills
+#: ``region_radius_parts_next`` without touching the live table, then swaps it in under ACCESS
+#: EXCLUSIVE. While that request waits behind a long reader (e.g. ``pg_dump``) every new radius
+#: lookup queues behind it, so the lock is taken explicitly with a short wait; a lost wait rolls
+#: back to a savepoint (the built ``_next`` is kept) and retries until a budget long enough to
+#: outlast a backup. Only that lock wait is retried — any other error propagates.
 REGION_RADIUS_LOCK_TIMEOUT = "2s"
 REGION_RADIUS_LOCK_RETRY_DELAY_S = 30.0
 REGION_RADIUS_LOCK_BUDGET_S = 3600.0
 _LOCK_NOT_AVAILABLE = "55P03"
+_RADIUS_LIVE = "region_radius_parts"
+_RADIUS_NEXT = "region_radius_parts_next"
+#: Serializes rebuilds: two concurrent rebuilds would otherwise race on the ``_next`` name.
+_RADIUS_REBUILD_LOCK_KEY = "kortravelgeo:region_radius_parts:rebuild"
+
+#: The swap drops the live table, so whatever hangs off it and is not recreated by the build SQL
+#: would be lost silently (grants, owner, triggers, RLS) or block the DROP (views, foreign keys —
+#: any normal dependency). Checked under ACCESS EXCLUSIVE, so nothing can change in between.
+_RADIUS_SWAP_CHECK_SQL = text(
+    """
+SELECT l.relowner = n.relowner AS same_owner,
+       l.relacl IS NOT DISTINCT FROM n.relacl AS same_grants,
+       NOT (l.relhastriggers OR l.relrowsecurity) AS no_triggers_or_rls,
+       NOT EXISTS (
+         SELECT 1 FROM pg_depend d
+          WHERE d.refclassid = 'pg_class'::regclass
+            AND d.refobjid = l.oid
+            AND d.deptype = 'n'
+       ) AS no_dependents
+  FROM pg_class l, pg_class n
+ WHERE l.oid = to_regclass('region_radius_parts')
+   AND n.oid = to_regclass('region_radius_parts_next')
+"""
+)
 
 
 class _RegionRadiusLockBusyError(Exception):
@@ -123,11 +147,27 @@ class _RegionRadiusLockBusyError(Exception):
         self.cause = cause
 
 
+def build_region_radius_parts_next_sql() -> str:
+    """``REGION_RADIUS_PARTS_REFRESH_SQL`` retargeted at ``region_radius_parts_next``.
+
+    One definition serves both the migration (in place, first build) and the swap. Index and
+    constraint names follow the table name (``idx_region_radius_parts_next_*``,
+    ``region_radius_parts_next_pkey``) and the swap renames them back.
+    """
+    sql = REGION_RADIUS_PARTS_REFRESH_SQL
+    truncate = f"TRUNCATE TABLE {_RADIUS_LIVE};"
+    if sql.count(truncate) != 1:
+        raise RuntimeError("REGION_RADIUS_PARTS_REFRESH_SQL no longer has exactly one TRUNCATE")
+    sql = sql.replace(truncate, "").replace(_RADIUS_LIVE, _RADIUS_NEXT)
+    return f"DROP TABLE IF EXISTS {_RADIUS_NEXT};\n{sql}"
+
+
 async def _lock_region_radius_parts(
     conn: Any, *, deadline: float | None = None, last_lock_error: DBAPIError | None = None
-) -> None:
+) -> bool:
+    """Take ACCESS EXCLUSIVE on the live table with a short wait. False: there is none yet."""
     if await conn.scalar(text("SELECT to_regclass('region_radius_parts')")) is None:
-        return  # first build: nobody can be reading it
+        return False  # first build: nobody can be reading it
     original_timeout = await conn.scalar(text("SELECT current_setting('lock_timeout')"))
     await conn.execute(text(f"SET LOCAL lock_timeout = '{REGION_RADIUS_LOCK_TIMEOUT}'"))
     # relation 조회와 GUC 준비 await도 예산을 소비하므로 실제 LOCK 직전에 검사한다.
@@ -143,6 +183,50 @@ async def _lock_region_radius_parts(
         text("SELECT set_config('lock_timeout', :lock_timeout, true)"),
         {"lock_timeout": original_timeout},
     )
+    return True
+
+
+async def _swap_region_radius_parts(conn: Any, *, live_exists: bool) -> None:
+    """Replace the live table with ``_next``. The caller holds ACCESS EXCLUSIVE on it."""
+    if live_exists:
+        row = (await conn.execute(_RADIUS_SWAP_CHECK_SQL)).mappings().one()
+        lost = sorted(name for name, ok in row.items() if not ok)
+        if lost:
+            raise RuntimeError(
+                f"region_radius_parts swap refused ({', '.join(lost)}): the live table carries "
+                "state the rebuild does not recreate — handle it in the build SQL first"
+            )
+        # No CASCADE: an unexpected dependent makes this fail (and roll back), not vanish.
+        await conn.execute(text(f"DROP TABLE {_RADIUS_LIVE}"))
+    await conn.execute(text(f"ALTER TABLE {_RADIUS_NEXT} RENAME TO {_RADIUS_LIVE}"))
+    # Constraints first: renaming the primary key also renames its index.
+    constraints = await conn.execute(
+        text(
+            "SELECT conname FROM pg_constraint"
+            " WHERE conrelid = 'region_radius_parts'::regclass AND conname LIKE :pattern"
+        ),
+        {"pattern": f"{_RADIUS_NEXT}%"},
+    )
+    for name in [str(r[0]) for r in constraints]:
+        target = name.replace(_RADIUS_NEXT, _RADIUS_LIVE, 1)
+        await conn.execute(
+            text(
+                f"ALTER TABLE {_RADIUS_LIVE} RENAME CONSTRAINT "
+                f"{_quote_identifier(name)} TO {_quote_identifier(target)}"
+            )
+        )
+    indexes = await conn.execute(
+        text(
+            "SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid"
+            " WHERE i.indrelid = 'region_radius_parts'::regclass AND c.relname LIKE :pattern"
+        ),
+        {"pattern": f"%{_RADIUS_NEXT}%"},
+    )
+    for name in [str(r[0]) for r in indexes]:
+        target = name.replace(_RADIUS_NEXT, _RADIUS_LIVE, 1)
+        await conn.execute(
+            text(f"ALTER INDEX {_quote_identifier(name)} RENAME TO {_quote_identifier(target)}")
+        )
 
 
 async def refresh_region_radius_parts(
@@ -150,43 +234,51 @@ async def refresh_region_radius_parts(
 ) -> None:
     """Rebuild subdivided administrative-region geometry for radius lookup.
 
-    ACCESS EXCLUSIVE is acquired first with a short wait (``REGION_RADIUS_LOCK_TIMEOUT``) and the
-    acquisition alone is retried for up to ``REGION_RADIUS_LOCK_BUDGET_S``.
+    One transaction: build ``region_radius_parts_next`` (the long part — the live table is not
+    touched, readers keep going), then take ACCESS EXCLUSIVE on the live table with a short wait
+    (``REGION_RADIUS_LOCK_TIMEOUT``, retried from a savepoint for up to
+    ``REGION_RADIUS_LOCK_BUDGET_S``), drop it, rename ``_next`` in and commit. The exclusive hold
+    is the swap only. A failure anywhere rolls the whole transaction back: the live table is
+    unchanged and no ``_next`` was ever committed, so a re-run starts clean and ``pg_dump`` never
+    sees a half state.
     """
-    deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
-    attempt = 0
-    last_lock_error: DBAPIError | None = None
-    while True:
-        # sleep 재개가 늦어졌다면 새 transaction/LOCK 시도 전에 예산을 다시 확인한다.
-        if last_lock_error is not None and time.monotonic() >= deadline:
-            raise last_lock_error from None
-        attempt += 1
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(_SET_MAINTENANCE_TIMEOUT)
-                # 풀 연결·transaction 준비 중 늦어져도 새 LOCK을 요청하지 않는다.
-                if last_lock_error is not None and time.monotonic() >= deadline:
-                    raise last_lock_error from None
-                await _lock_region_radius_parts(
-                    conn, deadline=deadline, last_lock_error=last_lock_error
+    async with engine.begin() as conn:
+        await conn.execute(_SET_MAINTENANCE_TIMEOUT)
+        await conn.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": _RADIUS_REBUILD_LOCK_KEY},
+        )
+        for sql in iter_sql_statements(build_region_radius_parts_next_sql()):
+            await conn.execute(text(sql))
+        deadline = time.monotonic() + REGION_RADIUS_LOCK_BUDGET_S
+        attempt = 0
+        last_lock_error: DBAPIError | None = None
+        while True:
+            # sleep 재개가 늦어졌다면 새 LOCK 시도 전에 예산을 다시 확인한다.
+            if last_lock_error is not None and time.monotonic() >= deadline:
+                raise last_lock_error from None
+            attempt += 1
+            try:
+                async with conn.begin_nested():
+                    live_exists = await _lock_region_radius_parts(
+                        conn, deadline=deadline, last_lock_error=last_lock_error
+                    )
+                    await _swap_region_radius_parts(conn, live_exists=live_exists)
+                break
+            except _RegionRadiusLockBusyError as busy:
+                if time.monotonic() + REGION_RADIUS_LOCK_RETRY_DELAY_S > deadline:
+                    raise busy.cause from None
+                LOGGER.warning(
+                    "region_radius_parts lock 대기가 %s를 넘었다(시도 %d) — %.0f s 뒤 재시도",
+                    REGION_RADIUS_LOCK_TIMEOUT,
+                    attempt,
+                    REGION_RADIUS_LOCK_RETRY_DELAY_S,
                 )
-                for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
-                    await conn.execute(text(sql))
-                # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
-                if publication_guard is not None:
-                    await publication_guard(conn)
-            return
-        except _RegionRadiusLockBusyError as busy:
-            if time.monotonic() + REGION_RADIUS_LOCK_RETRY_DELAY_S > deadline:
-                raise busy.cause from None
-            LOGGER.warning(
-                "region_radius_parts lock 대기가 %s를 넘었다(시도 %d) — %.0f s 뒤 재시도",
-                REGION_RADIUS_LOCK_TIMEOUT,
-                attempt,
-                REGION_RADIUS_LOCK_RETRY_DELAY_S,
-            )
-            last_lock_error = busy.cause
-            await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
+                last_lock_error = busy.cause
+                await asyncio.sleep(REGION_RADIUS_LOCK_RETRY_DELAY_S)
+        # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
+        if publication_guard is not None:
+            await publication_guard(conn)
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:

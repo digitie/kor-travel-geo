@@ -136,13 +136,16 @@ async def test_refresh_mv_forwards_owner_guard_to_radius_parts(monkeypatch):
 
 
 def test_region_radius_rebuild_caps_its_lock_wait() -> None:
-    # G-01 follow-up a: the TRUNCATE must not queue radius readers for the 6 h ceiling.
+    # G-01 follow-up a/a2: the rebuild fills `_next` first and only then asks for the live
+    # table's ACCESS EXCLUSIVE (short wait, retried from a savepoint) — the hold is the swap only.
     source = inspect.getsource(postload.refresh_region_radius_parts)
     lock = inspect.getsource(postload._lock_region_radius_parts)
 
-    assert source.index("await _lock_region_radius_parts(") < source.index(
-        "REGION_RADIUS_PARTS_REFRESH_SQL"
+    build = source.index("build_region_radius_parts_next_sql()")
+    assert build < source.index("conn.begin_nested()") < source.index(
+        "await _lock_region_radius_parts("
     )
+    assert "TRUNCATE" not in postload.build_region_radius_parts_next_sql()
     assert "LOCK TABLE region_radius_parts IN ACCESS EXCLUSIVE MODE" in lock
     assert lock.index("SET LOCAL lock_timeout = '") < lock.index("LOCK TABLE")
     assert postload.REGION_RADIUS_LOCK_TIMEOUT == "2s"

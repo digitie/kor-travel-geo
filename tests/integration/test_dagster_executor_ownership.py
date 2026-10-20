@@ -283,11 +283,12 @@ async def test_radius_parts_commit_checks_owner_after_rebuild(
     async with ownership_engine.begin() as conn:
         await conn.execute(text("CREATE TABLE region_radius_parts (value text)"))
         await conn.execute(text("INSERT INTO region_radius_parts VALUES ('old')"))
-    # geometry SQL의 실행계획 대신 실제 TRUNCATE/INSERT transaction의 게시 경계를 검증한다.
+    # geometry SQL의 실행계획 대신 실제 _next 재생성·교체 transaction의 게시 경계를 검증한다.
     monkeypatch.setattr(
         postload,
         "REGION_RADIUS_PARTS_REFRESH_SQL",
-        "TRUNCATE TABLE region_radius_parts; INSERT INTO region_radius_parts VALUES ('new');",
+        "CREATE TABLE region_radius_parts (value text); TRUNCATE TABLE region_radius_parts;"
+        " INSERT INTO region_radius_parts VALUES ('new');",
     )
     cancel_event = asyncio.Event()
     actual_guard = load_job_publication_guard(
