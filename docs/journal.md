@@ -1,5 +1,13 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-24 — Next.js 16.4.3 보안 의존성 갱신
+
+- Next.js 16.2.12에서 `16.4.3`으로 정확히 고정하고 잠금 파일을 재생성했다. 사용하는 `eslint-config-next`도 `16.4.3`으로 맞췄다.
+- 기존 Next.js 16 설정·React 19.3.0·지도 패키지 SHA와 postinstall 패치를 유지했다. lint는 기존 전체 문서 복구/로그아웃 이동 경고 3건과 종료 코드 0이다.
+- WSL Linux Node 22.22.2에서 프론트엔드 기존 테스트 269건과 lint·type-check·build PASS. 빌드가 생성한 타입 선언과 필요한 JSX 설정을 반영했다.
+- React Doctor 0.9.18 offline 검사: 오류 0·경고 14·점수 90. 앱 소스가 바뀌지 않은 기존 진단은 이번 의존성 갱신에 섞지 않으며 전체 경고 해소로 보고하지 않는다. CodeGraph 초기 색인·sync·status도 확인했다.
+- 같은 시점 `npm audit` 전체 보고: 총 16→12건, critical 1→0건. `next` 항목은 제거됐지만 다른 패키지 취약점은 남아 있다. 강제 자동 수정이나 요청 외 major 의존성 갱신은 하지 않았다.
+- 기존 작업 트리는 보존하고 Linux 격리 작업 공간의 `codex/next-16.4.3-security`에서 변경했다. CI·독립 리뷰·운영 배포·실제 서비스 UI 수용은 아직 별도이며, 이 기록을 운영 반영 완료로 세지 않는다.
 
 ## 2026-10-20 — G-01 후속 a2: region_radius_parts `_next` 재생성 + 짧은 교체(소스)
 
