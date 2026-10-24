@@ -1,7 +1,5 @@
 # tasks.md — 백로그
 
-- [ ] **T-327 — Next.js 16.4.3**. 의존성·잠금 파일과 필요한 호환 설정을 갱신하고 WSL 프론트엔드 검증을 통과했다. PR CI·독립 리뷰와 운영 반영은 별도다. [검증·잔여 취약점](journal.md).
-
 열린 `[ ]`(진행 중/대기/보류) task만 두는 백로그. 완료·종료 이력은
 [`docs/tasks-done.md`](tasks-done.md), 진척·"다음 한 작업"은 [`docs/resume.md`](resume.md)가
 정본이다. 작성·유지 규약(역할 표·라우팅·ID 스킴·entry 형식)은

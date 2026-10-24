@@ -1,5 +1,9 @@
 # tasks-done.md — 완료/아카이브 task 이력
 
+## 2026-10-24 — npm 보안·버전 정합 소스 완료
+
+- [x] **T-327 — Next.js 16.4.3**. npm 직접/전이 보안 패치와 공통 버전 정합, 이 저장소 기존 테스트 269개·타입·린트·빌드 검증을 반영했다. 최종 게이트와 머지 상태는 [PR](https://github.com/digitie/kor-travel-geo/pull/596), 잔여 상류 권고와 범위는 [정합 기록](npm-security-alignment-2026-10-24.md)을 따른다.
+
 > 완료(`[x]`)·종료(no-go/no-action)·아카이브 history. 진행 중/대기 task는
 > [`docs/tasks.md`](tasks.md), 작성·유지 규약은 [`docs/tasks-rule.md`](tasks-rule.md).
 > 최신 완료가 위로 누적된다(newest-first).
