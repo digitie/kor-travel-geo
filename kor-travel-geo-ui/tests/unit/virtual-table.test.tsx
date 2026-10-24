@@ -2,14 +2,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 
-// jsdom has no layout, so give scroll elements a measurable height for the virtualizer.
+// jsdom에는 레이아웃이 없어 가상화기가 읽는 viewport 높이를 제공한다.
 describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
   let origHeight: PropertyDescriptor | undefined;
   let origRect: typeof Element.prototype.getBoundingClientRect;
 
   beforeAll(() => {
-    origHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
-    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    origHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
       configurable: true,
       value: 400
     });
@@ -29,7 +29,8 @@ describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
     };
   });
   afterAll(() => {
-    if (origHeight) Object.defineProperty(HTMLElement.prototype, "offsetHeight", origHeight);
+    if (origHeight) Object.defineProperty(HTMLElement.prototype, "clientHeight", origHeight);
+    else Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
     Element.prototype.getBoundingClientRect = origRect;
   });
 
