@@ -1,5 +1,22 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-24 — 여섯 프로젝트 npm 보안·버전 정합
+
+- 이 저장소의 기존 프론트엔드/공용 테스트 269개와 타입·린트·빌드 PASS. [버전·예외·검증 범위](npm-security-alignment-2026-10-24.md).
+- CI 설치 실패를 재현하고 토큰 tarball의 이전 잠금 해시를 새 바이트에 맞춰 재생성했다. 기존 VWorld 고정 커밋을 로컬 상류에서 archive하여 vendor로 소비하며 원격 패키지 차단은 유지한다. 신규 install·ci·audit 0건과 vendor 3파일의 실제 SHA512/lock 일치를 확인했다.
+- 직접/전이 npm 의존성과 잠금 파일을 갱신하고 여섯 프로젝트의 공통 버전을 맞췄다.
+- 호환성 예외·미수정 상류 권고·검증 범위는 [정합 기록](npm-security-alignment-2026-10-24.md)을 따른다.
+- 소스·잠금 파일 정합과 WSL 검증을 완료했다. 최종 CI·두 독립 확인·N150 후보 UI 게이트와 머지 상태는 [PR](https://github.com/digitie/kor-travel-geo/pull/596)에서 정산하며 통과 확인 전 머지하지 않는다.
+
+## 2026-10-24 — Next.js 16.4.3 보안 의존성 갱신
+
+- Next.js 16.2.12에서 `16.4.3`으로 정확히 고정하고 잠금 파일을 재생성했다. 사용하는 `eslint-config-next`도 `16.4.3`으로 맞췄다.
+- 기존 Next.js 16 설정·React 19.3.0·지도 패키지 SHA와 postinstall 패치를 유지했다. lint는 기존 전체 문서 복구/로그아웃 이동 경고 3건과 종료 코드 0이다.
+- WSL Linux Node 22.22.2에서 프론트엔드 기존 테스트 269건과 lint·type-check·build PASS. 빌드가 생성한 타입 선언과 필요한 JSX 설정을 반영했다.
+- React Doctor 0.9.18 offline 검사: 오류 0·경고 14·점수 90. 앱 소스가 바뀌지 않은 기존 진단은 이번 의존성 갱신에 섞지 않으며 전체 경고 해소로 보고하지 않는다. CodeGraph 초기 색인·sync·status도 확인했다.
+- 같은 시점 `npm audit` 전체 보고: 총 16→12건, critical 1→0건. `next` 항목은 제거됐지만 다른 패키지 취약점은 남아 있다. 강제 자동 수정이나 요청 외 major 의존성 갱신은 하지 않았다.
+- James(프론트/UI)·Popper(빌드/운영) 독립 사전 리뷰에서 이 저장소의 추가 P0/P1은 없었다. 실제 서비스 UI와 CI 이후 머지 게이트를 대체하지 않는다.
+- 기존 작업 트리는 보존하고 Linux 격리 작업 공간의 `codex/next-16.4.3-security`에서 변경했다. CI·운영 배포·실제 서비스 UI 수용은 아직 별도이며, 이 기록을 운영 반영 완료로 세지 않는다.
 
 ## 2026-10-20 — G-01 후속 a2: region_radius_parts `_next` 재생성 + 짧은 교체(소스)
 
