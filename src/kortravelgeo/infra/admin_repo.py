@@ -1933,12 +1933,14 @@ SELECT row_number() OVER (ORDER BY total_exec_time DESC, calls DESC)::integer AS
        GREATEST(temp_blks_read, 0)::bigint AS temp_blks_read,
        GREATEST(temp_blks_written, 0)::bigint AS temp_blks_written,
        COALESCE(wal_bytes, 0)::numeric AS wal_bytes,
-       -- pg_stat_statements 1.11(PG17)이 blk_*_time을 shared_blk_*_time으로 바꿨다(공용 PG 18, 2026-10-27).
-       COALESCE((to_jsonb(statement_row) ->> 'shared_blk_read_time')::double precision,
-                (to_jsonb(statement_row) ->> 'blk_read_time')::double precision, 0) AS blk_read_time_ms,
-       COALESCE((to_jsonb(statement_row) ->> 'shared_blk_write_time')::double precision,
-                (to_jsonb(statement_row) ->> 'blk_write_time')::double precision, 0) AS blk_write_time_ms
-  FROM x_extension.pg_stat_statements AS statement_row
+       -- PG17(pg_stat_statements 1.11): blk_*_time -> shared_blk_*_time
+       COALESCE((to_jsonb(pss) ->> 'shared_blk_read_time')::double precision,
+                (to_jsonb(pss) ->> 'blk_read_time')::double precision,
+                0) AS blk_read_time_ms,
+       COALESCE((to_jsonb(pss) ->> 'shared_blk_write_time')::double precision,
+                (to_jsonb(pss) ->> 'blk_write_time')::double precision,
+                0) AS blk_write_time_ms
+  FROM x_extension.pg_stat_statements AS pss
  WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
    -- T-310: 공용 instance에서는 같은 DB에도 다른 role(cluster admin 등)의 statement가
    -- 쌓인다. 이 tenant의 app role이 실행한 것만 저장한다(남의 항목은 query가
