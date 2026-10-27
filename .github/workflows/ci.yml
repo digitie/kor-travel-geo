@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgis/postgis:16-3.5
+        image: postgis/postgis:18-3.6
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: kor_travel_geo_ci_test
@@ -63,14 +63,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install GDAL, PostgreSQL 16 client tools, zstd
+      - name: Install GDAL, PostgreSQL 18 client tools, zstd
         timeout-minutes: 12
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get -o Acquire::Retries=3 update
           sudo apt-get -o Dpkg::Lock::Timeout=120 install -y --no-install-recommends \
-            gdal-bin libgdal-dev postgresql-client-16 zstd
+            gdal-bin libgdal-dev postgresql-client-18 zstd
           pg_dump --version
       - name: Install backend
         run: |
@@ -153,7 +153,7 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: dagster

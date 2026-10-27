@@ -104,7 +104,7 @@ WORKDIR /app
 #  - gdal-bin pulls the libgdal shared library the copied osgeo C extension links against
 #    (same debian release as the builder, so the libgdal major matches the built wheel).
 #  - the db_backup/db_restore ops shell out to pg_dump/pg_restore + zstd (run_backup_job /
-#    run_restore_job), so the PostgreSQL 16 client (matches the kor_travel_geo server) and
+#    run_restore_job), so the PostgreSQL 18 client (matches the kor_travel_geo server) and
 #    zstd are installed from the PGDG apt repo.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg gdal-bin \
@@ -114,7 +114,7 @@ RUN apt-get update \
     && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" \
          > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client-16 zstd \
+    && apt-get install -y --no-install-recommends postgresql-client-18 zstd \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system appuser \
