@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { type Page, type Request } from "@playwright/test";
 
 /**
  * Deterministic fake-API harness for `/admin/source-files` e2e (T-225).
@@ -310,7 +310,7 @@ function suffixOverride(responses: Record<string, unknown> | undefined, pathname
 
 const UNHANDLED = Symbol("unhandled");
 
-function resolveBody(pathname: string, method: string, url: URL, opts: Required_<SourceFilesMockOptions>, receivedBytes: number): unknown {
+function resolveBody(pathname: string, method: string, url: URL, opts: Required_<SourceFilesMockOptions>, request: Request): unknown {
   const override = suffixOverride(opts.responses, pathname);
   if (override !== undefined) return override;
 
@@ -320,7 +320,7 @@ function resolveBody(pathname: string, method: string, url: URL, opts: Required_
   }
   if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/multipart\/\d+$/.test(pathname) && method === "PUT") {
     const partNumber = Number(pathname.split("/").pop());
-    return { part_number: partNumber, part_etag: `etag-${partNumber}`, received_bytes: receivedBytes };
+    return { part_number: partNumber, part_etag: `etag-${partNumber}`, received_bytes: request.postDataBuffer()?.byteLength ?? 0 };
   }
   if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/multipart$/.test(pathname) && method === "POST") {
     return { multipart_upload_id: "mp-1", part_size_bytes: 8 * 1024 * 1024 };
@@ -329,7 +329,7 @@ function resolveBody(pathname: string, method: string, url: URL, opts: Required_
     return makeUploadSession({ upload_session_id: sessionIdFromRegister(pathname), state: "registered", registration_state: "registered" });
   }
   if (pathname.endsWith("/upload-sessions") && method === "POST") {
-    return makeUploadSession({ upload_session_id: "us_new", state: "created" });
+    return makeUploadSession({ ...request.postDataJSON(), upload_session_id: "us_new", state: "created" });
   }
   if (/\/upload-sessions\/[^/]+$/.test(pathname) && method === "GET") {
     const id = pathname.split("/").pop() as string;
@@ -482,7 +482,7 @@ export async function installSourceFilesMock(
       return;
     }
 
-    const body = resolveBody(pathname, method, url, opts, route.request().postDataBuffer()?.byteLength ?? 0);
+    const body = resolveBody(pathname, method, url, opts, route.request());
     if (body === UNHANDLED) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       return;
