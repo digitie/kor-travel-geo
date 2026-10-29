@@ -1,6 +1,6 @@
 "use client";
 
-import { GPUInitializationError } from "maplibre-gl";
+import { GPUInitializationError, setWorkerUrl } from "maplibre-gl";
 import type {
   ErrorEvent as MapLibreErrorEvent,
   Map as MapLibreMap,
@@ -20,6 +20,9 @@ import {
 } from "@/lib/vworld";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 import { isMapUsable } from "@/components/vworld/map-utils";
+
+// 번들러가 라이브러리의 import.meta.url을 바꿔도 같은 설치 버전의 worker를 제공한다.
+setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
 
 export type Coordinate = {
   x: number;
