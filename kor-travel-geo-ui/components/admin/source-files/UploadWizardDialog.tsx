@@ -157,11 +157,11 @@ export function UploadWizardDialog({
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         const detail = err.detail ?? err.body;
-        const existing = detail && typeof detail === "object" && "session" in detail
-          ? detail.session : detail;
+        const existing = detail && typeof detail === "object" && "existing_session" in detail
+          ? detail.existing_session : null;
         if (existing && typeof existing === "object" && "upload_session_id" in existing) {
           const resumed = existing as UploadSessionStatus;
-          if (resumed.category === categoryKey && resumed.user_yyyymm === userYyyymm && isResumableSession(resumed)) return resumed;
+          if (Array.isArray(resumed.file_slots) && resumed.category === categoryKey && resumed.user_yyyymm === userYyyymm && isResumableSession(resumed)) return resumed;
         }
       }
       throw err;
