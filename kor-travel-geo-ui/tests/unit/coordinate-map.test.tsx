@@ -18,6 +18,7 @@ vi.mock("maplibre-gl", () => {
     Map: vi.fn(),
     Marker: vi.fn(),
     NavigationControl: vi.fn(),
+    setWorkerUrl: vi.fn(),
     GPUInitializationError
   };
 });

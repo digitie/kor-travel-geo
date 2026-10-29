@@ -51,6 +51,8 @@ test.describe("VWorld 지도", () => {
       timeout: 15_000
     });
     await page.waitForTimeout(1500);
+    await expect.poll(() => page.workers().length, { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect(page.locator(".vworld-map-overlay")).toHaveCount(0);
 
     const mapScreenshot = await page.getByTestId("vworld-map-container").screenshot();
     const screenshotStats = pngColorStats(mapScreenshot);
@@ -60,7 +62,7 @@ test.describe("VWorld 지도", () => {
     expect(screenshotStats.nonWhiteSamples, JSON.stringify(screenshotStats)).toBeGreaterThan(200);
     expect(
       consoleMessages.some(
-        (message) => message.includes("CORS request not http") || message.includes("vworld://")
+        (message) => message.includes("CORS request not http") || message.includes("vworld://") || message.includes("Worker failed to load")
       ),
       consoleMessages.join("\n")
     ).toBe(false);
