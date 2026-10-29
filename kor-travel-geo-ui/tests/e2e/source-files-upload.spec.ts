@@ -25,7 +25,11 @@ test.describe("업로드 적재 /admin/source-files (T-259)", () => {
     await page.route("**/api/proxy/v1/admin/source-files/upload-sessions**", async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
-      if (path.endsWith("/upload-sessions") && request.method() === "POST") return route.fulfill({ status: 409, json: { detail: { session } } });
+      if (path.endsWith("/upload-sessions") && request.method() === "POST") return route.fulfill({ status: 409, json: {
+        error: "upload_session_conflict", upload_session_id: session.upload_session_id,
+        category: session.category, user_yyyymm: session.user_yyyymm, state: session.state,
+        existing_session: session
+      } });
       if (path.endsWith("/multipart/complete")) {
         uploadedSlots.push(path.split("/files/")[1].split("/")[0]);
         return route.fulfill({ json: { ...session, uploaded_file_count: 2, file_slots: slots.map((slot) => ({ ...slot, uploaded: true })) } });

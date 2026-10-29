@@ -120,7 +120,11 @@ describe("UploadWizardDialog (#201)", () => {
 
   it("중복 세션의 손상된 파일을 교체해 재업로드한다", async () => {
     const conflict = new apiMocks.ApiError("conflict", 409);
-    conflict.detail = { session: { ...SESSION, file_slots: [{ ...SESSION.file_slots[0], uploaded: true, received_bytes: 10 }] } };
+    conflict.body = {
+      error: "upload_session_conflict", upload_session_id: SESSION.upload_session_id,
+      category: SESSION.category, user_yyyymm: SESSION.user_yyyymm, state: SESSION.state,
+      existing_session: { ...SESSION, file_slots: [{ ...SESSION.file_slots[0], uploaded: true, received_bytes: 10 }] }
+    };
     apiMocks.postJson.mockImplementation(async (path: string) => {
       if (path.endsWith("/upload-sessions")) throw conflict;
       if (path.endsWith("/preview-validate")) return { outcome: "passed", parts: [] };
