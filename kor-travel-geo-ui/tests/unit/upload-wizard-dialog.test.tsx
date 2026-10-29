@@ -67,14 +67,15 @@ const SESSION = {
 
 function renderDialog(
   onCompleted = vi.fn(),
-  maxBytesByCategory: Map<string, number> = new Map()
+  maxBytesByCategory: Map<string, number> = new Map(),
+  category: SourceFileCategoryInfo = CATEGORY
 ) {
   const queryClient = new QueryClient();
   const onOpenChange = vi.fn();
   render(
     <QueryClientProvider client={queryClient}>
       <UploadWizardDialog
-        categories={[CATEGORY]}
+        categories={[category]}
         maxBytesByCategory={maxBytesByCategory}
         onCompleted={onCompleted}
         onOpenChange={onOpenChange}
@@ -89,6 +90,53 @@ describe("UploadWizardDialog (#201)", () => {
   beforeEach(() => {
     apiMocks.postJson.mockReset();
     multipartMocks.uploadSlotFile.mockReset();
+  });
+
+  it("시도별 미완료 슬롯만 이어서 업로드하고 모두 끝난 뒤 사전 점검한다", async () => {
+    const slots = [
+      { slot: "11", part_label: "서울특별시", uploaded: true, received_bytes: 10 },
+      { slot: "12", part_label: "전남광주통합특별시", uploaded: false, received_bytes: 0 }
+    ];
+    const session = { ...SESSION, group_kind: "multi_part", expected_file_count: 2, file_slots: slots };
+    apiMocks.postJson.mockImplementation(async (path: string) => path.endsWith("/preview-validate")
+      ? { outcome: "passed", parts: [] }
+      : session);
+    multipartMocks.uploadSlotFile.mockResolvedValue({
+      ...session, uploaded_file_count: 2, file_slots: slots.map((slot) => ({ ...slot, uploaded: true }))
+    });
+    renderDialog(vi.fn(), new Map(), { ...CATEGORY, group_kind: "multi_part" });
+    fireEvent.click(screen.getByRole("option", { name: /도로명주소 한글 전체분/ }));
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.click(screen.getByRole("button", { name: "업로드 세션 열기" }));
+    await waitFor(() => expect(screen.getByLabelText("전남광주통합특별시 파일 선택")).toBeTruthy());
+    expect(apiMocks.postJson.mock.calls.some(([path]) => path.endsWith("/preview-validate"))).toBe(false);
+    fireEvent.change(screen.getByLabelText("전남광주통합특별시 파일 선택"), {
+      target: { files: [new File(["x"], "전남광주통합특별시.zip")] }
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "다음" })).toBeEnabled());
+    expect(multipartMocks.uploadSlotFile).toHaveBeenCalledTimes(1);
+    expect(multipartMocks.uploadSlotFile).toHaveBeenCalledWith(expect.objectContaining({ slotId: "12" }));
+  });
+
+  it("중복 세션의 손상된 파일을 교체해 재업로드한다", async () => {
+    const conflict = new apiMocks.ApiError("conflict", 409);
+    conflict.detail = { session: { ...SESSION, file_slots: [{ ...SESSION.file_slots[0], uploaded: true, received_bytes: 10 }] } };
+    apiMocks.postJson.mockImplementation(async (path: string) => {
+      if (path.endsWith("/upload-sessions")) throw conflict;
+      if (path.endsWith("/preview-validate")) return { outcome: "passed", parts: [] };
+      return {};
+    });
+    multipartMocks.uploadSlotFile.mockResolvedValue({ ...SESSION, file_slots: [{ ...SESSION.file_slots[0], uploaded: true }] });
+    renderDialog();
+    fireEvent.click(screen.getByRole("option", { name: /도로명주소 한글 전체분/ }));
+    fireEvent.change(screen.getByLabelText("기준년월"), { target: { value: "202605" } });
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+    fireEvent.change(screen.getByLabelText("업로드할 파일 선택"), {
+      target: { files: [new File(["x"], "fixed.zip")] }
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "다음" })).toBeEnabled());
+    expect(apiMocks.postJson).toHaveBeenCalledWith("/admin/source-files/upload-sessions/sess-1/files/archive/replace", {});
+    expect(multipartMocks.uploadSlotFile).toHaveBeenCalledTimes(1);
   });
 
   it("walks category -> yyyymm -> drop file -> preview -> register", async () => {
