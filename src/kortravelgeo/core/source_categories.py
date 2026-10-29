@@ -237,7 +237,21 @@ SIDO_PARTS: tuple[tuple[str, str], ...] = (
     ("52", "전북특별자치도"),
 )
 
-#: Number of file slots an upload session for ``category`` must collect.
-#: ``single_file`` is always 1; ``multi_part`` categories are sido-partitioned.
-def expected_file_count(category: SourceCategory) -> int:
-    return 1 if category.group_kind == "single_file" else len(SIDO_PARTS)
+
+def sido_parts_for_month(user_yyyymm: str | None) -> tuple[tuple[str, str], ...]:
+    """2026-07 통합 전 원천은 17개, 이후 원천은 코드 12를 포함한 16개다."""
+    if user_yyyymm is None or user_yyyymm < "202607":
+        return SIDO_PARTS
+    return tuple(
+        sorted(
+            (
+                *((code, label) for code, label in SIDO_PARTS if code not in {"29", "46"}),
+                ("12", "전남광주통합특별시"),
+            )
+        )
+    )
+
+
+def expected_file_count(category: SourceCategory, *, user_yyyymm: str | None = None) -> int:
+    """단일 archive 또는 원천 기준월에 맞는 시도별 파일 수."""
+    return 1 if category.group_kind == "single_file" else len(sido_parts_for_month(user_yyyymm))

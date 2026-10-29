@@ -49,7 +49,8 @@ export async function uploadSlotFile({
   onProgress?: (progress: SlotUploadProgress) => void;
   signal?: AbortSignal;
 }): Promise<UploadSessionStatus> {
-  const partSize = partSizeBytes > 0 ? partSizeBytes : 8 * 1024 * 1024;
+  // Next.js proxy buffers at most 10 MiB by default; keep each request below it.
+  const partSize = Math.min(partSizeBytes > 0 ? partSizeBytes : 8 * 1024 * 1024, 8 * 1024 * 1024);
   const partsTotal = Math.max(1, Math.ceil(file.size / partSize));
 
   const report = (patch: Partial<SlotUploadProgress>) =>
@@ -94,14 +95,20 @@ export async function uploadSlotFile({
       throw new ApiError(response.status, text || `${response.status} part upload failed`);
     }
     const part = (await response.json()) as UploadPartResponse;
+    if (part.received_bytes !== blob.size) {
+      const error = `파트 ${partNumber} 수신 크기가 원본과 다릅니다 (${part.received_bytes}/${blob.size})`;
+      report({ state: "error", error, uploadedBytes, partsDone: completedParts });
+      throw new ApiError(response.status, error);
+    }
     uploadedBytes += blob.size;
     completedParts += 1;
     report({ state: "uploading", uploadedBytes, partsDone: completedParts });
     return [part.part_number, part.part_etag];
   };
-  const partEtags = await Promise.all(
-    Array.from({ length: partsTotal }, (_unused, index) => uploadPart(index))
-  );
+  const partEtags: [number, string][] = [];
+  for (let index = 0; index < partsTotal; index += 1) {
+    partEtags.push(await uploadPart(index));
+  }
 
   report({ state: "completing", uploadedBytes, partsDone: partsTotal });
   const completeBody: MultipartCompleteRequest = { part_etags: partEtags };

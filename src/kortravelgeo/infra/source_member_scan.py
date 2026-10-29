@@ -14,6 +14,8 @@ lines ~970-977): no GB-scale reads to validate structure.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from kortravelgeo.core.source_validation import (
     ManifestMember,
     PartManifest,
 )
+from kortravelgeo.exceptions import InvalidInputError
 
 _SHP_SUFFIXES = {".shp", ".shx", ".dbf", ".prj"}
 _YYYYMM_RE = re.compile(r"(20\d{2})(0[1-9]|1[0-2])(?:\d{2})?")
@@ -71,7 +74,36 @@ def _member_names(archive: Path) -> list[str]:
                 for info in zf.infolist()
                 if not info.filename.endswith("/")
             ]
-    # 7z / other: caller supplies a pre-extracted dir; treat as the lone member.
+    # RustFS materialization uses extensionless slot names; inspect the signature.
+    with archive.open("rb") as stream:
+        is_7z = stream.read(6) == b"7z\xbc\xaf\x27\x1c"
+    if is_7z:
+        seven_zip = shutil.which("7z") or shutil.which("7zz") or shutil.which("7za")
+        if seven_zip is None:
+            raise InvalidInputError("7z/7zz/7za command not found; 7z 원천을 검증할 수 없습니다")
+        try:
+            result = subprocess.run(
+                [seven_zip, "l", "-slt", "-ba", str(archive)],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise InvalidInputError("7z 원천의 파일 목록 조회 시간이 초과되었습니다") from exc
+        if result.returncode != 0:
+            raise InvalidInputError("7z 원천의 파일 목록을 읽을 수 없습니다")
+        names: list[str] = []
+        for block in result.stdout.split("\n\n"):
+            fields = dict(line.split(" = ", 1) for line in block.splitlines() if " = " in line)
+            if fields.get("Folder") == "+" or fields.get("Attributes", "").startswith("D"):
+                continue
+            if "Path" in fields:
+                names.append(fields["Path"])
+        return names
     return [archive.name]
 
 
@@ -169,6 +201,7 @@ def scan_group_manifest(
     category: str,
     group_kind: str,
     parts: dict[str, Path],
+    user_yyyymm: str | None = None,
 ) -> GroupManifest:
     """Build a :class:`GroupManifest` from ``part_key -> archive path``."""
     part_manifests = tuple(
@@ -178,4 +211,5 @@ def scan_group_manifest(
         category=category,
         group_kind=group_kind,  # type: ignore[arg-type]
         parts=part_manifests,
+        user_yyyymm=user_yyyymm,
     )

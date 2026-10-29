@@ -1262,7 +1262,8 @@ class AsyncAddressClient:
             from .core.source_validation import validate_group_manifest
 
             manifest = scan_group_manifest(
-                category=category, group_kind=group_kind, parts=parts
+                category=category, group_kind=group_kind, parts=parts,
+                user_yyyymm=children[0].user_yyyymm,
             )
             decision = validate_group_manifest(manifest)
         return await revalidate_group(
@@ -1325,7 +1326,8 @@ class AsyncAddressClient:
                 await rustfs.download_file(object_key, dest)
                 parts[slot.part_key] = dest
             manifest = scan_group_manifest(
-                category=session.category, group_kind=session.group_kind, parts=parts
+                category=session.category, group_kind=session.group_kind, parts=parts,
+                user_yyyymm=session.user_yyyymm,
             )
             decision = validate_group_manifest(manifest)
 

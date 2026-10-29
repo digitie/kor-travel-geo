@@ -310,7 +310,7 @@ function suffixOverride(responses: Record<string, unknown> | undefined, pathname
 
 const UNHANDLED = Symbol("unhandled");
 
-function resolveBody(pathname: string, method: string, url: URL, opts: Required_<SourceFilesMockOptions>): unknown {
+function resolveBody(pathname: string, method: string, url: URL, opts: Required_<SourceFilesMockOptions>, receivedBytes: number): unknown {
   const override = suffixOverride(opts.responses, pathname);
   if (override !== undefined) return override;
 
@@ -320,7 +320,7 @@ function resolveBody(pathname: string, method: string, url: URL, opts: Required_
   }
   if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/multipart\/\d+$/.test(pathname) && method === "PUT") {
     const partNumber = Number(pathname.split("/").pop());
-    return { part_number: partNumber, part_etag: `etag-${partNumber}` };
+    return { part_number: partNumber, part_etag: `etag-${partNumber}`, received_bytes: receivedBytes };
   }
   if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/multipart$/.test(pathname) && method === "POST") {
     return { multipart_upload_id: "mp-1", part_size_bytes: 8 * 1024 * 1024 };
@@ -482,7 +482,7 @@ export async function installSourceFilesMock(
       return;
     }
 
-    const body = resolveBody(pathname, method, url, opts);
+    const body = resolveBody(pathname, method, url, opts, route.request().postDataBuffer()?.byteLength ?? 0);
     if (body === UNHANDLED) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       return;
