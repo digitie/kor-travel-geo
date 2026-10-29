@@ -20,7 +20,8 @@ vi.mock("@/lib/metrics", async (importOriginal) => {
 });
 
 import { recordProxyUpstream, recordUiRequest } from "@/lib/metrics";
-import { GET } from "@/app/api/proxy/[...path]/route";
+import { GET, POST } from "@/app/api/proxy/[...path]/route";
+import { requestHasValidSession } from "@/lib/auth";
 
 const fetchMock = vi.fn();
 
@@ -48,6 +49,39 @@ afterEach(() => {
 });
 
 describe("BFF proxy route handler", () => {
+  it.each([
+    "v1/admin/source-files/upload-sessions/session/preview-validate",
+    "v1/admin/source-files/upload-sessions/session/register",
+    "v1/admin/source-files/groups/group/revalidate",
+    "v1/admin/source-match-sets/set/run-validation"
+  ])("장시간 원천 작업 %s는 전용 dispatcher와 client signal을 사용한다", async (path) => {
+    fetchMock.mockResolvedValue(Response.json({ ok: true }));
+    const controller = new AbortController();
+    const request = { ...makeRequest(controller.signal), method: "POST" } as NextRequest;
+    await POST(request, { params: Promise.resolve({ path: path.split("/") }) });
+    expect(fetchMock.mock.calls[0][1].dispatcher).toBeDefined();
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+  });
+
+  it.each([
+    ["GET", "v1/admin/source-files/upload-sessions/session/preview-validate"],
+    ["POST", "v1/admin/source-files/upload-sessions/session/files/archive/multipart/initiate"],
+    ["POST", "v1/admin/tables"]
+  ])("일반 요청 %s %s는 기본 dispatcher를 유지한다", async (method, path) => {
+    fetchMock.mockResolvedValue(Response.json({ ok: true }));
+    const request = { ...makeRequest(new AbortController().signal), method } as NextRequest;
+    await POST(request, { params: Promise.resolve({ path: path.split("/") }) });
+    expect(fetchMock.mock.calls[0][1].dispatcher).toBeUndefined();
+  });
+
+  it("장시간 원천 작업도 유효 세션이 없으면 401이고 upstream을 호출하지 않는다", async () => {
+    vi.mocked(requestHasValidSession).mockResolvedValueOnce(false);
+    const request = { ...makeRequest(new AbortController().signal), method: "POST" } as NextRequest;
+    const response = await POST(request, { params: Promise.resolve({ path: ["v1", "admin", "source-files", "upload-sessions", "session", "preview-validate"] }) });
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("정상 응답은 status를 그대로 전달하고 client signal을 upstream fetch로 넘긴다", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify([{ table_name: "t" }]), {
