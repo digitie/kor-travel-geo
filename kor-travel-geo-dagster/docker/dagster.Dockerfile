@@ -119,7 +119,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system appuser \
     && useradd --system --gid appuser --home-dir /app --shell /usr/sbin/nologin appuser \
-    && mkdir -p "$DAGSTER_HOME" \
+    && mkdir -p "$DAGSTER_HOME" /app/data \
     && chown -R appuser:appuser /app /opt/dagster
 
 COPY --from=builder /install /usr/local
