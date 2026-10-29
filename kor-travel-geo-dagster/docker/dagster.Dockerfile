@@ -107,7 +107,7 @@ WORKDIR /app
 #    run_restore_job), so the PostgreSQL 18 client (matches the kor_travel_geo server) and
 #    zstd are installed from the PGDG apt repo.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg gdal-bin \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg gdal-bin 7zip \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \

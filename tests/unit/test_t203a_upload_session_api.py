@@ -16,9 +16,12 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.dto.source import (
+    RegisterResponse,
     UploadSessionFileSlot,
+    UploadSessionPartStatus,
     UploadSessionStatus,
 )
+from kortravelgeo.infra.rustfs import RustfsListedPart, RustfsObjectHead
 from kortravelgeo.infra.source_upload_repo import SessionCreateResult
 from kortravelgeo.settings import (
     Settings,
@@ -99,6 +102,97 @@ class _FakeClient:
     async def record_audit_event(self, *, action: str, **_kwargs):  # type: ignore[no-untyped-def]
         self.audit_calls.append(action)
         return None
+
+
+class _MultipartClient(_FakeClient):
+    recorded_bytes: int | None = None
+    registered_hash: str | None = None
+
+    async def get_upload_session(self, _session_id):  # type: ignore[no-untyped-def]
+        return _session(
+            state="uploading", file_slots=(UploadSessionFileSlot(slot="archive", uploaded=True),)
+        )
+
+    async def upload_session_slot_parts(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            UploadSessionPartStatus(
+                part_key="archive",
+                part_number=1,
+                part_etag="one",
+                received_bytes=6,
+                part_sha256="1" * 64,
+            ),
+            UploadSessionPartStatus(
+                part_key="archive",
+                part_number=2,
+                part_etag="two",
+                received_bytes=4,
+                part_sha256="2" * 64,
+                completed_at=datetime.now(UTC),
+            ),
+        )
+
+    async def record_upload_session_part(self, *_args, **kwargs):  # type: ignore[no-untyped-def]
+        self.recorded_bytes = kwargs["received_bytes"]
+
+    async def register_source_group(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.registered_hash = kwargs["contexts"][0].sha256
+        return RegisterResponse(
+            source_file_group_id="group-1",
+            category="roadname_hangul_full",
+            group_kind="single_file",
+            state="available",
+            validation_state="passed",
+            user_yyyymm="202605",
+        )
+
+
+class _MultipartStorage:
+    async def list_parts(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return (RustfsListedPart(part_number=1), RustfsListedPart(part_number=2))
+
+    async def complete_multipart_upload(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return "complete"
+
+    async def head_object(self, _key):  # type: ignore[no-untyped-def]
+        return RustfsObjectHead(key="archive", size=10, etag="whole", metadata={})
+
+    async def compute_sha256(self, _key):  # type: ignore[no-untyped-def]
+        return "3" * 64
+
+
+@pytest.mark.asyncio
+async def test_multipart_completion_keeps_last_part_byte_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "kortravelgeo.api.routers.admin.RustfsClient", lambda _config: _MultipartStorage()
+    )
+    client = _MultipartClient()
+    async with httpx.AsyncClient(transport=_app(client), base_url="http://test") as ac:
+        response = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/files/archive/multipart/complete?multipart_upload_id=test",
+            headers=_MANAGER_HEADERS,
+            json={},
+        )
+    assert response.status_code == 200
+    assert client.recorded_bytes == 4
+
+
+@pytest.mark.asyncio
+async def test_multipart_registration_hashes_whole_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "kortravelgeo.api.routers.admin.RustfsClient", lambda _config: _MultipartStorage()
+    )
+    client = _MultipartClient()
+    async with httpx.AsyncClient(transport=_app(client), base_url="http://test") as ac:
+        response = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/register",
+            headers=_MANAGER_HEADERS,
+            json={"confirm_user_yyyymm": "202605"},
+        )
+    assert response.status_code == 200
+    assert client.registered_hash == "3" * 64
 
 
 def _app(client: _FakeClient) -> httpx.ASGITransport:

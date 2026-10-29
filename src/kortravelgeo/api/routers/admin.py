@@ -796,7 +796,10 @@ async def complete_multipart_upload(
         part_number=complete_parts[-1].part_number,
         multipart_upload_id=multipart_upload_id,
         part_etag=complete_parts[-1].etag,
-        received_bytes=sum(p.received_bytes for p in parts),
+        received_bytes=next(
+            p.received_bytes for p in parts
+            if p.part_number == complete_parts[-1].part_number
+        ),
         completed=True,
     )
     return await client.get_upload_session(session.upload_session_id)
@@ -939,7 +942,11 @@ async def register_upload_session(
                 raise InvalidInputError(msg)
             continue
         object_key = _slot_object_key(config.prefix if config else "", session, slot.slot)
-        sha256 = next((p.part_sha256 for p in completed if p.part_sha256), None)
+        # Multipart rows carry chunk hashes, never the assembled object's hash.
+        sha256 = (
+            next((p.part_sha256 for p in completed if p.part_sha256), None)
+            if session.upload_strategy != "multipart" or rustfs is None else None
+        )
         size_bytes = sum(p.received_bytes for p in completed)
         object_etag = next((p.part_etag for p in completed if p.part_etag), None)
         if rustfs is not None:
@@ -971,6 +978,7 @@ async def register_upload_session(
         category=session.category,
         group_kind=session.group_kind,
         present_part_keys=tuple(completed_keys),
+        user_yyyymm=session.user_yyyymm,
     )
     try:
         response = await client.register_source_group(
@@ -3237,6 +3245,7 @@ def _coverage_structure_validation(
     category: str,
     group_kind: str,
     present_part_keys: tuple[str, ...],
+    user_yyyymm: str | None = None,
 ) -> GroupValidation:
     """Coverage-level structure decision used at register time (T-203b).
 
@@ -3252,6 +3261,7 @@ def _coverage_structure_validation(
         category=category,
         group_kind=group_kind,
         present_part_keys=present_part_keys,
+        user_yyyymm=user_yyyymm,
     )
 
 

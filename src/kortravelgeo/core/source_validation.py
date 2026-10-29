@@ -21,10 +21,10 @@ Layer-name lists are REUSED from the loader layer:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
-from kortravelgeo.core.source_categories import SIDO_PARTS, category_by_code
+from kortravelgeo.core.source_categories import SIDO_PARTS, category_by_code, sido_parts_for_month
 from kortravelgeo.core.source_layers import (
     ADDRESS_BUNDLE_LAYER,
     BUNDLE_CONNECTION_LAYER,
@@ -45,7 +45,7 @@ from kortravelgeo.core.source_layers import (
 #: (M1) and every SINGLE_FILE_TEXT_PROFILES required-prefix check (M2/M3) — bumped
 #: so already-registered groups re-validate via validator_version_change instead
 #: of silently keeping a stale pre-fix outcome.
-VALIDATOR_VERSION = "t127.2"
+VALIDATOR_VERSION = "202610-sido.1"
 
 ValidationOutcome = Literal["passed", "warning", "failed"]
 
@@ -93,6 +93,7 @@ class GroupManifest:
     category: str
     group_kind: Literal["single_file", "multi_part"]
     parts: tuple[PartManifest, ...] = ()
+    user_yyyymm: str | None = None
 
 
 # --- decision result -------------------------------------------------------
@@ -421,8 +422,12 @@ def _detected_yyyymm_warning(members: tuple[ManifestMember, ...]) -> str | None:
     return "member 기준월 혼재: " + ", ".join(values)
 
 
-def _expected_part_keys(group_kind: str) -> tuple[str, ...]:
-    return SIDO_PART_KEYS if group_kind == "multi_part" else ("archive",)
+def _expected_part_keys(group_kind: str, user_yyyymm: str | None) -> tuple[str, ...]:
+    return (
+        tuple(code for code, _ in sido_parts_for_month(user_yyyymm))
+        if group_kind == "multi_part"
+        else ("archive",)
+    )
 
 
 def validate_group_manifest(manifest: GroupManifest) -> GroupValidation:
@@ -434,18 +439,35 @@ def validate_group_manifest(manifest: GroupManifest) -> GroupValidation:
     blocked but the gap is visible.
     """
     category = category_by_code.get(manifest.category)
-    expected_keys = _expected_part_keys(manifest.group_kind)
+    expected_keys = _expected_part_keys(manifest.group_kind, manifest.user_yyyymm)
     by_key = {part.part_key: part for part in manifest.parts}
 
     layer_profile = LAYER_PROFILES.get(manifest.category)
     single_layer_profile = SINGLE_LAYER_PROFILES.get(manifest.category)
     text_part_profile = TEXT_PART_PROFILES.get(manifest.category)
     single_profile = SINGLE_FILE_TEXT_PROFILES.get(manifest.category)
+    if single_profile is not None:
+        sido_count = len(sido_parts_for_month(manifest.user_yyyymm))
+        single_profile = replace(
+            single_profile,
+            required_prefixes=tuple(
+                (prefix, sido_count if count == len(SIDO_PARTS) else count)
+                for prefix, count in single_profile.required_prefixes
+            ),
+            optional_prefixes=tuple(
+                (prefix, sido_count if count == len(SIDO_PARTS) else count)
+                for prefix, count in single_profile.optional_prefixes
+            ),
+        )
 
     part_results: list[PartValidation] = []
     coverage: dict[str, str] = {}
     reasons: list[str] = []
     group_outcome: ValidationOutcome = "passed"
+    unexpected = sorted(set(by_key) - set(expected_keys))
+    if unexpected:
+        reasons.append("예상하지 않은 part: " + ", ".join(unexpected))
+        group_outcome = "failed"
 
     for key in expected_keys:
         part = by_key.get(key)
@@ -494,6 +516,7 @@ def validate_group_coverage(
     category: str,
     group_kind: str,
     present_part_keys: tuple[str, ...],
+    user_yyyymm: str | None = None,
 ) -> GroupValidation:
     """Coverage-only register-time decision.
 
@@ -501,12 +524,16 @@ def validate_group_coverage(
     decide whether the expected upload slots arrived. Full SHP/TXT member checks
     stay in :func:`validate_group_manifest`.
     """
-    expected_keys = _expected_part_keys(group_kind)
+    expected_keys = _expected_part_keys(group_kind, user_yyyymm)
     present = frozenset(present_part_keys)
     coverage = {key: "present" if key in present else "missing" for key in expected_keys}
     missing_keys = sorted(k for k, v in coverage.items() if v == "missing")
     reasons: list[str] = []
     outcome: ValidationOutcome = "passed"
+    unexpected = sorted(present - set(expected_keys))
+    if unexpected:
+        reasons.append("예상하지 않은 part: " + ", ".join(unexpected))
+        outcome = "failed"
     if missing_keys:
         label = "시도 part" if group_kind == "multi_part" else "archive"
         reasons.append(f"{label} 누락: " + ", ".join(missing_keys))

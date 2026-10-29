@@ -24,9 +24,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.core.source_categories import (
-    SIDO_PARTS,
     category_by_code,
     expected_file_count,
+    sido_parts_for_month,
 )
 from kortravelgeo.dto.source import (
     TERMINAL_UPLOAD_SESSION_STATES,
@@ -61,10 +61,12 @@ _SESSION_LOCK_NAMESPACE = 0x4B47_0203
 # --- Pure helpers (DB-free, unit-tested directly) --------------------------
 
 
-def slot_definitions(category_code: str) -> tuple[UploadSessionFileSlot, ...]:
+def slot_definitions(
+    category_code: str, *, user_yyyymm: str | None = None
+) -> tuple[UploadSessionFileSlot, ...]:
     """File slots a session must collect for ``category_code``.
 
-    ``single_file`` → one ``archive`` slot; ``multi_part`` → 17 sido slots.
+    ``single_file`` → one ``archive`` slot; ``multi_part`` → source-month sido slots.
     """
     category = category_by_code.get(category_code)
     if category is None:
@@ -79,7 +81,7 @@ def slot_definitions(category_code: str) -> tuple[UploadSessionFileSlot, ...]:
             part_key=code,
             part_label=label,
         )
-        for code, label in SIDO_PARTS
+        for code, label in sido_parts_for_month(user_yyyymm)
     )
 
 
@@ -138,7 +140,7 @@ class SourceUploadSessionRepository:
             msg = f"unknown source category: {req.category}"
             raise InvalidInputError(msg)
         group_kind = category.group_kind
-        expected = expected_file_count(category)
+        expected = expected_file_count(category, user_yyyymm=req.user_yyyymm)
         async with self.engine.begin() as conn:
             await conn.execute(
                 text("SELECT pg_advisory_xact_lock(:ns, hashtext(:key))"),
@@ -194,7 +196,9 @@ RETURNING source_upload_session_id, source_file_group_id, category, group_kind,
                     },
                 )
             ).mappings().one()
-        session = _session_status(dict(row), slots=slot_definitions(req.category))
+        session = _session_status(
+            dict(row), slots=slot_definitions(req.category, user_yyyymm=req.user_yyyymm)
+        )
         return SessionCreateResult(session=session, parts=(), conflict=False)
 
     async def get_session(self, session_id: str) -> UploadSessionStatus | None:
@@ -296,6 +300,15 @@ RETURNING source_upload_session_id, source_file_group_id, category, group_kind,
     ) -> UploadSessionPartStatus:
         """Upsert one part row (etag / sha256 / received_bytes for resume)."""
         async with self.engine.begin() as conn:
+            if completed:
+                # Serialize slot completions before counting committed slots.
+                await conn.execute(
+                    text(
+                        "SELECT source_upload_session_id FROM ops.source_upload_sessions "
+                        "WHERE source_upload_session_id = :sid FOR UPDATE"
+                    ),
+                    {"sid": session_id},
+                )
             row = (
                 await conn.execute(
                     text(
@@ -331,6 +344,28 @@ RETURNING source_upload_session_id, part_key, multipart_upload_id, part_number,
                     },
                 )
             ).mappings().one()
+            if completed:
+                await conn.execute(
+                    text(
+                        """
+UPDATE ops.source_upload_sessions s
+   SET uploaded_file_count = p.uploaded,
+       state = CASE WHEN p.uploaded >= s.expected_file_count
+                    THEN 'awaiting_registration' ELSE 'uploading' END,
+       completed_at = CASE WHEN p.uploaded >= s.expected_file_count
+                           THEN now() ELSE completed_at END,
+       updated_at = now()
+  FROM (
+    SELECT count(DISTINCT part_key)::int AS uploaded
+      FROM ops.source_upload_session_parts
+     WHERE source_upload_session_id = :sid AND completed_at IS NOT NULL
+  ) p
+ WHERE s.source_upload_session_id = :sid AND s.registered_at IS NULL
+   AND s.state IN ('created', 'uploading', 'awaiting_registration', 'failed_register')
+"""
+                    ),
+                    {"sid": session_id},
+                )
         return _part_status(dict(row))
 
     async def replace_slot(
@@ -488,6 +523,7 @@ class SourceGroupChild:
     original_filename: str
     category: str
     group_kind: str
+    user_yyyymm: str
 
 
 async def source_group_children(
@@ -500,7 +536,7 @@ async def source_group_children(
                 text(
                     """
 SELECT f.source_file_id, f.part_key, f.object_key, f.original_filename,
-       g.category, g.group_kind
+       g.category, g.group_kind, g.user_yyyymm
   FROM ops.source_files f
   JOIN ops.source_file_groups g
     ON g.source_file_group_id = f.source_file_group_id
@@ -519,6 +555,7 @@ SELECT f.source_file_id, f.part_key, f.object_key, f.original_filename,
             original_filename=str(r["original_filename"]),
             category=str(r["category"]),
             group_kind=str(r["group_kind"]),
+            user_yyyymm=str(r["user_yyyymm"]),
         )
         for r in rows
     )
@@ -582,7 +619,9 @@ def _slots_with_parts(
     parts: tuple[UploadSessionPartStatus, ...],
 ) -> tuple[UploadSessionFileSlot, ...]:
     """Overlay recorded part progress onto the static slot definitions."""
-    base = slot_definitions(str(session_row["category"]))
+    base = slot_definitions(
+        str(session_row["category"]), user_yyyymm=str(session_row["user_yyyymm"])
+    )
     by_key: dict[str, list[UploadSessionPartStatus]] = {}
     for part in parts:
         by_key.setdefault(part.part_key, []).append(part)

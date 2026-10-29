@@ -16,6 +16,29 @@ function smallZip() {
 }
 
 test.describe("업로드 적재 /admin/source-files (T-259)", () => {
+  test("20MiB 파일을 8MiB 이하 파트로 모두 전송한 뒤 등록한다", async ({ page }) => {
+    await installSourceFilesMock(page);
+    const partSizes: number[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "PUT" && /\/multipart\/\d+$/.test(new URL(request.url()).pathname)) {
+        partSizes.push(request.postDataBuffer()?.byteLength ?? 0);
+      }
+    });
+    await page.goto("/admin/source-files");
+    const card = page.locator(".source-card", { hasText: "도로명주소 한글 전체분" });
+    await card.getByPlaceholder("예: 202606").fill("202606");
+    await card.getByLabel("도로명주소 한글 전체분 파일 선택").setInputFiles({
+      name: "large.zip", mimeType: "application/zip", buffer: Buffer.alloc(20 * 1024 * 1024)
+    });
+    const registered = page.waitForRequest(
+      (request) => request.url().endsWith("/register") && request.method() === "POST"
+    );
+    await card.getByRole("button", { name: "업로드" }).click();
+    await registered;
+    expect(partSizes).toEqual([8 * 1024 * 1024, 8 * 1024 * 1024, 4 * 1024 * 1024]);
+    await expect(card.getByText("완료").first()).toBeVisible();
+  });
+
   test("업로드 버튼은 파일 + 유효 기준월 전에는 비활성이다", async ({ page }) => {
     await installSourceFilesMock(page);
     await page.goto("/admin/source-files");

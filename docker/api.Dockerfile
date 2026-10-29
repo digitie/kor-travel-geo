@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       build-essential \
-      gdal-bin \
+      gdal-bin 7zip \
       libgdal-dev \
       curl git \
       gnupg \
