@@ -10,6 +10,7 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.loaders.manifest import max_source_yyyymm, record_full_load_source_month
 
 from .common import TextSource, as_int, discover_text_sources, iter_pipe_rows, required
@@ -114,14 +115,18 @@ async def load_locsum(
     *,
     source_yyyymm: str | None,
     limit_per_file: int | None = None,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
+    if replace and limit_per_file is not None:
+        raise InvalidInputError("전체분 교체에는 limit_per_file을 사용할 수 없습니다")
     sources = discover_locsum_files(path)
     rows = _iter_many(sources, source_yyyymm=source_yyyymm, limit_per_file=limit_per_file)
     return await copy_locsum_rows(
         engine,
         rows,
+        replace=replace,
         on_progress=on_progress,
         cancel_event=cancel_event,
     )
@@ -131,6 +136,7 @@ async def copy_locsum_rows(
     engine: AsyncEngine,
     rows: Iterable[LocsumEntranceRow],
     *,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
@@ -184,6 +190,15 @@ FROM STDIN
                     loaded_yyyymm = max_source_yyyymm(loaded_yyyymm, row.source_yyyymm)
                     if on_progress and count % 10_000 == 0:
                         on_progress(0.0)
+            if replace:
+                if count == 0:
+                    raise InvalidInputError("빈 위치정보 전체분으로 기존 원천을 교체할 수 없습니다")
+                await cur.execute("ANALYZE _locsum_staging (sig_cd, ent_man_no)")
+                await cur.execute(
+                    "DELETE FROM tl_locsum_entrc t WHERE NOT EXISTS "
+                    "(SELECT 1 FROM _locsum_staging s "
+                    "WHERE s.sig_cd = t.sig_cd AND s.ent_man_no = t.ent_man_no)"
+                )
             await cur.execute(
                 """
 INSERT INTO tl_locsum_entrc AS t (

@@ -377,6 +377,7 @@ SELECT source_file_id, part_key, part_label, original_filename, object_key,
         for ref in groups:
             yyyymm = ref.effective_yyyymm or ref.user_yyyymm
             child_payload: dict[str, Any] = {
+                "replace": True,
                 "path": str(self.category_staging_dir(staging_root, ref.category)),
                 "source_yyyymm": yyyymm,
                 "source_file_group_id": ref.source_file_group_id,

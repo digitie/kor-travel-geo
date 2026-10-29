@@ -10,6 +10,7 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.pnu import build_pnu
 from kortravelgeo.loaders.manifest import max_source_yyyymm, record_full_load_source_month
 
@@ -144,14 +145,18 @@ async def load_juso_hangul(
     *,
     source_yyyymm: str | None,
     limit_per_file: int | None = None,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
+    if replace and limit_per_file is not None:
+        raise InvalidInputError("전체분 교체에는 limit_per_file을 사용할 수 없습니다")
     sources = discover_juso_hangul_files(path)
     rows = _iter_many(sources, source_yyyymm=source_yyyymm, limit_per_file=limit_per_file)
     return await copy_juso_rows(
         engine,
         rows,
+        replace=replace,
         on_progress=on_progress,
         cancel_event=cancel_event,
     )
@@ -161,6 +166,7 @@ async def copy_juso_rows(
     engine: AsyncEngine,
     rows: Iterable[JusoTextRow],
     *,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
@@ -192,6 +198,16 @@ FROM STDIN
                     loaded_yyyymm = max_source_yyyymm(loaded_yyyymm, row.source_yyyymm)
                     if on_progress and count % 10_000 == 0:
                         on_progress(0.0)
+            if replace:
+                if count == 0:
+                    raise InvalidInputError(
+                        "빈 도로명주소 전체분으로 기존 원천을 교체할 수 없습니다"
+                    )
+                await cur.execute("ANALYZE _juso_text_staging (bd_mgt_sn)")
+                await cur.execute(
+                    "DELETE FROM tl_juso_text t WHERE NOT EXISTS "
+                    "(SELECT 1 FROM _juso_text_staging s WHERE s.bd_mgt_sn = t.bd_mgt_sn)"
+                )
             await cur.execute(
                 """
 INSERT INTO tl_juso_text AS t (

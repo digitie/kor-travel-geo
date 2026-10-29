@@ -186,6 +186,7 @@ async def _load_juso(
             engine,
             _payload_path(payload),
             source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            replace=_payload_bool(payload, "replace", default=False),
             limit_per_file=_payload_int(payload, "limit_per_file"),
             cancel_event=cancel_event,
         )
@@ -205,6 +206,7 @@ async def _load_locsum(
             engine,
             _payload_path(payload),
             source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            replace=_payload_bool(payload, "replace", default=False),
             limit_per_file=_payload_int(payload, "limit_per_file"),
             cancel_event=cancel_event,
         )
@@ -324,6 +326,7 @@ async def _load_navi(
             engine,
             _payload_path(payload),
             source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            replace=_payload_bool(payload, "replace", default=False),
             limit_per_file=_payload_int(payload, "limit_per_file"),
             cancel_event=cancel_event,
         )
