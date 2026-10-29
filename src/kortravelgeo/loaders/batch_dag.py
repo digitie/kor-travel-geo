@@ -724,6 +724,7 @@ SELECT job_id, kind, payload
   FROM load_jobs
  WHERE load_batch_id = :batch_id
    AND job_id <> :batch_id
+   AND parent_job_id = :batch_id
  ORDER BY created_at
 """
                     ),
