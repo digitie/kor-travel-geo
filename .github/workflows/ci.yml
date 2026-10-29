@@ -130,6 +130,7 @@ jobs:
           print(dict(ran), f"skipped={skipped} failed={bad}")
           # Per-file floors: a whole module silently dropping out cannot hide behind the others.
           floors = {
+              "test_t319_source_month_manifest_live": 6,
               "test_t325_data_fingerprint": 30,
               "test_serving_release_lineage_race": 2,
               "test_dataset_version_projection": 3,

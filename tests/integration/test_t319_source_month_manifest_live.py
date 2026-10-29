@@ -93,7 +93,7 @@ async def _reset(engine: AsyncEngine) -> None:
 def _snapshot_entrance(index: int, month: str) -> NaviEntranceRow:
     return NaviEntranceRow(
         sig_cd="11110", entry_no=index, rn_cd="3100001", buld_se_cd="0",
-        buld_mnnm=index, buld_slno=0, bjd_cd="1111010100", kind="1",
+        buld_mnnm=index, buld_slno=0, bjd_cd="1111010100", kind="navi",
         x_5179=953000.0, y_5179=1952000.0, source_file="snapshot", source_yyyymm=month,
     )
 
