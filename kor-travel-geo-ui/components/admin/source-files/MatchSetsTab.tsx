@@ -12,6 +12,7 @@ import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { JobProgress } from "@/components/admin/backups/JobProgress";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
+import { CreateMatchSetPanel } from "@/components/admin/source-files/CreateMatchSetPanel";
 import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -98,6 +99,7 @@ export function MatchSetsTab() {
 
   return (
     <div className="source-stack">
+      <CreateMatchSetPanel onCreated={(created) => { setSelectedId(created.match_set.source_match_set_id); setLastResult(created); }} />
       <div className="source-split">
       <Panel
         title="매칭 세트"
