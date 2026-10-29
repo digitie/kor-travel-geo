@@ -99,6 +99,45 @@ async def _noop_progress(*, progress=None, stage=None, message=None):
     return None
 
 
+async def test_source_children_exclude_completed_rebuild_prepare_job() -> None:
+    """완료한 준비 작업의 하위 배치 연결은 적재 자식 관계가 아니다."""
+    engine = await _fresh_engine()
+    try:
+        repo = AdminRepository(engine)
+        prepare = await repo.insert_load_job(
+            kind="source_rebuild_db", payload={}, executor="dagster"
+        )
+        root = await repo.insert_load_batch(
+            payload=_BATCH_PAYLOAD, children=batch_children(_BATCH_PAYLOAD), executor="dagster"
+        )
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "UPDATE load_jobs SET load_batch_id=:batch, state='done', "
+                    "started_at=now(), finished_at=now(), orchestrator_run_id='prepare-run' "
+                    "WHERE job_id=:prepare"
+                ),
+                {"batch": root.job_id, "prepare": prepare.job_id},
+            )
+
+        selected = await batch_dag._fetch_source_children(engine, root.job_id)
+        assert [kind for _, kind, _ in selected] == ["juso_text_load", "locsum_load"]
+        assert [payload for _, _, payload in selected] == [
+            {"path": "/tmp/juso"}, {"path": "/tmp/locsum"}
+        ]
+        assert prepare.job_id not in {job_id for job_id, _, _ in selected}
+        async with engine.connect() as conn:
+            state, run_id = (
+                await conn.execute(
+                    text("SELECT state, orchestrator_run_id FROM load_jobs WHERE job_id=:id"),
+                    {"id": prepare.job_id},
+                )
+            ).one()
+        assert (state, run_id) == ("done", "prepare-run")
+    finally:
+        await engine.dispose()
+
+
 async def test_dagster_batch_roundtrip_converges_all_children(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
