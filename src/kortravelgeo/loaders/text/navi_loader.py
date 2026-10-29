@@ -10,6 +10,7 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.loaders.manifest import max_source_yyyymm, record_full_load_source_month
 
 from .common import TextSource, as_int, discover_text_sources, iter_pipe_rows, required
@@ -208,9 +209,12 @@ async def load_navi(
     *,
     source_yyyymm: str | None,
     limit_per_file: int | None = None,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> tuple[int, int]:
+    if replace and limit_per_file is not None:
+        raise InvalidInputError("전체분 교체에는 limit_per_file을 사용할 수 없습니다")
     build_sources = discover_navi_build_files(path)
     entrance_sources = discover_navi_entrance_files(path)
     build_rows = (
@@ -231,6 +235,7 @@ async def load_navi(
         engine,
         build_rows,
         entrance_rows,
+        replace=replace,
         on_progress=on_progress,
         cancel_event=cancel_event,
     )
@@ -252,6 +257,7 @@ async def copy_navi_rows(
     build_rows: Iterable[NaviBuildingRow],
     entrance_rows: Iterable[NaviEntranceRow],
     *,
+    replace: bool = False,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> tuple[int, int]:
@@ -305,6 +311,16 @@ FROM STDIN
                     )
                     build_count += 1
                     build_yyyymm = max_source_yyyymm(build_yyyymm, build_row.source_yyyymm)
+            if replace:
+                if build_count == 0:
+                    raise InvalidInputError(
+                        "빈 내비게이션 전체분으로 기존 원천을 교체할 수 없습니다"
+                    )
+                await cur.execute("ANALYZE _navi_build_staging (bd_mgt_sn)")
+                await cur.execute(
+                    "DELETE FROM tl_navi_buld_centroid t WHERE NOT EXISTS "
+                    "(SELECT 1 FROM _navi_build_staging s WHERE s.bd_mgt_sn = t.bd_mgt_sn)"
+                )
             await cur.execute(
                 """
 INSERT INTO tl_navi_buld_centroid AS t (
@@ -381,6 +397,17 @@ FROM STDIN
                         )
                     )
                     entrance_count += 1
+            if replace:
+                if entrance_count == 0:
+                    raise InvalidInputError(
+                        "빈 내비게이션 출입구 전체분으로 기존 원천을 교체할 수 없습니다"
+                    )
+                await cur.execute("ANALYZE _navi_entrc_staging (sig_cd, entry_no)")
+                await cur.execute(
+                    "DELETE FROM tl_navi_entrc t WHERE NOT EXISTS "
+                    "(SELECT 1 FROM _navi_entrc_staging s "
+                    "WHERE s.sig_cd = t.sig_cd AND s.entry_no = t.entry_no)"
+                )
             await cur.execute(
                 """
 INSERT INTO tl_navi_entrc AS t (

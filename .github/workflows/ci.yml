@@ -103,6 +103,7 @@ jobs:
       - name: Integration suites
         run: |
           pytest -q -p no:cacheprovider -rs --junitxml=integration-junit.xml \
+            tests/integration/test_t319_source_month_manifest_live.py::test_full_snapshot_replaces_absent_keys_and_rolls_back_failed_copy \
             tests/integration/test_t325_data_fingerprint.py \
             tests/integration/test_serving_release_lineage_race.py \
             tests/integration/test_dataset_version_projection.py \
@@ -129,6 +130,7 @@ jobs:
           print(dict(ran), f"skipped={skipped} failed={bad}")
           # Per-file floors: a whole module silently dropping out cannot hide behind the others.
           floors = {
+              "test_t319_source_month_manifest_live": 6,
               "test_t325_data_fingerprint": 30,
               "test_serving_release_lineage_race": 2,
               "test_dataset_version_projection": 3,

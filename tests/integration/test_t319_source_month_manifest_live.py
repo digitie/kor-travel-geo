@@ -29,14 +29,17 @@ import pytest
 from sqlalchemy import text
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.admin_repo import source_yyyymm_by_kind
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.loaders.shp import polygons_loader
 from kortravelgeo.loaders.text.juso_hangul_loader import JusoTextRow, copy_juso_rows
 from kortravelgeo.loaders.text.locsum_loader import LocsumEntranceRow, copy_locsum_rows
-from kortravelgeo.loaders.text.navi_loader import NaviBuildingRow, copy_navi_rows
+from kortravelgeo.loaders.text.navi_loader import NaviBuildingRow, NaviEntranceRow, copy_navi_rows
 from kortravelgeo.settings import Settings
 from tests.integration._pg_guard import require_disposable_database
 
@@ -85,6 +88,86 @@ async def _reset(engine: AsyncEngine) -> None:
             text("DELETE FROM load_manifest WHERE table_name = ANY(:names)"),
             {"names": list(_TABLES)},
         )
+
+
+def _snapshot_entrance(index: int, month: str) -> NaviEntranceRow:
+    return NaviEntranceRow(
+        sig_cd="11110", entry_no=index, rn_cd="3100001", buld_se_cd="0",
+        buld_mnnm=index, buld_slno=0, bjd_cd="1111010100", kind="navi",
+        x_5179=953000.0, y_5179=1952000.0, source_file="snapshot", source_yyyymm=month,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["juso", "locsum", "navi"])
+@pytest.mark.parametrize("old_month", ["202603", "202609"])
+async def test_full_snapshot_replaces_absent_keys_and_rolls_back_failed_copy(
+    kind: str, old_month: str
+) -> None:
+    engine = await _fresh_engine()
+    table = _TABLE_BY_KIND[kind]
+
+    def rows(factory: Any, ids: list[int], month: str, fail: bool) -> Iterator[Any]:
+        for index in ids:
+            yield factory(index, month)
+        if fail:
+            raise RuntimeError("source read failed")
+
+    async def apply(
+        ids: list[int], month: str, *, replace: bool = False, fail: bool = False
+    ) -> None:
+        if kind == "juso":
+            await copy_juso_rows(engine, rows(_juso_row, ids, month, fail), replace=replace)
+        elif kind == "locsum":
+            await copy_locsum_rows(engine, rows(_locsum_row, ids, month, fail), replace=replace)
+        else:
+            await copy_navi_rows(
+                engine, rows(_navi_row, ids, month, False),
+                rows(_snapshot_entrance, ids, month, fail), replace=replace,
+            )
+
+    try:
+        await apply([1, 2], old_month)
+        if kind == "juso":
+            async with engine.begin() as conn:
+                await conn.execute(text(
+                    "INSERT INTO tl_juso_parcel_link "
+                    "(bd_mgt_sn,pnu,bjd_cd,mntn_yn,lnbr_mnnm,sig_cd,rn_cd,source_kind) "
+                    "VALUES (:sn,'1111010100100010000','1111010100','0',1,'11110',"
+                    "'3100001','jibun_full')"
+                ), {"sn": _juso_row(1, old_month).bd_mgt_sn})
+        await apply([2, 3], "202609")
+        async with engine.connect() as conn:
+            assert await conn.scalar(text(f"SELECT count(*) FROM {table}")) == 3
+        await apply([2, 3], "202609", replace=True)
+        async with engine.connect() as conn:
+            assert await conn.scalar(text(f"SELECT count(*) FROM {table}")) == 2
+            assert await conn.scalar(text(f"SELECT min(source_yyyymm) FROM {table}")) == "202609"
+            if kind == "juso":
+                assert await conn.scalar(text("SELECT count(*) FROM tl_juso_parcel_link")) == 0
+        with pytest.raises(InvalidInputError):
+            await apply([], "202610", replace=True)
+        with pytest.raises(RuntimeError, match="source read failed"):
+            await apply([4], "202610", replace=True, fail=True)
+        async with engine.connect() as conn:
+            assert await conn.scalar(text(f"SELECT count(*) FROM {table}")) == 2
+            assert await conn.scalar(text(f"SELECT min(source_yyyymm) FROM {table}")) == "202609"
+            assert await conn.scalar(text(f"SELECT max(source_yyyymm) FROM {table}")) == "202609"
+            assert await conn.scalar(
+                text("SELECT source_yyyymm FROM load_manifest WHERE table_name=:table"),
+                {"table": table},
+            ) == "202609"
+            if kind == "navi":
+                assert list((await conn.execute(
+                    text("SELECT entry_no FROM tl_navi_entrc ORDER BY entry_no")
+                )).scalars()) == [2, 3]
+    finally:
+        try:
+            await _reset(engine)
+            async with engine.begin() as conn:
+                await conn.execute(text("TRUNCATE tl_navi_entrc"))
+        finally:
+            await engine.dispose()
 
 
 async def _oracle(conn: AsyncConnection) -> dict[str, str | None]:
