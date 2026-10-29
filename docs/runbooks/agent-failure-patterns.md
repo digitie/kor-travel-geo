@@ -16,6 +16,7 @@
 | n150 Playwright가 실행 불가 | n150 브라우저/권한/네트워크/secret 준비가 안 됨 | 사유를 기록하고 Windows Playwright fallback 실행 |
 | `codegraph status`가 sync 직후에도 pending | `codegraph sync`가 끝나기 전에 status를 봄 | sync 종료를 기다린 뒤 status 실행. `impact`는 file path가 아니라 symbol 이름 전달 |
 | `next-env.d.ts`가 `.next/dev/types/routes.d.ts`로 바뀜 | Next dev/build가 자동 생성 reference를 로컬 실행 모드에 맞게 고침 | 커밋 전 tracked 기준으로 되돌리고 generated reference 변경은 제외 |
+| 대용량 원천의 사전 점검 중 `UND_ERR_HEADERS_TIMEOUT` | 파일 수신 뒤 압축파일 전체를 읽는 동안 fetch의 응답 헤더 대기 제한 초과 | 완료 슬롯을 보존하고 원천 작업의 전용 dispatcher·취소 동작 검증 뒤 사전 점검부터 재시도 |
 
 ## 2. 패턴 A — Windows Git 포인터가 남아 Linux Git이 실패
 
@@ -166,3 +167,9 @@ ss -ltnp | rg ':12505' || true
 | long-running server가 Ctrl-C로 안 꺼짐 | 0회 | `ss -ltnp | rg ':<PORT>'`로 PID 확인 후 `kill <PID>` |
 | CodeGraph가 pending으로 보임 | 0회 | sync 종료 대기 후 status 재실행 |
 | generated file이 실행 모드 때문에 바뀜 | 0회 | tracked 기준으로 복구하고 커밋 제외 |
+
+## 12. 대용량 원천의 점검·등록 응답 대기
+
+전자지도처럼 수 GB인 묶음은 파일 수신이 끝난 뒤에도 서버가 원천을 내려받아 검사·해시한다. 이때 프록시 로그의 `UND_ERR_HEADERS_TIMEOUT`은 필수 멤버 결손과 구분한다. 진행 중인 이전 점검이 종료됐는지 확인하고, 수신 크기가 맞는 완료 슬롯을 그대로 보존해 사전 점검부터 재시도한다.
+
+장시간 원천 POST는 전용 Agent의 30분 헤더 대기를 사용한다. 일반 요청은 기본 dispatcher를 사용하며, 클라이언트의 `AbortSignal`을 계속 전달한다. Node 기본 fetch와 Undici 8을 연결할 때는 `Dispatcher1Wrapper` 계약을 확인한다. 변경 후 실제 지연 응답·취소와 인증·헤더 전달 회귀를 검증한다. [Node fetch 문서](https://github.com/nodejs/node/blob/main/doc/api/globals.md#fetch)를 참고한다.

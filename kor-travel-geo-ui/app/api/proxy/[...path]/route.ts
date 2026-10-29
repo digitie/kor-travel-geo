@@ -12,6 +12,7 @@ import {
   forwardedProxyHeaders
 } from "@/lib/proxy";
 import { KNOWN_ADMIN_ROLES } from "@/lib/roles";
+import { sourceArchiveDispatcherFor } from "@/lib/source-archive-dispatcher";
 
 const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12501";
 
@@ -33,6 +34,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const backendRoute = backendRouteForMetrics(params.path);
     let upstreamStatusCode = 500;
     try {
+      const dispatcher = sourceArchiveDispatcherFor(request.method, params.path);
       const response = await fetch(target, {
         ...buildProxyRequestInit(
           request.method,
@@ -42,7 +44,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
           }),
           request.body,
           request.signal
-        )
+        ),
+        ...(dispatcher ? { dispatcher } : {})
       });
       upstreamStatusCode = response.status;
       statusCode = response.status;
