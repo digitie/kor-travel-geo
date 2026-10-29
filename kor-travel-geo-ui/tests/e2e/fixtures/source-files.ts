@@ -313,6 +313,9 @@ const UNHANDLED = Symbol("unhandled");
 function resolveBody(pathname: string, method: string, url: URL, opts: Required_<SourceFilesMockOptions>, request: Request): unknown {
   const override = suffixOverride(opts.responses, pathname);
   if (override !== undefined) return override;
+  if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/replace$/.test(pathname) && method === "POST") {
+    return { invalidated: true, state: "created" };
+  }
 
   // --- upload sessions + multipart ---
   if (/\/upload-sessions\/[^/]+\/files\/[^/]+\/multipart\/complete$/.test(pathname)) {

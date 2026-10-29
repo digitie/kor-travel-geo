@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { installSourceFilesMock } from "./fixtures/source-files";
+import { installSourceFilesMock, makeCategoryCatalog, makeFileSlot, makeUploadSession } from "./fixtures/source-files";
 
 // T-259 단계별 e2e: 업로드 적재. 업로드 탭에서 category 선택·기준월 입력·파일 선택 →
 // 세션 생성 → multipart(initiate/part/complete) → register 성공 경로를 T-225 공용 하네스로
@@ -16,6 +16,38 @@ function smallZip() {
 }
 
 test.describe("업로드 적재 /admin/source-files (T-259)", () => {
+  test("시도별 세션 재개에서 완료 파일을 보존하고 남은 파일을 업로드·등록한다", async ({ page }) => {
+    const category = { category: "electronic_map_full", label: "도로명주소 전자지도", role: "build_required", serving_usage: "serving_core", group_kind: "multi_part", optional: false, expected_member_kinds: [] };
+    const slots = [makeFileSlot({ slot: "11", part_key: "11", part_label: "서울특별시", uploaded: true, received_bytes: 256 }), makeFileSlot({ slot: "12", part_key: "12", part_label: "전남광주통합특별시" })];
+    const session = makeUploadSession({ category: "electronic_map_full", user_yyyymm: "202610", state: "uploading", group_kind: "multi_part", expected_file_count: 2, uploaded_file_count: 1, file_slots: slots });
+    await installSourceFilesMock(page, { catalog: makeCategoryCatalog([category]) });
+    const uploadedSlots: string[] = [];
+    await page.route("**/api/proxy/v1/admin/source-files/upload-sessions**", async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/upload-sessions") && request.method() === "POST") return route.fulfill({ status: 409, json: { detail: { session } } });
+      if (path.endsWith("/multipart/complete")) {
+        uploadedSlots.push(path.split("/files/")[1].split("/")[0]);
+        return route.fulfill({ json: { ...session, uploaded_file_count: 2, file_slots: slots.map((slot) => ({ ...slot, uploaded: true })) } });
+      }
+      if (path.endsWith("/preview-validate")) return route.fulfill({ json: { outcome: "passed", parts: [] } });
+      await route.fallback();
+    });
+    await page.goto("/admin/source-files");
+    await page.getByRole("button", { name: "업로드 마법사", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("option", { name: /도로명주소 전자지도/ }).click();
+    await dialog.getByRole("combobox", { name: "기준년월", exact: true }).fill("202610");
+    await dialog.getByRole("button", { name: "다음", exact: true }).click();
+    await dialog.getByRole("button", { name: "업로드 세션 열기", exact: true }).click();
+    await expect(dialog.getByText("1/2 파일 업로드 완료")).toBeVisible();
+    await dialog.getByLabel("전남광주통합특별시 파일 선택", { exact: true }).setInputFiles(smallZip());
+    await expect(dialog.getByRole("button", { name: "다음", exact: true })).toBeEnabled();
+    expect(uploadedSlots).toEqual(["12"]);
+    await dialog.getByRole("button", { name: "다음", exact: true }).click();
+    await dialog.getByRole("button", { name: "등록", exact: true }).click();
+    await expect(dialog.getByText(/업로드가 등록됐습니다/)).toBeVisible();
+  });
   test("20MiB 파일을 8MiB 이하 파트로 모두 전송한 뒤 등록한다", async ({ page }) => {
     await installSourceFilesMock(page);
     const partSizes: number[] = [];

@@ -25,6 +25,7 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   isValidYyyymm,
+  isResumableSession,
   servingUsageLabels,
   servingUsageNote,
   servingUsageTones,
@@ -149,8 +150,35 @@ export function UploadWizardDialog({
     onOpenChange(next);
   }
 
-  async function handleFileSelected(selectedFile: File) {
-    dispatch({ file: selectedFile, error: null, preview: null, progress: null, session: null });
+  async function openSession(displayName: string): Promise<UploadSessionStatus> {
+    if (session && session.category === categoryKey && session.user_yyyymm === userYyyymm) return session;
+    try {
+      return await createSession.mutateAsync({ category: categoryKey!, userYyyymm, displayName });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const detail = err.detail ?? err.body;
+        const existing = detail && typeof detail === "object" && "session" in detail
+          ? detail.session : detail;
+        if (existing && typeof existing === "object" && "upload_session_id" in existing) {
+          const resumed = existing as UploadSessionStatus;
+          if (resumed.category === categoryKey && resumed.user_yyyymm === userYyyymm && isResumableSession(resumed)) return resumed;
+        }
+      }
+      throw err;
+    }
+  }
+
+  async function handleOpenSession() {
+    dispatch({ busy: true, error: null });
+    try {
+      dispatch({ session: await openSession(category!.label), busy: false });
+    } catch (err) {
+      dispatch({ busy: false, error: getErrorMessage(err) });
+    }
+  }
+
+  async function handleFileSelected(selectedFile: File, slotId?: string) {
+    dispatch({ file: selectedFile, error: null, preview: null, progress: null });
     if (!category) return;
     if (maxBytes && selectedFile.size > maxBytes) {
       dispatch({
@@ -160,30 +188,33 @@ export function UploadWizardDialog({
     }
     dispatch({ busy: true });
     try {
-      const newSession = await createSession.mutateAsync({
-        category: category.category,
-        userYyyymm,
-        displayName: selectedFile.name
-      });
+      const newSession = await openSession(selectedFile.name);
       dispatch({ session: newSession });
-      const slot = newSession.file_slots[0];
+      const slot = slotId ? newSession.file_slots.find((item) => item.slot === slotId) : newSession.file_slots[0];
       if (!slot) {
         dispatch({ busy: false, error: "세션에 업로드 슬롯이 없습니다" });
         return;
       }
-      await uploadSlotFile({
+      // Clear this slot even when the last attempt failed before local state refreshed.
+      await postJson(`/admin/source-files/upload-sessions/${newSession.upload_session_id}/files/${slot.slot}/replace`, {});
+      const finished = await uploadSlotFile({
         sessionId: newSession.upload_session_id,
         slotId: slot.slot,
         file: selectedFile,
         partSizeBytes: newSession.part_size_bytes,
         onProgress: (next) => dispatch({ progress: next })
       });
+      dispatch({ session: finished });
+      if (category.group_kind === "multi_part" && !finished.file_slots.every((item) => item.uploaded)) {
+        dispatch({ busy: false });
+        return;
+      }
       const result = await previewValidate.mutateAsync(newSession.upload_session_id);
       dispatch({ busy: false, preview: result });
     } catch (err) {
       const message =
         err instanceof ApiError && err.status === 409
-          ? "이미 같은 카테고리·기준월의 업로드 세션이 진행 중입니다 — 카테고리 카드에서 이어서 진행하세요."
+          ? "이미 같은 카테고리·기준월의 업로드 세션이 진행 중입니다 — 세션 정보를 확인할 수 없어 재개하지 못했습니다."
           : getErrorMessage(err);
       dispatch({ busy: false, error: message });
     }
@@ -242,7 +273,7 @@ export function UploadWizardDialog({
         {step === 1 ? (
           <CategoryPickerStep
             categories={categories}
-            onSelect={(key) => dispatch({ categoryKey: key, step: 2 })}
+            onSelect={(key) => dispatch({ categoryKey: key, step: 2, session: null, preview: null, file: null, error: null })}
             selected={categoryKey}
           />
         ) : step === 2 && category ? (
@@ -250,7 +281,7 @@ export function UploadWizardDialog({
             <Field>
               <YyyymmField
                 id="upload-wizard-yyyymm"
-                onChange={(value) => dispatch({ userYyyymm: value })}
+                onChange={(value) => dispatch({ userYyyymm: value, session: null, preview: null, file: null, error: null })}
                 value={userYyyymm}
                 help={
                   <>
@@ -270,18 +301,15 @@ export function UploadWizardDialog({
           </div>
         ) : step === 3 && category ? (
           <div className="wizard-preview">
-            <FileDropZone
-              disabled={busy}
-              file={file}
-              maxBytes={maxBytes}
-              onFileSelected={(selected) => void handleFileSelected(selected)}
-            />
+            <SlotFileInputs category={category} session={session} busy={busy} file={file}
+              maxBytes={maxBytes} onOpenSession={() => void handleOpenSession()}
+              onFileSelected={(selected, slot) => void handleFileSelected(selected, slot)} />
             {progress ? <UploadProgressBar progress={progress} /> : null}
             {previewValidate.isPending ? (
               <p className="form-note">구조/멤버/기준월 사전 점검 중…</p>
             ) : null}
             {preview ? <ValidationPreviewResult preview={preview} /> : null}
-            {session && !preview && error && !busy ? (
+            {session && !preview && !busy && (error || session.file_slots.every((slot) => slot.uploaded)) ? (
               <div className="button-row">
                 <Button onClick={() => void handleRetryPreview()} type="button" variant="outline">
                   사전 점검 다시 시도
@@ -293,7 +321,7 @@ export function UploadWizardDialog({
                 이전
               </Button>
               <Button
-                disabled={!preview || busy}
+                disabled={!preview || preview.outcome === "failed" || busy}
                 onClick={() => dispatch({ step: 4 })}
                 type="button"
               >
@@ -315,7 +343,7 @@ export function UploadWizardDialog({
             ) : (
               <>
                 <p className="wizard-hint">
-                  {category.label} · {userYyyymm} · {file?.name} 을(를) 등록합니다. 등록 후에도
+                  {category.label} · {userYyyymm} · {session.expected_file_count}개 파일을 등록합니다. 등록 후에도
                   활성 매칭 세트에 포함되기 전까지는 서빙에 반영되지 않습니다.
                 </p>
                 {preview && preview.outcome !== "passed" ? (
@@ -407,12 +435,43 @@ function CategoryImpactSummaryCard({ category }: { category: SourceFileCategoryI
   );
 }
 
+function SlotFileInputs({ category, session, busy, file, maxBytes, onOpenSession, onFileSelected }: {
+  category: SourceFileCategoryInfo;
+  session: UploadSessionStatus | null;
+  busy: boolean;
+  file: File | null;
+  maxBytes?: number;
+  onOpenSession: () => void;
+  onFileSelected: (file: File, slot?: string) => void;
+}) {
+  if (category.group_kind !== "multi_part") {
+    return <FileDropZone disabled={busy} file={file} maxBytes={maxBytes} onFileSelected={onFileSelected} />;
+  }
+  if (!session) {
+    return <Button disabled={busy} onClick={onOpenSession} type="button">업로드 세션 열기</Button>;
+  }
+  return (
+    <div className="max-h-[45vh] overflow-y-auto space-y-3">
+      <p>{session.uploaded_file_count}/{session.expected_file_count} 파일 업로드 완료</p>
+      {session.file_slots.map((slot) => (
+        <div key={slot.slot}>
+          <p>{slot.part_label ?? slot.slot} · {slot.uploaded ? `완료 (${formatBytes(slot.received_bytes)})` : "업로드 대기"}</p>
+          <FileDropZone label={`${slot.part_label ?? slot.slot} 파일 선택`} disabled={busy}
+            file={null} maxBytes={maxBytes} onFileSelected={(selected) => onFileSelected(selected, slot.slot)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FileDropZone({
+  label = "업로드할 파일 선택",
   file,
   maxBytes,
   disabled,
   onFileSelected
 }: {
+  label?: string;
   file: File | null;
   maxBytes?: number;
   disabled: boolean;
@@ -439,7 +498,7 @@ function FileDropZone({
     >
       <label className="upload-dropzone-label">
         <input
-          aria-label="업로드할 파일 선택"
+          aria-label={label}
           disabled={disabled}
           onChange={(event) => {
             const selected = event.target.files?.[0];
