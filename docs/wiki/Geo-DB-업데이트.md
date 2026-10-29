@@ -211,6 +211,18 @@ Dockerfile에는 기본 데이터 디렉터리를 기존 소유권 설정 전에
 
 실제 부모가 해당 배치인 자식만 선택하도록 한 줄 수정하고 수정 전 SQL 회귀 실패·수정 후 통과, 전체 테스트와 실제 PostgreSQL CI를 확인했다. 운영의 읽기 전용 조회에서도 8개 오선택에서 원천 7개 선택으로 바뀐 것을 확인했고 이미지·컨테이너는 유지했다. [PR #607](https://github.com/digitie/kor-travel-geo/pull/607)은 머지됐다. 모든 이전 작업 종료를 확인한 뒤 같은 원천으로 네 번째 준비부터 다시 시작했다.
 
+주소 응답은 200이지만 지도가 worker 로딩 실패로 남는 문제도 확인했다. 실제 worker 생성 주소가 빈 값인 것을 재현하고, 설치된 같은 버전의 worker를 정적 번들 자산으로 지정했다. [PR #608](https://github.com/digitie/kor-travel-geo/pull/608)은 테스트·실제 후보 지도 검증·CI·리뷰 대기 뒤 머지됐다.
+
+정식 UI 이미지 `kor-travel-geo-ui:rel-e70e4827d250`를 기존 Manager 변경 잠금 안에서 UI 하나에만 적용했다. 헬스체크·현재 이미지 대조, 새 로그인·로그아웃·비인증 차단·인증 프록시 200을 확인했고 API·코드 서버 컨테이너는 유지했다. 실제 운영 Geocode/Reverse의 worker 각 1개와 VWorld 타일 각 16개 수신도 확인했다.
+
+아래는 **원천 적재 진행 중에 UI 교체만 검증한 화면**이다. 지도·좌표 표시 성공과 DB 갱신 완료는 구분한다. 운영 건물 도형과 새 데이터 버전은 원천 적재·정합성·MV 갱신 뒤 다시 확인한다.
+
+[운영 Geocode의 worker·지도 표시 확인](assets/production-map-geocode-success.png)
+
+![운영 Reverse의 worker·지도 표시 확인](assets/production-map-reverse-success.png)
+
+이후 코드 서버를 재생성할 때는 PR #606·#607이 반영된 이미지와 Manager #575의 공용 접속 구성을 함께 사용한다. 현재 실행 중인 코드 서버는 재생성하지 않는다.
+
 ## 7. 완료 판정
 
 적재 작업 완료, 정합성 결과, 새 서빙 릴리스와 데이터 기준월을 확인한다. Geocode·Reverse를 실제 UI에서 실행해 결과를 확인하고 각 성공 화면을 기록한다. 실행 결과와 공개 Wiki 게시 주소는 완료 후 이 문서에 추가한다.
