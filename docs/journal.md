@@ -1,5 +1,12 @@
 # JOURNAL — 작업 일지
 
+## 2026-10-30 — 실제 지도 worker 경로 복구
+
+- 운영 Geocode API는 정상 응답했으나 지도는 worker 로딩 실패로 남았다. 실제 브라우저의 worker 생성 인수를 관찰해 빈 주소로 현재 HTML 페이지를 읽으려는 것을 확인했다. 번들러가 바꾼 MapLibre의 `import.meta.url`에서 기본 주소를 얻지 못한 경우다.
+- `setWorkerUrl`에 설치된 MapLibre worker 파일의 정적 URL을 명시했다. Next.js 빌드가 같은 버전의 worker를 해시된 자산으로 포함하며 외부 CDN이나 별도 worker 버전을 추가하지 않는다. E2E는 실제 worker 시작·오류 안내 없음도 확인하도록 보강했다.
+- Linux ext4의 프론트 282개·타입·린트·빌드를 통과했다. React Doctor는 오류 0·기존 경고 14개다. CodeGraph MCP가 Linux 경로의 인덱스를 찾지 못해 Linux CLI의 sync·status·context·impact로 호출자와 검증 표면을 확인했다.
+- 빌드한 후보 UI를 Linux 브라우저에서 실행해 실제 Geocode/Reverse 200, worker 각 1개와 실제 VWorld 타일 각각 6개·20개를 확인했다. 초기 후보의 지도 인증키 누락은 기존 운영 키를 보호된 후보 환경에 제공해 바로잡았으며 키 값·쿠키는 공개 문서에 넣지 않는다. 소스 머지 뒤 정식 UI 이미지 배포와 운영 재검증이 남았다.
+
 ## 2026-10-30 — 네 번째 준비와 성공 화면 보존
 
 - 실제 UI에서 네 번째 준비 `job_a67da58095c94e318d423a69794f9d06`을 제출했다. Dagster `2d68ea1b-6d78-42a5-86ed-5f406c53d9bd`는 무결성 게이트를 통과해 파일 준비를 진행 중이다. 등록 원천·매칭과 모든 실패 기록은 보존했다.
