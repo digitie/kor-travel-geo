@@ -18,6 +18,7 @@
 - Dagster 유지보수 연결에서 PostgreSQL client_connection_check_interval을 10초로 설정해, worker 종료로 클라이언트 연결이 끊긴 뒤에도 장시간 쿼리가 남는 문제를 줄인다. 서버가 연결 단절을 감지하는 기능이며 모든 장애를 정확히 10초 안에 정리한다는 보장은 아니다. API 기본 연결 정책과 기존 SQL 시간 상한은 유지한다.
 
 ### Added
+- GitHub에서 읽을 수 있는 Wiki 형식 운영 매뉴얼에 실제 백업·주소 조회·원천 등록 성공 화면과 기준월·지원 범위·재개 절차를 기록한다.
 - API/CS 이미지 빌드에서 최종 Python의 stdlib checked-hash bytecode를 명시적으로 준비한다.
   API extra에 Common core와 기본 HTTP 생존 확인을 연결하며 Compose override 정산과 운영 효과는 별도다.
 - 실제 repository origin을 명시한 경우에만 Common native incarnation 복구 센서를
