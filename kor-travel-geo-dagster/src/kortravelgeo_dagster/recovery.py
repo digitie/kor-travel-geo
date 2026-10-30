@@ -42,10 +42,13 @@ def native_recovery_sensors() -> list[SensorDefinition]:
 
 
 def policy_for_job(name: str) -> RecoveryPolicy:
-    """24시간이 필요한 작업과 비멱등 작업의 재시도 금지를 보존한다."""
+    """전국 전체분 48시간·긴 원천/복원 24시간과 비멱등 재시도 금지를 보존한다."""
     safe_retry = name in IDEMPOTENT_RETRY_JOBS
+    max_runtime = 86400 if name in LONG_JOBS else 21600
+    if name == "full_load_batch":
+        max_runtime = 172800
     return RecoveryPolicy(
-        max_runtime_seconds=86400 if name in LONG_JOBS else 21600,
+        max_runtime_seconds=max_runtime,
         idempotent=safe_retry,
         infrastructure_retries=1 if safe_retry else 0,
     )

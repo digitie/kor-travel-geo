@@ -68,11 +68,9 @@ def test_every_instigator_declares_its_prod_status_in_code() -> None:
     assert declared == _DECLARED_INSTIGATOR_STATUS
 
 
-# Shared-plane max runtime (owner decision 2026-09-30): the shared instance's 6 h
-# run_monitoring default applies to every geo job except the ones that can legitimately run
-# longer, which carry ``dagster/max_runtime`` = 86400 (``kortravelgeo_dagster/run_tags.py``
-# explains each). ``None`` means "no tag — the instance default applies". Every job is listed,
-# so a new job fails this test until someone decides which side it belongs on.
+# 공유 실행 상한은 모든 작업에 명시한다. 전국 전체분은 원천 적재 뒤 정합성·MV까지
+# 수행하므로 48시간이며, 개별 원천·복원은 기존 24시간 상한을 유지한다.
+# 작업이 추가되거나 다른 작업의 상한이 바뀌면 이 전체 목록으로 회귀를 감지한다.
 _EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
     "backup_copy": "21600",
     "backup_restore_drill": "86400",
@@ -81,7 +79,7 @@ _EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
     "consistency_check": "21600",
     "db_backup": "21600",
     "db_restore": "86400",
-    "full_load_batch": "86400",
+    "full_load_batch": "172800",
     "load_source": "86400",
     "mv_refresh": "21600",
     "scheduled_backup_run_due": "21600",

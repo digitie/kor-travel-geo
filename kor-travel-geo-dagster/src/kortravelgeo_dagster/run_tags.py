@@ -7,6 +7,11 @@ decides it. Dagster lets the run tag ``dagster/max_runtime`` override the instan
 run, and job-definition tags are copied onto every run of that job (launch-from-API,
 schedule, or UI), so carrying the cap on the job keeps it the same on any instance.
 
+**National batch override (2026-10-31).** ``full_load_batch`` merges these
+common tags, then ``geo_job`` applies the 48 h cap from ``recovery.policy_for_job``.
+The 202610 source phase alone took 19 h 53 min before consistency checks and MV refresh;
+the earlier national-load benchmark below no longer gives a safe 24 h margin.
+
 **Which jobs** (owner decision 2026-09-30: every other geo job keeps the shared default):
 
 - ``full_load_batch`` — the national full load took 4 h 8 min on the dev workstation
