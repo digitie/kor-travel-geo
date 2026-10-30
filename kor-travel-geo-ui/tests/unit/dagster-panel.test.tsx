@@ -116,7 +116,7 @@ const RUN_DETAILS = {
           level: "INFO",
           message: "backup completed",
           step_id: "backup",
-          timestamp: "1783486860"
+          timestamp: "1783486860000"
         }
       ],
       event_cursor: "cursor-1",
@@ -150,7 +150,7 @@ const RUN_DETAILS = {
           level: "ERROR",
           message: "mv refresh failed",
           step_id: null,
-          timestamp: "2026-07-08T05:02:00Z"
+          timestamp: "1783486920000"
         }
       ],
       event_cursor: "cursor-2",
@@ -234,9 +234,12 @@ describe("DagsterPanel", () => {
       "href",
       "/api/proxy/v1/admin/backups/artifact-1/download?token=x"
     );
-    // Event timestamp is a numeric epoch string; it renders as a UTC date, not raw epoch.
+    // GraphQL events use millisecond strings; run metadata continues to use seconds.
+    expect(await screen.findByText("2026-07-08 04:00:00")).toBeTruthy();
     expect(await screen.findByText("2026-07-08 05:01:00")).toBeTruthy();
-    expect(screen.queryByText("1783486860")).toBeNull();
+    expect(screen.getByText("started (UTC)")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "time (UTC)" })).toBeInTheDocument();
+    expect(screen.queryByText("1783486860000")).toBeNull();
     // Op-log grouping surfaces the backup op section (step_id "backup"), emphasized.
     expect(await screen.findByText("backup op")).toBeTruthy();
 
@@ -245,6 +248,7 @@ describe("DagsterPanel", () => {
       expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_2", expect.objectContaining({ signal: expect.any(AbortSignal) }))
     );
     expect(await screen.findByText("RUN_FAILURE")).toBeTruthy();
+    expect(await screen.findByText("2026-07-08 05:02:00")).toBeTruthy();
     // A failed run shows the failure banner sourced from the persisted alert.
     expect(await screen.findByText("run 실패: FAILURE")).toBeTruthy();
     expect(screen.getByText("오류 유형: Failure")).toBeTruthy();
