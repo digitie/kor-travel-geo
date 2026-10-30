@@ -20,6 +20,7 @@ import {
   dagsterRunUrl,
   dagsterStatusTone,
   formatDagsterEpoch,
+  formatDagsterEventTime,
   type DagsterRunDetailData,
   type DagsterRunEvent,
   type DagsterRunFailureAlert,
@@ -243,9 +244,9 @@ function RunDetailPanel({
                 </dd>
               </>
             ) : null}
-            <dt className="text-muted-foreground">started</dt>
+            <dt className="text-muted-foreground">started (UTC)</dt>
             <dd>{formatDagsterEpoch(run?.start_time)}</dd>
-            <dt className="text-muted-foreground">updated</dt>
+            <dt className="text-muted-foreground">updated (UTC)</dt>
             <dd>{formatDagsterEpoch(run?.update_time)}</dd>
           </dl>
           <OpLogGroups events={detail.events ?? []} />
@@ -457,7 +458,7 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
               <table className="dagster-op-log-table w-full text-left text-xs">
                 <thead>
                   <tr className="text-muted-foreground">
-                    <th className="px-3 py-1 font-medium">time</th>
+                    <th className="px-3 py-1 font-medium">time (UTC)</th>
                     <th className="px-3 py-1 font-medium">event</th>
                     <th className="px-3 py-1 font-medium">level</th>
                     <th className="px-3 py-1 font-medium">message</th>
@@ -470,7 +471,7 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
                       className="border-t border-border/50 align-top"
                     >
                       <td className="whitespace-nowrap px-3 py-1 font-mono">
-                        {formatDagsterEpoch(event.timestamp)}
+                        {formatDagsterEventTime(event.timestamp)}
                       </td>
                       <td className="px-3 py-1">{event.event_type}</td>
                       <td className="px-3 py-1">{event.level ?? "-"}</td>
