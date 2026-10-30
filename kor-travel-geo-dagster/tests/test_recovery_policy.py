@@ -16,7 +16,12 @@ def test_only_read_only_verify_allows_infrastructure_retry() -> None:
         assert policy.idempotent is (job.name == "backup_verify")
         assert job.tags["dagster/max_retries"] == ("1" if policy.idempotent else "0")
         assert job.tags["dagster/retry_on_asset_or_op_failure"] == "false"
-        assert int(job.tags["dagster/max_runtime"]) == (86400 if job.name in LONG_JOBS else 21600)
+        if job.name == "full_load_batch":
+            assert int(job.tags["dagster/max_runtime"]) == 172800
+        else:
+            assert int(job.tags["dagster/max_runtime"]) == (
+                86400 if job.name in LONG_JOBS else 21600
+            )
         assert job.executor_def.name == "multiprocess"
         result = job.executor_def.apply_config_mapping({"config": {}})
         assert result.success
