@@ -83,11 +83,16 @@ export function useAckRunFailureMutation() {
 }
 
 export function formatDagsterEpoch(value: number | string | null | undefined): string {
-  // Run start/end arrive as numbers; event timestamps arrive as numeric epoch
-  // strings (DagsterRunEvent.timestamp). Coerce so both render as a UTC date.
+  // Run and tick timestamps use epoch seconds.
   const epoch = typeof value === "string" ? Number(value) : value;
   if (epoch == null || !Number.isFinite(epoch)) return "-";
   return new Date(epoch * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+// GraphQL event timestamps use epoch milliseconds, unlike run and tick times.
+export function formatDagsterEventTime(value: string | null | undefined): string {
+  if (value == null || value.trim() === "") return "-";
+  return formatDagsterEpoch(Number(value) / 1000);
 }
 
 export function dagsterRunUrl(dagsterUrl: string, runId: string): string {
