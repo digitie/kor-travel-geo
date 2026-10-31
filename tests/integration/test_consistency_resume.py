@@ -168,7 +168,10 @@ VALUES ('다른작업',:kind,:state,'{}',now())
             },
         )
     else:
-        await f.conn.execute(text("UPDATE load_manifest SET source_set='{\"changed\":true}'"))
+        await f.conn.execute(
+            text("UPDATE load_manifest SET source_set=CAST(:payload AS jsonb)"),
+            {"payload": json.dumps({"changed": True})},
+        )
     with pytest.raises(ConflictError):
         await f.service.prepare_consistency_resume(
             f.match_id, BATCH, expected_manifest=previous["source_checkpoint"]
@@ -208,3 +211,24 @@ async def test_source_writers_share_but_resume_excludes_them(completed_sources):
         with pytest.raises(ConcurrentExecutionError):
             async with cross_process_lock(engine, key, shared=True):
                 pytest.fail("원천 쓰기가 재개 검사 중에 시작됐습니다.")
+
+
+@pytest.mark.asyncio
+async def test_resume_source_history_lookup_can_use_parent_index(completed_sources):
+    conn = completed_sources.conn
+    await conn.execute(text("SET LOCAL enable_seqscan=off"))
+    plan = await conn.scalar(text("""
+EXPLAIN (FORMAT JSON) SELECT job_id, kind, state, payload, started_at, finished_at
+FROM public.load_jobs WHERE parent_job_id=:id
+AND kind NOT IN ('consistency_check','mv_refresh') ORDER BY created_at
+"""), {"id": BATCH})
+    indexes = []
+
+    def visit(node):
+        if "Index Name" in node:
+            indexes.append(node["Index Name"])
+        for child in node.get("Plans", []):
+            visit(child)
+
+    visit(plan[0]["Plan"])
+    assert "idx_load_jobs_parent" in indexes
