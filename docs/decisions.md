@@ -1,7 +1,7 @@
 # decisions.md — 이전됨 → `docs/adr/`
 
 ADR는 파일당 1개로 [`docs/adr/`](adr/) 아래에 있다 (`NNN-<slug>.md`).
-최근 추가한 [ADR-074](adr/074-consistency-stage-resume.md)는 완료 원천의 검증·재사용과 정합성 단계 재개를 다룬다.
+최근 추가한 [ADR-074](adr/074-consistency-stage-resume.md)는 완료 원천의 검증·재사용과 정합성 단계 재개를 다룬다. 전자지도만 복구한 경우에도 원래 완료 원천과 실제 복구 작업의 구성을 검증해 재사용한다.
 정본 색인·분류(핵심 구조 / → 이관 / → 개발 규칙 / 삭제됨)·작성 규약은
 [`docs/adr/README.md`](adr/README.md).
 
