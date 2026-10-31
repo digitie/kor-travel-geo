@@ -219,6 +219,7 @@ SELECT sig_cd, ent_man_no, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, rn_cd, rn
               staging_seq DESC
   ) AS s
 ON CONFLICT (sig_cd, ent_man_no) DO UPDATE SET
+  bd_mgt_sn = NULL,
   bjd_cd = EXCLUDED.bjd_cd,
   ctp_kor_nm = EXCLUDED.ctp_kor_nm,
   sig_kor_nm = EXCLUDED.sig_kor_nm,

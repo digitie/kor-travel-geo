@@ -1140,6 +1140,8 @@ CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_sppn_makarea_geom ON tl_sppn_makarea USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sppn_makarea_sig ON tl_sppn_makarea (sig_cd);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_address_resolve
+  ON tl_spbd_buld_polygon ((sig_cd || rn_cd), buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
   ON tl_spbd_buld_polygon (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_geom ON tl_sprd_manage USING GIST (geom);
@@ -1511,7 +1513,7 @@ UPDATE tl_locsum_entrc e
    AND e.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
    AND e.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
    AND e.buld_slno IS NOT DISTINCT FROM j.buld_slno
-   AND e.bjd_cd = j.bjd_cd
+   AND left(e.bjd_cd, 8) = left(j.bjd_cd, 8)
    AND (e.zip_no IS NULL OR j.zip_no IS NULL OR e.zip_no = j.zip_no);
 
 UPDATE tl_navi_entrc e
@@ -1522,7 +1524,7 @@ UPDATE tl_navi_entrc e
    AND e.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
    AND e.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
    AND e.buld_slno IS NOT DISTINCT FROM j.buld_slno
-   AND (e.bjd_cd IS NULL OR e.bjd_cd = j.bjd_cd);
+   AND (e.bjd_cd IS NULL OR left(e.bjd_cd, 8) = left(j.bjd_cd, 8));
 
 ANALYZE tl_juso_text;
 ANALYZE tl_locsum_entrc;

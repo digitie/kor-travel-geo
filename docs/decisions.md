@@ -1,6 +1,7 @@
 # decisions.md — 이전됨 → `docs/adr/`
 
 ADR는 파일당 1개로 [`docs/adr/`](adr/) 아래에 있다 (`NNN-<slug>.md`).
+최근 추가한 [ADR-072](adr/072-polygon-address-sigungu-link.md)는 건물 도형의 소재지 시군구 주소 연결을 다룬다.
 정본 색인·분류(핵심 구조 / → 이관 / → 개발 규칙 / 삭제됨)·작성 규약은
 [`docs/adr/README.md`](adr/README.md).
 

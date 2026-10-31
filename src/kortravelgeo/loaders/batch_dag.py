@@ -526,6 +526,8 @@ async def run_consistency_check(
     async def case_progress(value: float, code: str) -> None:
         await progress(progress=value, stage=f"consistency:{code}", message=f"{code} checked")
 
+    await progress(stage="resolve_links", message="정합성 검사 전 주소·도형 연결 해소")
+    await resolve_text_geometry_links(engine)
     raw_cases = payload.get("cases")
     cases = tuple(raw_cases) if isinstance(raw_cases, list) and raw_cases else DEFAULT_CASES
     report = await run_all_cases(

@@ -110,7 +110,7 @@ CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 
 건물 출입구 좌표의 **정본**. 한 건물에 출입구가 여러 개일 수 있고 `ent_se_cd`로 대표/부속을 구분한다.
 
-중요: 실제 `202604_위치정보요약DB_전체분.zip`의 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 원본은 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 지상/지하, 건물 본·부번, 우편번호, 용도, 출입구 구분, 행정동명, X/Y 좌표를 제공한다. 따라서 테이블은 원본 natural key를 보존하고, 후처리(`loaders/postload.py`)에서 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + bjd_cd (+ zip_no)`로 조인해 `bd_mgt_sn`을 해소한다. 이 해소가 실패한 행은 reverse/geocode MV의 대표 출입구 후보에서 제외하되, 정합성 리포트에서 비율을 추적한다.
+중요: 실제 `202604_위치정보요약DB_전체분.zip`의 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 원본은 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 지상/지하, 건물 본·부번, 우편번호, 용도, 출입구 구분, 행정동명, X/Y 좌표를 제공한다. 따라서 테이블은 원본 natural key를 보존하고, 후처리(`loaders/postload.py`)에서 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + left(bjd_cd, 8) (+ zip_no)`로 조인해 `bd_mgt_sn`을 해소한다. 이 해소가 실패한 행은 reverse/geocode MV의 대표 출입구 후보에서 제외하되, 정합성 리포트에서 비율을 추적한다. 읍면동 코드 끝 00과 상세 리 코드를 같은 주소로 연결할 수 있도록 법정동은 앞 8자리 읍면동을 비교하고 원본 10자리 값은 보존한다. 건물번호의 NULL 비교와 양쪽 우편번호가 있을 때의 일치 조건은 유지한다. 위치정보요약 재적재 시 이전에 파생한 관리번호를 비우며 정합성 검사 전에 연결을 해소한다. 내비게이션 출입구도 읍면동 8자리로 비교한다.
 
 ```sql
 CREATE TABLE tl_locsum_entrc (
@@ -260,7 +260,7 @@ CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, b
 | `tl_scco_li` | `li_cd` | MULTIPOLYGON 5179 | 리 polygon |
 | `region_radius_parts` | `(level, code, part_no)` | GEOMETRY 5179 | `/v2/regions/within-radius` 가속용 재생성 테이블. 시도·시군구·읍면동 polygon을 `ST_Subdivide`로 쪼개고 parent code를 보관한다. |
 | `tl_kodis_bas` | `bas_mgt_sn` | MULTIPOLYGON 5179 | 우편번호(기초구역) polygon |
-| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon. 원천 `BD_MGT_SN`은 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, `rncode_full + 건물구분 + 본번/부번 + bjd_cd` natural key 검증용 속성을 함께 보관한다. `LI_CD=''`는 generated `bjd_cd`에서 `00`으로 보정해 정본 10자리 법정동 코드와 맞춘다. |
+| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon. 원천 `BD_MGT_SN`은 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않는다. `rncode_full` 또는 `sig_cd || rn_cd`와 건물구분·본번/부번·`bjd_cd`로 연결하며 원본 코드는 보존한다([ADR-072](../adr/072-polygon-address-sigungu-link.md)). `LI_CD=''`는 generated `bjd_cd`에서 `00`으로 보정한다. |
 | `tl_sprd_manage` | `(sig_cd, rds_man_no)` | MULTILINESTRING 5179 | 도로 관리 LineString. C8 도로 인접성 검증은 이 geometry를 사용한다. |
 | `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | 속성 보조 | 도로 구간 |
 | `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTIPOLYGON 5179 | 도로 폭/도로면 polygon. 2026년 실제 도로명주소 전자지도 `TL_SPRD_RW` SHP 헤더가 `Polygon`이므로 테이블도 `MULTIPOLYGON`으로 보관한다. C8 인접성 검증은 `rds_man_no`가 있는 `tl_sprd_manage.geom`을 기준으로 수행한다. |
