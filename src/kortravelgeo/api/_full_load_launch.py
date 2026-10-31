@@ -27,9 +27,15 @@ from kortravelgeo.api._dagster_client import (
 from kortravelgeo.exceptions import KorTravelGeoError
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
+from kortravelgeo.infra.concurrency import (
+    AdvisoryLockKey,
+    AdvisoryLockNamespace,
+    cross_process_lock,
+)
 from kortravelgeo.infra.db_capabilities import require_db_lifecycle
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.scratch_db import ensure_scratch_database, scratch_database_dsn
+from kortravelgeo.infra.source_rebuild_service import SourceRebuildService
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -118,7 +124,25 @@ async def launch_full_load_batch_dagster_run(
     the serving DB is never opened.
     """
 
-    children = batch_children(payload)
+    resume_from = payload.get("resume_from_batch_id")
+    if resume_from:
+        if payload.get("target_database") or payload.get("forced_promotion"):
+            raise KorTravelGeoError(
+                "정합성 재개에 대상 DB 변경·강제 승격을 사용할 수 없습니다.", http_status=400
+            )
+        async with cross_process_lock(
+            engine, AdvisoryLockKey.global_key(AdvisoryLockNamespace.SOURCE_STATE)
+        ):
+            checked = await SourceRebuildService(engine).prepare_consistency_resume(
+                str(payload.get("source_match_set_id", "")),
+                str(resume_from),
+                expected_manifest=payload.get("source_checkpoint"),
+            )
+            root = await AdminRepository(engine).insert_load_batch(
+                payload=checked, children=[], executor="dagster"
+            )
+        return await _launch_inserted_batch(engine, settings, root.job_id, checked)
+    children = list(batch_children(payload))
     if payload.get("target_database"):
         # T-312: the scratch DB needs CREATE DATABASE via the maintenance DB — refuse (E0410)
         # before any DB is created or row inserted on an instance whose role cannot.
@@ -127,27 +151,29 @@ async def launch_full_load_batch_dagster_run(
         root = await AdminRepository(control_engine).insert_load_batch(
             payload=payload, children=children, executor="dagster"
         )
-        batch_id = root.job_id
-        run_config = {
-            "ops": {"run_full_load_batch": {"config": {"job_id": batch_id, "payload": payload}}}
-        }
-        try:
-            await launch_dagster_run(
-                settings,
-                job_name="full_load_batch",
-                run_config=run_config,
-                tags={"kor_travel_geo.job_id": batch_id},
-            )
-        except _LAUNCH_ERRORS as exc:
-            if await LoadJobExecutor(control_engine).mark_launch_failed(
-                batch_id, f"Dagster launch failed: {exc}"
-            ):
-                await AdminRepository(control_engine).cancel_queued_batch_children(batch_id)
-                raise KorTravelGeoError(
-                    "Dagster full-load launch failed", http_status=502
-                ) from exc
-            # run이 이미 root를 adopt했다 — children은 그 run이 이어서 돈다(T-318).
-        return batch_id
+        return await _launch_inserted_batch(control_engine, settings, root.job_id, payload)
+
+
+async def _launch_inserted_batch(
+    engine: AsyncEngine, settings: Settings, batch_id: str, payload: dict[str, Any]
+) -> str:
+    """입력 검증·행 생성 잠금을 반납한 뒤 실행을 제출해 새 워커와 경합하지 않는다."""
+    run_config = {
+        "ops": {"run_full_load_batch": {"config": {"job_id": batch_id, "payload": payload}}}
+    }
+    try:
+        await launch_dagster_run(
+            settings, job_name="full_load_batch", run_config=run_config,
+            tags={"kor_travel_geo.job_id": batch_id},
+        )
+    except _LAUNCH_ERRORS as exc:
+        if await LoadJobExecutor(engine).mark_launch_failed(
+            batch_id, f"Dagster launch failed: {exc}"
+        ):
+            await AdminRepository(engine).cancel_queued_batch_children(batch_id)
+            raise KorTravelGeoError("Dagster full-load launch failed", http_status=502) from exc
+        # run이 이미 root를 adopt했다 — 그 run이 이어서 돈다(T-318).
+    return batch_id
 
 
 async def launch_source_load_dagster_run(
@@ -214,6 +240,11 @@ async def _launch_control_job(
     )
     job_id = row.job_id
     run_config = {"ops": {op_name: {"config": {"job_id": job_id, "payload": payload}}}}
+    if kind == "source_rebuild_db" and payload.get("resume_from_batch_id"):
+        # 이전 코드 서버는 모르는 최상위 설정을 거부한다. payload만 보내면 옛 op가
+        # 재개 필드를 무시하고 전체 재적재를 실행할 수 있다.
+        config = run_config["ops"][op_name]["config"]
+        config["resume_from_batch_id"] = payload["resume_from_batch_id"]
     try:
         await launch_dagster_run(
             settings,

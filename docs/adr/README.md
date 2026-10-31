@@ -16,6 +16,7 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
+| ADR-074 | 완료 원천을 검증하고 정합성부터 새 배치로 재개한다 | [074-consistency-stage-resume.md](074-consistency-stage-resume.md) |
 | ADR-073 | 원천 좌표를 보존하고 검증된 좌표만 서빙한다 | [073-serving-coordinate-quarantine.md](073-serving-coordinate-quarantine.md) |
 | ADR-072 | 건물 도형의 주소 연결은 소재지 시군구 코드도 사용한다 | [072-polygon-address-sigungu-link.md](072-polygon-address-sigungu-link.md) |
 | ADR-071 | 보조 geometry timeout은 좌표와 분리하고 요청 수명을 따른다 | [071-optional-geometry-timeout-and-request-lifetime.md](071-optional-geometry-timeout-and-request-lifetime.md) |

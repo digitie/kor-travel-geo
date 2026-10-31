@@ -207,3 +207,7 @@ Windows에서는 같은 서버의 TCP 연결이 되는데 WSL SSH만 `No route t
 ## 18. 브라우저 식별에 연결된 관리 UI 세션
 
 관리 UI 세션은 User-Agent 식별값에 연결된다. Firefox 로그인 상태 파일을 Chromium에서 재사용하면 보호 조회가 401일 수 있다. 상태 파일을 브라우저별로 구분하고 같은 브라우저에서 재개하거나 실제 로그인 UI로 다시 인증한다. 식별값을 위조하거나 제품 인증 검증을 완화하지 않는다. 요청 접수 전 인증 실패와 실제 DB 작업 실패를 구분해 중복 재구축을 피한다.
+
+## SQLAlchemy text의 JSON 리터럴
+
+`text()` 안에 JSON 문자열을 직접 넣으면 `:true`처럼 콜론 다음 값이 이름 있는 바인드 변수로 해석될 수 있다. 실제 PostgreSQL CI에서 JSON 변경 fixture가 이 이유로 실패했다. `CAST(:payload AS jsonb)`와 JSON 직렬화 매개변수를 사용한다. 테스트 자료도 문자열 보간으로 SQL에 넣지 않으며 실제 DB 회귀를 생략 없이 확인한다.

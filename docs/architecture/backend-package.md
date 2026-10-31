@@ -4,6 +4,8 @@
 
 ## 1. 개요
 
+전체분의 정합성 단계 재개는 `POST /v1/admin/source-match-sets/{id}/rebuild-db`의 선택 필드 `resume_from_batch_id`로 요청한다. 같은 완료 원천·manifest와 변경 이력을 검증하고 원천 재전개·재적재 없이 새 배치의 정합성·MV·정상 승격을 실행한다. 원천 쓰기와의 공유/배타 잠금, 이전 실패 이력 보존, 이전 코드 서버의 실행 전 거부는 [ADR-074](../adr/074-consistency-stage-resume.md)와 [운영 런북](../runbooks/batch-consistency-resume.md)을 따른다.
+
 `kor-travel-geo`(이하 본 패키지)는 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
 
 - **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저, 주소 조회는 후보 목록 응답만 공개

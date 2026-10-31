@@ -112,6 +112,7 @@ jobs:
             tests/integration/test_maintenance_statement_timeout.py \
             tests/integration/test_polygon_address_links.py \
             tests/integration/test_serving_coordinate_quality.py \
+            tests/integration/test_consistency_resume.py \
             tests/integration/test_region_radius_lock_timeout.py \
             tests/integration/test_region_radius_swap.py \
             tests/integration/test_dead_client_statement_cancel.py
@@ -142,6 +143,7 @@ jobs:
               "test_maintenance_statement_timeout": 4,
               "test_polygon_address_links": 1,
               "test_serving_coordinate_quality": 13,
+              "test_consistency_resume": 14,
               "test_region_radius_lock_timeout": 3,
               "test_region_radius_swap": 11,
               "test_dead_client_statement_cancel": 2,

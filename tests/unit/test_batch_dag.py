@@ -10,11 +10,14 @@ full-load e2e (opt-in) and the M5 live e2e.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
 
+from kortravelgeo.exceptions import ConflictError
+from kortravelgeo.infra.concurrency import AdvisoryLockNamespace
 from kortravelgeo.loaders import batch_dag
 from kortravelgeo.loaders.batch_dag import FullLoadBatchGateError, run_full_load_batch
 
@@ -192,6 +195,82 @@ async def test_gate_blocks_mv_on_consistency_error(monkeypatch: pytest.MonkeyPat
     # consistency ran, but the ERROR gate blocked mv: no mv child inserted, no mv leaf call.
     assert harness.mv_payloads == []
     assert [kind for kind, _ in _FakeRepo.inserts] == ["consistency_check"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("severity", ["WARN", "ERROR"])
+async def test_resume_reuses_sources_and_keeps_new_batch_gate(monkeypatch, severity):
+    harness = _Harness(severity=severity)
+    _install_harness(monkeypatch, harness)
+    events = []
+    checked = {
+        "resume_from_batch_id": "old-failed",
+        "source_match_set_id": "match-1",
+        "reused_source_jobs": [{"job_id": "old-source", "kind": "juso_text_load"}],
+    }
+
+    @asynccontextmanager
+    async def guard(engine, key):
+        assert key.namespace == AdvisoryLockNamespace.SOURCE_STATE
+        events.append("guard")
+        try:
+            yield
+        finally:
+            events.append("released")
+
+    async def validate(match_id, previous_id, **kwargs):
+        assert events == ["guard"]
+        assert (match_id, previous_id, kwargs["current_batch_id"]) == (
+            "match-1",
+            "old-failed",
+            "batch-1",
+        )
+        return checked
+
+    monkeypatch.setattr(batch_dag, "cross_process_lock", guard)
+    monkeypatch.setattr(
+        batch_dag,
+        "SourceRebuildService",
+        lambda _: SimpleNamespace(prepare_consistency_resume=validate),
+    )
+
+    async def reject_fetch(*args):
+        raise AssertionError("재사용 원천을 새 실행이 인수하거나 다시 적재하면 안 됩니다.")
+
+    monkeypatch.setattr(batch_dag, "_fetch_source_children", reject_fetch)
+    if severity == "ERROR":
+        with pytest.raises(FullLoadBatchGateError):
+            await _run(checked)
+        assert harness.mv_payloads == []
+    else:
+        result = await _run(checked)
+        assert result["source_children"] == 0 and result["reused_source_children"] == 1
+        assert harness.mv_payloads[0]["load_batch_id"] == "batch-1"
+        assert harness.mv_payloads[0]["serving_quality_run_id"] == "quality-1"
+    assert harness.source_calls == []
+    adopted = next(event[1] for event in _FakeExecutor.events if event[0] == "adopt")
+    assert adopted == "consistency_check-child"
+    assert events == ["guard", "released"]
+
+
+@pytest.mark.asyncio
+async def test_resume_rechecks_sources_before_creating_any_child(monkeypatch):
+    @asynccontextmanager
+    async def guard(*args):
+        yield
+
+    async def invalid(*args, **kwargs):
+        raise ConflictError("원천이 변경됐습니다.")
+
+    monkeypatch.setattr(batch_dag, "cross_process_lock", guard)
+    monkeypatch.setattr(
+        batch_dag,
+        "SourceRebuildService",
+        lambda _: SimpleNamespace(prepare_consistency_resume=invalid),
+    )
+    with pytest.raises(ConflictError):
+        await _run({"resume_from_batch_id": "old-failed", "source_match_set_id": "match-1"})
+    assert _FakeRepo.inserts == [] and _FakeExecutor.events == []
 
 
 @pytest.mark.asyncio

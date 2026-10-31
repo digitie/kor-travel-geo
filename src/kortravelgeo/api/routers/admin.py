@@ -1658,6 +1658,14 @@ async def rebuild_source_match_set_db(
     promotion block — never the integrity gate above, an unavailable group, or a
     match set ``integrity_alert`` (doc ~1559, ADR-049 #13).
     """
+    if req.resume_from_batch_id and req.force_promotion:
+        raise InvalidInputError("정합성 재개는 강제 승격과 함께 사용할 수 없습니다.")
+    if req.resume_from_batch_id:
+        from kortravelgeo.infra.source_rebuild_service import SourceRebuildService
+
+        await SourceRebuildService(client._engine()).prepare_consistency_resume(
+            source_match_set_id, req.resume_from_batch_id,
+        )
     if req.force_promotion:
         if not ctx.has_any_role(frozenset({ROLE_DESTRUCTIVE_ADMIN})):
             raise ForbiddenError(
@@ -1680,6 +1688,8 @@ async def rebuild_source_match_set_db(
             "reason": req.reason,
             "download_concurrency": req.download_concurrency,
             "materialize_concurrency": req.materialize_concurrency,
+            **({"resume_from_batch_id": req.resume_from_batch_id}
+               if req.resume_from_batch_id else {}),
         },
     )
     await client.record_audit_event(
@@ -1690,6 +1700,8 @@ async def rebuild_source_match_set_db(
         payload={
             "force_promotion": req.force_promotion,
             "reason": req.reason,
+            **({"resume_from_batch_id": req.resume_from_batch_id}
+               if req.resume_from_batch_id else {}),
         },
         resource_type="source_match_set",
         resource_id=source_match_set_id,
@@ -1701,7 +1713,9 @@ async def rebuild_source_match_set_db(
         enqueued=True,
         job_id=job_id,
         forced_promotion=req.force_promotion,
-        message="rebuild prepare job queued; integrity gate will run asynchronously",
+        message=("정합성 재개 준비가 접수됐습니다. 원천 검증 뒤 새 배치를 시작합니다."
+                 if req.resume_from_batch_id else
+                 "rebuild prepare job queued; integrity gate will run asynchronously"),
     )
 
 

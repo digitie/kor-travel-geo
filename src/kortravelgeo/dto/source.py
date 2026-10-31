@@ -949,6 +949,12 @@ class SourceRebuildDbRequest(FrozenModel):
     reason: str | None = None
     download_concurrency: int = Field(default=3, ge=1, le=8)
     materialize_concurrency: int = Field(default=2, ge=1, le=8)
+    resume_from_batch_id: str | None = Field(
+        default=None,
+        pattern=r"^batch_[0-9a-f]{32}$",
+        description=("완료 원천이 현재 DB와 일치하는 실패·취소 배치를 정합성부터 재개한다. "
+                     "강제 승격과 함께 사용할 수 없다."),
+    )
 
 
 class SourceRebuildDbResponse(FrozenModel):

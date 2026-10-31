@@ -367,6 +367,26 @@ describe("SourceFilesPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("정합성 재개는 이전 배치 ID를 요구하고 강제 승격을 해제한다", async () => {
+    renderPanel("match");
+    const force = await screen.findByRole("checkbox", { name: /consistency ERROR 강제 승급/ });
+    fireEvent.click(force);
+    fireEvent.change(screen.getByLabelText("실행 방식"), { target: { value: "consistency" } });
+    expect(screen.queryByRole("checkbox", { name: /consistency ERROR 강제 승급/ })).not.toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: "정합성부터 재개" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("재개할 이전 전체 배치 ID"), { target: { value: "invalid" } });
+    expect(submit).toBeDisabled();
+    const batch = "batch_" + "a".repeat(32);
+    fireEvent.change(screen.getByLabelText("재개할 이전 전체 배치 ID"), { target: { value: " " + batch + " " } });
+    fireEvent.click(submit);
+    await waitFor(() => expect(apiMocks.postJson).toHaveBeenCalledWith(
+      "/admin/source-match-sets/ms_active/rebuild-db", expect.objectContaining({
+        resume_from_batch_id: batch, force_promotion: false, typed_confirmation: null
+      })
+    ));
+  });
+
   it("목록 탭 상단에 용량/이슈 요약 카드를 렌더한다", async () => {
     renderPanel("list");
     const summary = (await screen.findByText("용량 / 이슈 요약")).closest(

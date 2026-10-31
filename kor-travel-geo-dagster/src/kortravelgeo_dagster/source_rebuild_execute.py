@@ -59,6 +59,9 @@ SOURCE_REBUILD_DB_JOB_TAGS: Final[dict[str, str]] = {
 }
 
 _CONFIG_SCHEMA: Final[dict[str, object]] = {
+    "resume_from_batch_id": Field(
+        String, is_required=False, description="정합성 재개 지원 계약 표식"
+    ),
     "job_id": Field(
         String,
         description="The source_rebuild_db control load_jobs id the API created before launching.",
@@ -109,6 +112,8 @@ async def run_source_rebuild_db_op(context: OpExecutionContext) -> dict[str, obj
     config = cast("Mapping[str, Any]", context.op_config)
     job_id = str(config["job_id"])
     payload = dict(cast("Mapping[str, Any]", config["payload"]))
+    if payload.get("resume_from_batch_id") != config.get("resume_from_batch_id"):
+        raise ValueError("정합성 재개 표식과 배치 입력이 일치하지 않습니다.")
 
     source_match_set_id = _payload_str(payload, "source_match_set_id")
     if source_match_set_id is None:
@@ -134,6 +139,8 @@ async def run_source_rebuild_db_op(context: OpExecutionContext) -> dict[str, obj
                 reason=reason,
                 download_concurrency=download_concurrency,
                 materialize_concurrency=materialize_concurrency,
+                **({"resume_from_batch_id": payload["resume_from_batch_id"]}
+                   if payload.get("resume_from_batch_id") else {}),
                 progress=progress,
             )
             if batch_payload is None:
@@ -155,7 +162,9 @@ async def run_source_rebuild_db_op(context: OpExecutionContext) -> dict[str, obj
             await progress(
                 progress=0.80,
                 stage="full_load_batch_launch",
-                message="source rebuild materialized; launching full_load_batch",
+                message=("완료 원천 검증 통과; 정합성 재개 배치 시작"
+                         if payload.get("resume_from_batch_id") else
+                         "source rebuild materialized; launching full_load_batch"),
             )
             batch_job_id = await launch_full_load_batch_dagster_run(engine, settings, batch_payload)
             await AdminRepository(engine).link_job_to_batch(job_id, batch_job_id)
