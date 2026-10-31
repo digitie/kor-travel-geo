@@ -132,7 +132,8 @@ def discover_sido_datasets(path: Path | str) -> tuple[JusoSidoDataset, ...]:
 
 def read_shp_header(path: Path | str) -> ShpHeader:
     shp_path = Path(path)
-    data = shp_path.read_bytes()[:100]
+    with shp_path.open("rb") as stream:
+        data = stream.read(100)
     if len(data) != 100:
         msg = f"invalid SHP header length: {shp_path}"
         raise LoaderError(msg)
