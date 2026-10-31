@@ -137,7 +137,7 @@ jobs:
               "test_serving_release_lineage_race": 2,
               "test_dataset_version_projection": 3,
               "test_backup_restore_hot_swap_roundtrip": 3,
-              "test_maintenance_statement_timeout": 3,
+              "test_maintenance_statement_timeout": 4,
               "test_region_radius_lock_timeout": 3,
               "test_region_radius_swap": 11,
               "test_dead_client_statement_cancel": 2,

@@ -110,7 +110,7 @@ CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 
 건물 출입구 좌표의 **정본**. 한 건물에 출입구가 여러 개일 수 있고 `ent_se_cd`로 대표/부속을 구분한다.
 
-중요: 실제 `202604_위치정보요약DB_전체분.zip`의 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 원본은 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 지상/지하, 건물 본·부번, 우편번호, 용도, 출입구 구분, 행정동명, X/Y 좌표를 제공한다. 따라서 테이블은 원본 natural key를 보존하고, 후처리(`loaders/postload.py`)에서 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + bjd_cd (+ zip_no)`로 조인해 `bd_mgt_sn`을 해소한다. 이 해소가 실패한 행은 reverse/geocode MV의 대표 출입구 후보에서 제외하되, 정합성 리포트에서 비율을 추적한다.
+중요: 실제 `202604_위치정보요약DB_전체분.zip`의 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 원본은 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 지상/지하, 건물 본·부번, 우편번호, 용도, 출입구 구분, 행정동명, X/Y 좌표를 제공한다. 따라서 테이블은 원본 natural key를 보존하고, 후처리(`loaders/postload.py`)에서 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + left(bjd_cd, 8) (+ zip_no)`로 조인해 `bd_mgt_sn`을 해소한다. 이 해소가 실패한 행은 reverse/geocode MV의 대표 출입구 후보에서 제외하되, 정합성 리포트에서 비율을 추적한다. 읍면동 코드 끝 00과 상세 리 코드를 같은 주소로 연결할 수 있도록 법정동은 앞 8자리 읍면동을 비교하고 원본 10자리 값은 보존한다. 건물번호의 NULL 비교와 양쪽 우편번호가 있을 때의 일치 조건은 유지한다. 위치정보요약 재적재 시 이전에 파생한 관리번호를 비우며 정합성 검사 전에 연결을 해소한다. 내비게이션 출입구도 읍면동 8자리로 비교한다.
 
 ```sql
 CREATE TABLE tl_locsum_entrc (

@@ -136,13 +136,33 @@ async def test_full_snapshot_replaces_absent_keys_and_rolls_back_failed_copy(
                     "VALUES (:sn,'1111010100100010000','1111010100','0',1,'11110',"
                     "'3100001','jibun_full')"
                 ), {"sn": _juso_row(1, old_month).bd_mgt_sn})
+        if kind == "locsum":
+            async with engine.begin() as conn:
+                await conn.execute(text(
+                    "UPDATE tl_locsum_entrc SET bd_mgt_sn='stale-derived-link' "
+                    "WHERE ent_man_no=2"
+                ))
         await apply([2, 3], "202609")
         async with engine.connect() as conn:
             assert await conn.scalar(text(f"SELECT count(*) FROM {table}")) == 3
+            if kind == "locsum":
+                assert await conn.scalar(text(
+                    "SELECT bd_mgt_sn FROM tl_locsum_entrc WHERE ent_man_no=2"
+                )) is None
+        if kind == "locsum":
+            async with engine.begin() as conn:
+                await conn.execute(text(
+                    "UPDATE tl_locsum_entrc SET bd_mgt_sn='stale-derived-link' "
+                    "WHERE ent_man_no=2"
+                ))
         await apply([2, 3], "202609", replace=True)
         async with engine.connect() as conn:
             assert await conn.scalar(text(f"SELECT count(*) FROM {table}")) == 2
             assert await conn.scalar(text(f"SELECT min(source_yyyymm) FROM {table}")) == "202609"
+            if kind == "locsum":
+                assert await conn.scalar(text(
+                    "SELECT bd_mgt_sn FROM tl_locsum_entrc WHERE ent_man_no=2"
+                )) is None
             if kind == "juso":
                 assert await conn.scalar(text("SELECT count(*) FROM tl_juso_parcel_link")) == 0
         with pytest.raises(InvalidInputError):

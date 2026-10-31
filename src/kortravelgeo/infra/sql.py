@@ -1511,7 +1511,7 @@ UPDATE tl_locsum_entrc e
    AND e.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
    AND e.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
    AND e.buld_slno IS NOT DISTINCT FROM j.buld_slno
-   AND e.bjd_cd = j.bjd_cd
+   AND left(e.bjd_cd, 8) = left(j.bjd_cd, 8)
    AND (e.zip_no IS NULL OR j.zip_no IS NULL OR e.zip_no = j.zip_no);
 
 UPDATE tl_navi_entrc e
@@ -1522,7 +1522,7 @@ UPDATE tl_navi_entrc e
    AND e.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
    AND e.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
    AND e.buld_slno IS NOT DISTINCT FROM j.buld_slno
-   AND (e.bjd_cd IS NULL OR e.bjd_cd = j.bjd_cd);
+   AND (e.bjd_cd IS NULL OR left(e.bjd_cd, 8) = left(j.bjd_cd, 8));
 
 ANALYZE tl_juso_text;
 ANALYZE tl_locsum_entrc;
