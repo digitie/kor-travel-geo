@@ -247,3 +247,229 @@ AND kind NOT IN ('consistency_check','mv_refresh') ORDER BY created_at
 
     visit(plan[0]["Plan"])
     assert "idx_load_jobs_parent" in indexes
+
+
+@pytest_asyncio.fixture
+async def repaired_sources(completed_sources, monkeypatch):
+    f = completed_sources
+    groups = await f.service._build_group_refs(f.conn, f.match_id)
+    shp = RebuildGroupRef(
+        category="electronic_map_full",
+        source_file_group_id=str(uuid4()),
+        group_sha256="c" * 64,
+        user_yyyymm="202610",
+        effective_yyyymm="202610",
+        load_kinds=("shp_polygons_load",),
+        object_keys=(),
+        file_ids=(str(uuid4()), str(uuid4())),
+        storage_uris=(),
+        files=(),
+    )
+    monkeypatch.setattr(
+        SourceRebuildService, "_build_group_refs", AsyncMock(return_value=(*groups, shp))
+    )
+    plan = f.service._assemble_plan(f.match_id, (*groups, shp))
+    await f.conn.execute(
+        text("UPDATE load_jobs SET payload=CAST(:payload AS jsonb) WHERE job_id=:id"),
+        {"payload": json.dumps(plan.batch_payload), "id": BATCH},
+    )
+    shp_payload = next(
+        c["payload"] for c in plan.batch_payload["children"] if c["kind"] == "shp_polygons_load"
+    )
+    await f.conn.execute(
+        text("""
+INSERT INTO load_jobs(job_id,kind,state,payload,parent_job_id,load_batch_id,started_at,finished_at)
+VALUES ('original-shp','shp_polygons_load','done',CAST(:payload AS jsonb),:parent,:parent,
+ now()-interval '15min',now()-interval '11min')
+"""),
+        {"payload": json.dumps(shp_payload), "parent": BATCH},
+    )
+    abandoned = "batch_" + "3" * 32
+    repaired = "batch_" + "4" * 32
+    payload = dict(plan.batch_payload)
+    payload.update(
+        source_batch_id=BATCH,
+        repair_from_batch_id=abandoned,
+        forced_promotion=False,
+        reused_source_jobs=[
+            {"job_id": "source-0", "kind": "juso_text_load"},
+            {"job_id": "source-1", "kind": "juso_parcel_link_load"},
+        ],
+        repair_preserved_sidos=["보존시도"],
+        repair_remaining_sidos=["복구시도"],
+    )
+    replacement = dict(
+        shp_payload,
+        mode="append",
+        repair_preserved_sidos=["보존시도"],
+        repair_remaining_sidos=["복구시도"],
+    )
+    payload["children"] = [{"kind": "shp_polygons_load", "payload": replacement}]
+    for job_id, state, body in (
+        (abandoned, "cancelled", plan.batch_payload),
+        (repaired, "failed", payload),
+    ):
+        await f.conn.execute(
+            text("""
+INSERT INTO load_jobs(job_id,kind,state,payload)
+VALUES (:id,'full_load_batch',:state,CAST(:payload AS jsonb))
+"""),
+            {"id": job_id, "state": state, "payload": json.dumps(body)},
+        )
+    for i, child in enumerate(plan.batch_payload["children"]):
+        await f.conn.execute(
+            text("""
+INSERT INTO load_jobs(job_id,kind,state,payload,parent_job_id,load_batch_id,started_at,finished_at)
+VALUES (:id,:kind,'cancelled',CAST(:payload AS jsonb),:parent,:parent,
+ CASE WHEN :kind='shp_polygons_load' THEN now()-interval '4min' END,now()-interval '3min')
+"""),
+            {
+                "id": f"abandoned-{i}",
+                "kind": child["kind"],
+                "payload": json.dumps(child["payload"]),
+                "parent": abandoned,
+            },
+        )
+    await f.conn.execute(
+        text("""
+INSERT INTO load_jobs(job_id,kind,state,payload,parent_job_id,load_batch_id,started_at,finished_at)
+VALUES ('repaired-shp','shp_polygons_load','done',CAST(:payload AS jsonb),:parent,:parent,
+ now()-interval '2min',now()-interval '1min')
+"""),
+        {"payload": json.dumps(replacement), "parent": repaired},
+    )
+    await f.conn.execute(
+        text("""
+INSERT INTO load_manifest(table_name,row_count,source_yyyymm,updated_at)
+VALUES ('tl_spbd_buld_polygon',100,'202610',now()-interval '90sec')
+""")
+    )
+    f.repaired = repaired
+    f.abandoned = abandoned
+    return f
+
+
+@pytest.mark.asyncio
+async def test_repaired_sources_resume_with_genuine_completed_source_ids(repaired_sources):
+    f = repaired_sources
+    result = await f.service.prepare_consistency_resume(f.match_id, f.repaired)
+    assert result["source_batch_id"] == BATCH
+    assert result["source_cohort_batch_id"] == f.repaired
+    assert {r["job_id"] for r in result["reused_source_jobs"]} == {
+        "source-0",
+        "source-1",
+        "repaired-shp",
+    }
+    assert "children" not in result and len(result["source_checkpoint"]) == 3
+    assert (
+        await f.conn.scalar(text("SELECT state FROM load_jobs WHERE job_id=:id"), {"id": BATCH})
+        == "failed"
+    )
+    assert (
+        await f.conn.scalar(
+            text("SELECT state FROM load_jobs WHERE job_id=:id"), {"id": f.abandoned}
+        )
+        == "cancelled"
+    )
+    with pytest.raises(ConflictError, match="다른 원천"):
+        await f.service.prepare_consistency_resume(f.match_id, BATCH)
+
+
+@pytest.mark.asyncio
+async def test_repaired_consistency_resume_preserves_cohort_on_repeat(repaired_sources):
+    f = repaired_sources
+    payload = await f.service.prepare_consistency_resume(f.match_id, f.repaired)
+    next_batch = "batch_" + "5" * 32
+    await f.conn.execute(
+        text("""
+INSERT INTO load_jobs(job_id,kind,state,payload)
+VALUES (:id,'full_load_batch','failed',CAST(:payload AS jsonb))
+"""),
+        {"id": next_batch, "payload": json.dumps(payload)},
+    )
+    result = await f.service.prepare_consistency_resume(f.match_id, next_batch)
+    assert result["resume_from_batch_id"] == next_batch
+    assert result["source_cohort_batch_id"] == f.repaired
+    assert result["reused_source_jobs"] == payload["reused_source_jobs"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change",
+    [
+        "incomplete",
+        "changed_file",
+        "stale_preserved",
+        "wrong_reuse",
+        "duplicate_partition",
+        "other_abandoned_source_ran",
+        "overlap",
+        "unknown_writer",
+        "earlier_unknown_writer",
+        "active_writer",
+    ],
+)
+async def test_repaired_sources_reject_unproven_or_concurrent_history(repaired_sources, change):
+    f = repaired_sources
+    if change == "incomplete":
+        await f.conn.execute(
+            text("UPDATE load_jobs SET state='failed' WHERE job_id='repaired-shp'")
+        )
+    elif change == "changed_file":
+        await f.conn.execute(
+            text(
+                "UPDATE load_jobs SET payload=jsonb_set(payload,'{group_sha256}','\"다른해시\"') "
+                "WHERE job_id='repaired-shp'"
+            )
+        )
+    elif change == "stale_preserved":
+        await f.conn.execute(
+            text("UPDATE load_manifest SET updated_at=now() WHERE table_name='tl_juso_text'")
+        )
+    elif change == "wrong_reuse":
+        await f.conn.execute(
+            text(
+                "UPDATE load_jobs SET payload=jsonb_set(payload,"
+                "'{reused_source_jobs,0,job_id}','\"original-shp\"') WHERE job_id=:id"
+            ),
+            {"id": f.repaired},
+        )
+    elif change == "duplicate_partition":
+        await f.conn.execute(
+            text(
+                "UPDATE load_jobs SET payload=jsonb_set(payload,"
+                "'{repair_remaining_sidos}',CAST(:names AS jsonb)) "
+                "WHERE job_id IN (:root,'repaired-shp')"
+            ),
+            {"root": f.repaired, "names": json.dumps(["보존시도"])},
+        )
+    elif change == "other_abandoned_source_ran":
+        await f.conn.execute(
+            text(
+                "UPDATE load_jobs SET started_at=now()-interval '4min' "
+                "WHERE parent_job_id=:id AND kind='juso_text_load'"
+            ),
+            {"id": f.abandoned},
+        )
+    elif change == "overlap":
+        await f.conn.execute(
+            text(
+                "UPDATE load_jobs SET finished_at=now() "
+                "WHERE parent_job_id=:id AND kind='shp_polygons_load'"
+            ),
+            {"id": f.abandoned},
+        )
+    else:
+        await f.conn.execute(
+            text("""
+INSERT INTO load_jobs(job_id,kind,state,payload,started_at,finished_at)
+VALUES ('unknown-shp','shp_polygons_load',:state,'{}',
+ now()-make_interval(mins => :minutes),now()-make_interval(mins => :minutes)+interval '1min')
+"""),
+            {
+                "state": "running" if change == "active_writer" else "failed",
+                "minutes": 14 if change == "earlier_unknown_writer" else 2,
+            },
+        )
+    with pytest.raises(ConflictError):
+        await f.service.prepare_consistency_resume(f.match_id, f.repaired)
