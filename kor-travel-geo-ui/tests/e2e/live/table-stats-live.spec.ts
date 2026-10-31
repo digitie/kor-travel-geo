@@ -36,11 +36,11 @@ test.describe("LIVE /admin/tables 행 수 (#515)", () => {
     for (const row of rows) {
       expect(row.row_count, `${row.table_name} row_count`).toBeGreaterThanOrEqual(0);
     }
-    // Whatever the count, the API must say whether it is a guess.
+    // 이 플래그는 통계 기준 유무다. false여도 통계 행 수가 확정치가 되는 것은 아니다.
     expect(typeof populated!.row_count_estimated).toBe("boolean");
   });
 
-  test("추정치 표시가 API 플래그와 일치하고 범례가 함께 뜬다", async ({ page }) => {
+  test("분석 이력이 있어도 추정치와 갱신 시각의 의미를 표시한다", async ({ page }) => {
     test.skip(!process.env.LIVE_E2E, "Live full-stack test — run with LIVE_E2E=1 and the stack up");
     await loginLiveAdminPage(page, "/admin");
 
@@ -50,19 +50,16 @@ test.describe("LIVE /admin/tables 행 수 (#515)", () => {
       row_count: number;
       row_count_estimated?: boolean;
     }[];
-    const anyEstimated = rows.some((r) => r.row_count_estimated);
 
     await page.goto("/admin/tables", { waitUntil: "networkidle" });
     await expect(page.getByRole("table", { name: "PostgreSQL 테이블 통계" })).toBeVisible({
       timeout: LIVE_TIMEOUT
     });
 
-    // The legend explains `≈` for sighted touch users (title tooltips never surface there), and
-    // must appear exactly when at least one row is actually an estimate.
-    const legend = page.getByText("표시는 해당 테이블에 vacuum/analyze 기록이 없어", {
+    const legend = page.getByText("표시된 행 수는 통계 기반 추정치입니다", {
       exact: false
     });
-    await expect(legend).toHaveCount(anyEstimated ? 1 : 0);
+    await expect(legend).toHaveCount(rows.length > 0 ? 1 : 0);
 
     // The populated table's rendered count must match the API, digit-grouped.
     const populated = rows.find((r) => r.table_name === POPULATED_TABLE)!;
@@ -71,7 +68,7 @@ test.describe("LIVE /admin/tables 행 수 (#515)", () => {
     await expect(row).toContainText(populated.row_count.toLocaleString(), {
       timeout: LIVE_TIMEOUT
     });
-    // `≈` shows on estimated rows only.
-    await expect(row).toContainText(populated.row_count_estimated ? "≈" : populated.row_count.toLocaleString());
+    await expect(row).toContainText("≈");
+    await expect(page.getByRole("columnheader", { name: "통계 갱신" })).toBeVisible();
   });
 });

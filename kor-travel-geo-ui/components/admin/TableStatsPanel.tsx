@@ -26,24 +26,20 @@ const columns: VirtualColumn<TableStat>[] = [
   },
   {
     key: "row_count",
-    header: "행 수",
+    header: "추정 행 수",
     align: "right",
     sortValue: (r) => r.row_count,
-    // `≈` when the count came from the planner's estimate because this database's statistics
-    // were reset (restore / hot-swap) and nothing has vacuumed/analyzed since (issue #515).
-    // `≈` alone is announced only at high symbol verbosity and `title` never surfaces on
-    // touch, so carry the meaning in text for AT instead of relying on either.
-    cell: (r) =>
-      r.row_count_estimated ? (
-        <span title="이 테이블에 대한 vacuum/analyze 기록이 없어 근사치입니다. ANALYZE를 돌리면 값이 갱신되지만, 정확한 행 수는 count(*)로만 확인할 수 있습니다.">
-          <span aria-hidden="true">≈ </span>
-          <span className="sr-only">약 </span>
-          {r.row_count.toLocaleString()}
-          <span className="sr-only">, 추정치</span>
-        </span>
-      ) : (
-        r.row_count.toLocaleString()
-      )
+    // 분석 이력이 있어도 n_live_tup은 추정치다. API 플래그는 통계 기준 유무만 구분한다.
+    cell: (r) => (
+      <span title={r.row_count_estimated
+        ? "vacuum/analyze 기록이 없어 오차가 클 수 있는 추정치입니다. 정확한 행 수는 별도 검증이 필요합니다."
+        : "통계 기반 추정치입니다. 분석 이력이 있어도 실제 건수와 다를 수 있습니다."}>
+        <span aria-hidden="true">≈ </span>
+        <span className="sr-only">약 </span>
+        {r.row_count.toLocaleString()}
+        <span className="sr-only">, 추정치</span>
+      </span>
+    )
   },
   {
     key: "size_bytes",
@@ -54,7 +50,7 @@ const columns: VirtualColumn<TableStat>[] = [
   },
   {
     key: "updated_at",
-    header: "최근 갱신",
+    header: "통계 갱신",
     sortValue: (r) => r.updated_at ?? null,
     cell: (r) => r.updated_at ?? "-"
   }
@@ -99,13 +95,10 @@ export function TableStatsPanel() {
             rows={data ?? []}
             searchPlaceholder="테이블 검색"
           />
-          {/* A `title` tooltip never appears on touch and the sr-only text is invisible, so a
-              sighted touch user would otherwise see a bare `≈` with no explanation. Shown only
-              when at least one row is actually an estimate. */}
-          {(data ?? []).some((r) => r.row_count_estimated) ? (
+          {(data ?? []).length > 0 ? (
             <p className="table-stats-legend">
-              <span aria-hidden="true">≈</span> 표시는 해당 테이블에 vacuum/analyze 기록이 없어
-              행 수가 근사치라는 뜻입니다. 정확한 행 수는 <code>count(*)</code>로만 확인할 수 있습니다.
+              표시된 행 수는 통계 기반 추정치입니다. 통계 갱신 시각은 적재 완료 시각이 아닙니다.
+              정확한 건수는 <code>count(*)</code> 등 별도 검증으로 확인합니다.
             </p>
           ) : null}
         </>
