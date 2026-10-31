@@ -50,7 +50,8 @@ SELECT 'building'::text AS kind,
        CAST(:rncode_full AS text) IS NOT NULL
        AND CAST(:bjd_cd AS text) IS NOT NULL
        AND CAST(:buld_mnnm AS integer) IS NOT NULL
-       AND p.rncode_full = CAST(:rncode_full AS text)
+       AND (p.rncode_full = CAST(:rncode_full AS text)
+            OR (p.sig_cd || p.rn_cd) = CAST(:rncode_full AS text))
        AND p.bjd_cd = CAST(:bjd_cd AS text)
        AND p.buld_mnnm = CAST(:buld_mnnm AS integer)
        AND p.buld_slno = CAST(:buld_slno AS integer)
