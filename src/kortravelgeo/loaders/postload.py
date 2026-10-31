@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.infra.cache import GeoCacheRepository
 from kortravelgeo.infra.engine import (
@@ -18,6 +18,7 @@ from kortravelgeo.infra.engine import (
     MAINTENANCE_STATEMENT_TIMEOUT_MS,
 )
 from kortravelgeo.infra.publication import PublicationGuard
+from kortravelgeo.infra.serving_quality import prepare_serving_quality, require_serving_quality
 from kortravelgeo.infra.sql import (
     MV_SQL,
     POSTLOAD_SQL,
@@ -61,15 +62,20 @@ async def refresh_mv(
     concurrently: bool = True,
     strategy: Literal["concurrent", "swap"] = "concurrent",
     publication_guard: PublicationGuard | None = None,
+    serving_quality_run_id: str | None = None,
 ) -> None:
+    quality_run_id = serving_quality_run_id or await prepare_serving_quality(engine)
+
+    async def guard(conn: AsyncConnection) -> None:
+        await require_serving_quality(conn, run_id=quality_run_id)
+        if publication_guard is not None:
+            await publication_guard(conn)
+
     if strategy == "swap":
         await normalize_mv_index_names(engine)
         await rebuild_mv_next(engine)
         await rebuild_text_search_mv_next(engine)
-        if publication_guard is None:
-            await shadow_swap_mv(engine)
-        else:
-            await shadow_swap_mv(engine, publication_guard=publication_guard)
+        await shadow_swap_mv(engine, publication_guard=guard)
         if publication_guard is None:
             await refresh_region_radius_parts(engine)
         else:
@@ -81,6 +87,8 @@ async def refresh_mv(
         statement += " CONCURRENTLY"
     statement += " mv_geocode_target"
     async with engine.begin() as conn:
+        await conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+        await require_serving_quality(conn, run_id=quality_run_id)
         # 긴 build 동안 소유 행을 잠그지 않는다. commit 직전 검증 실패는 refresh를 rollback한다.
         await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         await conn.execute(text(statement))
@@ -96,8 +104,7 @@ async def refresh_mv(
             await conn.execute(text(text_search_statement))
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
-        if publication_guard is not None:
-            await publication_guard(conn)
+        await guard(conn)
     if publication_guard is None:
         await refresh_region_radius_parts(engine)
     else:
@@ -324,7 +331,10 @@ async def refresh_region_radius_parts(
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:
+    await prepare_serving_quality(engine)
     async with engine.begin() as conn:
+        await conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+        await require_serving_quality(conn)
         await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search"))
         for sql in iter_sql_statements(MV_SQL):
@@ -383,6 +393,8 @@ async def shadow_swap_mv(
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        await conn.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+        await require_serving_quality(conn)
         await conn.execute(_SET_MAINTENANCE_TIMEOUT)
         for sql in iter_sql_statements(build_mv_next_sql()):
             await conn.execute(text(sql))

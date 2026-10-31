@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from kortravelgeo.infra.serving_quality import ACTIVE_RUN_SQL, QUALITY_DDL
+
 SCHEMA_SQL = """
 CREATE SCHEMA IF NOT EXISTS x_extension;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension;
@@ -1070,6 +1072,8 @@ CREATE TABLE IF NOT EXISTS ops.public_api_keys (
 );
 """
 
+SCHEMA_SQL += ";\n".join(QUALITY_DDL) + ";\n"
+
 INDEX_SQL = """
 SET search_path = public, x_extension;
 
@@ -1337,7 +1341,7 @@ SELECT level, code, name, parent_sido_cd, parent_sig_cd, part_no, geom
 ANALYZE region_radius_parts;
 """
 
-MV_SQL = """
+MV_SQL = f"""
 SET search_path = public, x_extension;
 
 DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target;
@@ -1410,12 +1414,18 @@ SELECT
   j.emd_kor_nm AS emd_nm,
   j.li_kor_nm AS li_nm,
   j.pnu,
-  COALESCE(be.ent_pt_5179, nc.centroid_5179) AS pt_5179,
   CASE
+    WHEN q.entity_id IS NOT NULL THEN q.replacement_geom
+    ELSE COALESCE(be.ent_pt_5179, nc.centroid_5179)
+  END AS pt_5179,
+  CASE
+    WHEN q.entity_id IS NOT NULL THEN ST_Transform(q.replacement_geom, 4326)
     WHEN COALESCE(be.ent_pt_5179, nc.centroid_5179) IS NULL THEN NULL
     ELSE ST_Transform(COALESCE(be.ent_pt_5179, nc.centroid_5179), 4326)
   END AS pt_4326,
   CASE
+    WHEN q.entity_id IS NOT NULL AND q.replacement_geom IS NOT NULL THEN 'centroid'
+    WHEN q.entity_id IS NOT NULL THEN NULL
     WHEN be.ent_pt_5179 IS NOT NULL THEN 'entrance'
     WHEN nc.centroid_5179 IS NOT NULL THEN 'centroid'
     ELSE NULL
@@ -1428,6 +1438,9 @@ LEFT JOIN best_navi nc
  AND nc.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
  AND nc.buld_slno IS NOT DISTINCT FROM j.buld_slno
  AND nc.bjd_emd_cd = left(j.bjd_cd, 8)
+LEFT JOIN serving_coordinate_quarantine q
+  ON q.run_id = ({ACTIVE_RUN_SQL})
+ AND q.entity_kind = 'point' AND q.entity_id = j.bd_mgt_sn
 WITH DATA;
 
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);

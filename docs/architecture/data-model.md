@@ -1,5 +1,11 @@
 # DATA MODEL — PostgreSQL + PostGIS 스키마
 
+## 원천 보존과 서빙 좌표 격리
+
+[ADR-073](../adr/073-serving-coordinate-quarantine.md)에 따라 `serving_quality_runs`는 정책 버전·적재 manifest 지문·판정 시작/완료 시각을, `serving_coordinate_quarantine`는 판정별 원본 식별자·좌표·파일·기준월·사유·주소 속성과 검증된 대체 좌표의 출처를 저장한다. `(run_id, entity_kind, entity_id)`가 격리 이력의 기본키다. 원천 테이블을 삭제·수정하지 않으며 과거 판정도 보존한다. 신규 DDL과 Alembic 0031은 같은 두 테이블을 생성한다.
+
+MV는 현재 입력 manifest와 정책에 대응하는 완료 판정만 사용한다. 검증된 대체 좌표가 없는 격리 주소는 주소 행을 유지하고 좌표를 NULL로 제공한다. NAVI 대체는 건물·우편번호·읍면동 내부와 같은 주소·기준월을 모두 검증하고 `pt_source=centroid`를 유지한다. C2의 원본 도형 위반은 서빙 제외 증거가 있는 경우 WARN으로 남기며 미격리 오류는 ERROR다. C4·C6·C7도 원본 격리 지표와 실제 서빙 위반을 구분한다. 판정 UUID 등 운영 메타데이터는 서빙 내용 지문에 넣지 않고, 좌표와 출처의 실제 변경을 기존 MV 지문으로 검출한다.
+
 본 문서는 `kor-travel-geo`이 사용하는 PostgreSQL + PostGIS 테이블 구조의 reference다. DDL 자체는 `sql/ddl/` 하위 파일과 `alembic/versions/`에 둔다.
 
 > **적재 정본 정책 (ADR-012)**: 본 사양은 행안부 텍스트 정본 3종(도로명주소 한글_전체분, 위치정보요약DB_전체분, 내비게이션용DB_전체분)을 1차 데이터로 삼고, SHP 전자지도는 polygon·폴리라인 도형만 보조로 적재한다. ADR-005의 GDAL Python binding은 SHP 적재 경로에만 한정된다.

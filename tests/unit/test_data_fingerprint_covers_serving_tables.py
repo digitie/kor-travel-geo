@@ -92,6 +92,8 @@ def _normalize(name: str) -> str:
 
 def module_tables(source: str) -> set[str]:
     """One module's FROM/JOIN relations minus its own CTEs and function calls."""
+    # NULL 안전 비교의 FROM은 관계 참조가 아니다.
+    source = re.sub(r"\bIS\s+(?:NOT\s+)?DISTINCT\s+FROM\b", "", source)
     referenced: set[str] = set()
     for clause in _FROM_CLAUSE_RE.finditer(source):
         for item in clause.group(1).split(","):
@@ -335,6 +337,8 @@ def test_lint_goes_red_when_a_table_is_dropped_from_the_set(
         "SELECT * FROM mv_geocode_target t JOIN generate_series(1, 3) g ON true",
         "SELECT * FROM generate_series(1, 3) g, mv_geocode_target t",
         "SELECT * FROM (SELECT 1) s",
+        "SELECT * FROM mv_geocode_target t WHERE t.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd",
+        "SELECT * FROM mv_geocode_target t WHERE t.buld_se_cd IS DISTINCT FROM j.buld_se_cd",
     ],
 )
 def test_lint_stays_green_for_ctes_and_function_calls(extra_sql: str) -> None:
