@@ -21,6 +21,7 @@ branch)은 표로 분기한다.
 
 | 파일 | 범위 |
 |------|------|
+| [batch-consistency-resume.md](./batch-consistency-resume.md) | 완료 원천을 재사용한 정합성 단계 재개, 원천 변경·부분 적재·동시 쓰기 차단과 실패 이력·시간 기록 |
 | [agent-workflow.md](./agent-workflow.md) | 표준 1-PR 작업 흐름 (Linux worktree → branch → WSL ext4 미러에서 4 게이트 → PR → CI green → 머지 → 동기화). 미러 셋업, `source scripts/agent_env.sh`, 프론트엔드/n150 Playwright/`gh`/CodeGraph 표준 명령 포함 |
 | [agent-failure-patterns.md](./agent-failure-patterns.md) | 반복된 **환경/도구 계층 실패 패턴**과 회피·복구 (Windows Git 포인터 repair, `CreateProcess ... os error 2`, `/mnt` inline 편집 escape 손상, `gh` 로컬 git metadata 충돌, Windows npm shim, n150 Playwright fallback, CodeGraph 순서 등) |
 | [restore-drill-runbook.md](./restore-drill-runbook.md) | 복원 드릴 (T-242). `ktgctl backup restore-drill`로 운영 serving DB를 건드리지 않고 백업이 실제 복원 가능한지 throwaway DB(`<base>_restoretest_<ts>`, `new_database` 모드)에서 증명 — reconcile(T-233) + smoke test + PASS/FAIL artifact, FAIL이면 비0 exit |

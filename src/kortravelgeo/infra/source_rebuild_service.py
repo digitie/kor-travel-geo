@@ -63,6 +63,7 @@ from kortravelgeo.core.source_rebuild import (
 )
 from kortravelgeo.exceptions import ConflictError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
+from kortravelgeo.infra.serving_quality import SOURCE_MANIFEST_SQL
 from kortravelgeo.infra.source_audit import insert_source_audit_event
 from kortravelgeo.infra.source_group_service import recompute_group_aggregates
 
@@ -269,6 +270,204 @@ UPDATE load_jobs
         return decision
 
     # --- group refs + batch payload assembly (the bridge) ------------------
+
+    async def prepare_consistency_resume(
+        self,
+        source_match_set_id: str,
+        previous_batch_id: str,
+        *,
+        current_batch_id: str | None = None,
+        expected_manifest: object = None,
+    ) -> dict[str, Any]:
+        """완료한 원천을 검증해 새 정합성·MV 실행의 입력을 만든다. 과거 행은 바꾸지 않는다."""
+        async with self.engine.connect() as conn:
+            match_set = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT state, integrity_alert, source_set_hash "
+                            "FROM ops.source_match_sets "
+                            "WHERE source_match_set_id = :id"
+                        ),
+                        {"id": source_match_set_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if match_set is None:
+                raise NotFoundError("재개할 매칭 세트가 없습니다.")
+            groups = await self._build_group_refs(conn, source_match_set_id)
+            start = decide_rebuild_start(
+                RebuildStartFacts(
+                    state=str(match_set["state"]),
+                    integrity_alert=bool(match_set["integrity_alert"]),
+                    source_set_hash=match_set["source_set_hash"],
+                    all_groups_available=await self._all_groups_available(
+                        conn, source_match_set_id
+                    ),
+                )
+            )
+            if not start.ok or not groups:
+                raise ConflictError("매칭 세트의 원천 검증·가용 상태를 확인하세요.")
+            plan = self._assemble_plan(source_match_set_id, groups)
+            previous = (
+                (
+                    await conn.execute(
+                        text("SELECT kind, state, payload FROM load_jobs WHERE job_id = :id"),
+                        {"id": previous_batch_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if previous is None:
+                raise NotFoundError("재개할 이전 배치가 없습니다.")
+            if previous["kind"] != "full_load_batch" or previous["state"] not in (
+                "failed",
+                "cancelled",
+            ):
+                raise ConflictError("실패하거나 취소된 전체 배치만 정합성부터 재개할 수 있습니다.")
+            previous_payload = dict(previous["payload"] or {})
+            if previous_payload.get(
+                "source_match_set_id"
+            ) != source_match_set_id or previous_payload.get("forced_promotion"):
+                raise ConflictError("동일 매칭 세트의 정상 승격 배치만 재개할 수 있습니다.")
+            source_batch_id = previous_payload.get("source_batch_id", previous_batch_id)
+            original = (
+                await conn.execute(
+                    text(
+                        "SELECT payload FROM load_jobs "
+                        "WHERE job_id = :id AND kind = 'full_load_batch'"
+                    ),
+                    {"id": source_batch_id},
+                )
+            ).scalar_one_or_none()
+            if not isinstance(original, dict):
+                raise ConflictError("원천 적재 배치의 이력을 확인할 수 없습니다.")
+            expected_sources = plan.batch_payload["source_set"]
+            for candidate in (original, previous_payload):
+                actual_sources = candidate.get("source_set", {})
+                if candidate.get("source_match_set_id") != source_match_set_id or any(
+                    actual_sources.get(key) != value for key, value in expected_sources.items()
+                ):
+                    raise ConflictError("이전 배치와 현재 매칭 세트의 원천·기준월·해시가 다릅니다.")
+            source_jobs = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT job_id, kind, state, payload, started_at, finished_at "
+                            "FROM load_jobs WHERE parent_job_id = :id "
+                            "AND kind NOT IN ('consistency_check', 'mv_refresh') "
+                            "ORDER BY created_at"
+                        ),
+                        {"id": source_batch_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            expected_children = {
+                child["kind"]: child["payload"] for child in plan.batch_payload["children"]
+            }
+            if (
+                len(source_jobs) != len(expected_children)
+                or {row["kind"] for row in source_jobs} != expected_children.keys()
+                or any(
+                    row["state"] != "done"
+                    or row["started_at"] is None
+                    or row["finished_at"] is None
+                    for row in source_jobs
+                )
+            ):
+                raise ConflictError("모든 원천 적재가 완료된 배치만 재개할 수 있습니다.")
+            identity_fields = (
+                "source_file_group_id",
+                "source_file_ids",
+                "group_sha256",
+                "source_yyyymm",
+            )
+            for row in source_jobs:
+                wanted = expected_children[row["kind"]]
+                if any(row["payload"].get(key) != wanted.get(key) for key in identity_fields):
+                    raise ConflictError(
+                        "완료한 원천 작업의 파일·해시·기준월이 현재 구성과 다릅니다."
+                    )
+            last_finished = max(row["finished_at"] for row in source_jobs)
+            other = await conn.scalar(
+                text("""
+SELECT job_id FROM load_jobs
+ WHERE job_id <> ALL(CAST(:source_ids AS text[]))
+   AND (right(kind, 5) = '_load' OR right(kind, 6) = '_delta')
+   AND (state IN ('queued', 'running') OR started_at > :last_finished)
+ LIMIT 1
+"""),
+                {
+                    "source_ids": [row["job_id"] for row in source_jobs],
+                    "last_finished": last_finished,
+                },
+            )
+            active_batch = await conn.scalar(
+                text("""
+SELECT job_id FROM load_jobs WHERE kind = 'full_load_batch' AND state IN ('queued', 'running')
+ AND (CAST(:current AS text) IS NULL OR job_id <> :current) LIMIT 1
+"""),
+                {"current": current_batch_id},
+            )
+            if other or active_batch:
+                raise ConflictError(
+                    "다른 원천 적재가 시작됐습니다. 현재 원천의 전체 적재 완료를 확인하세요."
+                )
+            manifest = await conn.scalar(text(SOURCE_MANIFEST_SQL))
+            if not isinstance(manifest, list) or not manifest:
+                raise ConflictError("원천 manifest가 없어 완료 상태를 증명할 수 없습니다.")
+            by_table = {row["table_name"]: row for row in manifest}
+            tables = {
+                "shp_polygons_load": "tl_spbd_buld_polygon",
+                "locsum_load": "tl_locsum_entrc",
+                "navi_load": "tl_navi_buld_centroid",
+                "roadaddr_entrance_load": "tl_roadaddr_entrc",
+                "juso_text_load": "tl_juso_text",
+                "juso_parcel_link_load": "tl_juso_parcel_link",
+                "sppn_makarea_load": "tl_sppn_makarea",
+            }
+            for row in source_jobs:
+                entry = by_table.get(tables[row["kind"]])
+                if (
+                    entry is None
+                    or not entry.get("row_count")
+                    or entry.get("source_yyyymm") != row["payload"].get("source_yyyymm")
+                    or not row["started_at"].timestamp()
+                    <= float(entry["updated_at"])
+                    <= row["finished_at"].timestamp()
+                ):
+                    raise ConflictError(
+                        "현재 원천이 이전 완료 작업과 일치하지 않거나 일부만 적재됐습니다."
+                    )
+            recorded = (
+                expected_manifest
+                if expected_manifest is not None
+                else previous_payload.get("source_checkpoint")
+            )
+            if recorded is not None and recorded != manifest:
+                raise ConflictError("완료 이후 원천 manifest가 변경돼 정합성 재개를 차단했습니다.")
+            payload = dict(plan.batch_payload)
+            payload.pop("children", None)
+            payload.pop("staging_dir", None)
+            payload.update(
+                resume_from_batch_id=previous_batch_id,
+                source_batch_id=source_batch_id,
+                source_checkpoint=manifest,
+                reused_source_jobs=[
+                    {"job_id": row["job_id"], "kind": row["kind"]} for row in source_jobs
+                ],
+            )
+            payload["source_set"] = dict(
+                expected_sources,
+                resume_from_batch_id=previous_batch_id,
+                source_batch_id=source_batch_id,
+            )
+            return payload
 
     async def _build_group_refs(
         self, conn: AsyncConnection, source_match_set_id: str

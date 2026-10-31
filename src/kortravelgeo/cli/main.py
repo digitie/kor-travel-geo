@@ -94,6 +94,11 @@ async def _run_with_cli_lock[T](
     operation: Callable[[], Awaitable[T]],
 ) -> T:
     try:
+        if key.namespace.name.startswith("LOAD_"):
+            async with cross_process_lock(
+                engine, AdvisoryLockKey.global_key(AdvisoryLockNamespace.SOURCE_STATE), shared=True
+            ), cross_process_lock(engine, key):
+                return await operation()
         async with cross_process_lock(engine, key):
             return await operation()
     except ConcurrentExecutionError as exc:

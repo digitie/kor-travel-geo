@@ -8,6 +8,8 @@ unconditional Dagster — there is no in-process fallback and no ``dagster_execu
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -18,6 +20,55 @@ from kortravelgeo.exceptions import KorTravelGeoError
 from kortravelgeo.settings import Settings
 
 _VALID_BATCH_PAYLOAD = {"children": [{"kind": "juso_text_load", "payload": {"path": "/data/juso"}}]}
+
+
+@pytest.mark.asyncio
+async def test_resume_creates_no_source_children_and_releases_guard_before_launch(monkeypatch):
+    events = []
+    checked = {
+        "resume_from_batch_id": "old-batch",
+        "reused_source_jobs": [{"job_id": "old-source"}],
+    }
+
+    @asynccontextmanager
+    async def guard(engine, key):
+        events.append("guard")
+        yield
+        events.append("released")
+
+    async def validate(*args, **kwargs):
+        assert events == ["guard"]
+        return checked
+
+    class Repo(_FakeRepo):
+        async def insert_load_batch(self, **kwargs):
+            assert events == ["guard"]
+            return await super().insert_load_batch(**kwargs)
+
+    async def launch(settings, *, job_name, run_config, tags):
+        assert events == ["guard", "released"]
+        assert run_config["ops"]["run_full_load_batch"]["config"]["payload"] == checked
+        return "run-resume"
+
+    monkeypatch.setattr(launch_mod, "cross_process_lock", guard)
+    monkeypatch.setattr(
+        launch_mod,
+        "SourceRebuildService",
+        lambda _: SimpleNamespace(prepare_consistency_resume=validate),
+    )
+    monkeypatch.setattr(launch_mod, "AdminRepository", Repo)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", launch)
+    await launch_mod.launch_full_load_batch_dagster_run(
+        object(),
+        Settings(_env_file=None),
+        {
+            "resume_from_batch_id": "old-batch",
+            "source_match_set_id": "match-1",
+            "reused_source_jobs": ["untrusted"],
+        },
+    )
+    assert _FakeRepo.inserted["payload"] == checked
+    assert _FakeRepo.inserted["children"] == []
 
 
 class _FakeRow:
@@ -371,6 +422,23 @@ async def test_control_job_launcher_failure_marks_failed_and_502(
 
     assert excinfo.value.http_status == 502
     assert _FakeExecutor.failed[0] == "job-dag-1"
+
+
+@pytest.mark.asyncio
+async def test_resume_launch_has_top_level_marker_old_code_servers_reject(monkeypatch):
+    configs = []
+
+    async def launch(settings, *, job_name, run_config, tags):
+        configs.append(run_config)
+        return "run-resume"
+
+    monkeypatch.setattr(launch_mod, "AdminRepository", _FakeRepo)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", launch)
+    await launch_mod.launch_source_rebuild_dagster_run(
+        object(), Settings(_env_file=None), {"resume_from_batch_id": "batch-previous"}
+    )
+    config = configs[0]["ops"]["run_source_rebuild_db"]["config"]
+    assert config["resume_from_batch_id"] == config["payload"]["resume_from_batch_id"]
 
 
 def test_insert_load_job_defaults_to_dagster_executor() -> None:

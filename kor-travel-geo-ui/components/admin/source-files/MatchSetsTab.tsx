@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Panel } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -375,11 +376,16 @@ function RebuildDbForm({
   const [force, setForce] = useState(false);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [resume, setResume] = useState(false);
+  const [resumeBatchId, setResumeBatchId] = useState("");
   const requiredPhrase = rebuildPromoteConfirmation(matchSetId);
   const confirmationOk = !force || confirmation === requiredPhrase;
   const preflight = summarizeRebuildPreflight(detail);
   const forceId = useId();
   const reasonId = useId();
+  const modeId = useId();
+  const resumeId = useId();
+  const resumeOk = !resume || /^batch_[0-9a-f]{32}$/.test(resumeBatchId.trim());
 
   return (
     <div className="rebuild-form">
@@ -389,6 +395,22 @@ function RebuildDbForm({
           rebuild-db — 이 매칭 세트의 원천으로 serving DB를 다시 구성하는 위험 작업입니다.
         </HelpTip>
       </h3>
+      <Field>
+        <FieldLabel htmlFor={modeId}>실행 방식</FieldLabel>
+        <NativeSelect id={modeId} value={resume ? "consistency" : "full"}
+          onChange={(event) => { setResume(event.target.value === "consistency"); setForce(false); }}>
+          <option value="full">원천 적재부터 전체 재구축</option>
+          <option value="consistency">완료 원천을 재사용해 정합성부터 재개</option>
+        </NativeSelect>
+      </Field>
+      {resume ? (
+        <Field>
+          <FieldLabel htmlFor={resumeId}>재개할 이전 전체 배치 ID</FieldLabel>
+          <Input id={resumeId} value={resumeBatchId} placeholder="batch_…"
+            onChange={(event) => setResumeBatchId(event.target.value)} />
+          <p className="form-note">모든 원천이 완료된 실패·취소 배치의 ID를 실행 상세에서 복사하세요. 원천이 변경됐거나 다른 적재가 실행 중이면 재개할 수 없습니다. 이전 실패 기록을 보존하고 새 실행에서 정합성·MV·정상 승격을 진행합니다.</p>
+        </Field>
+      ) : null}
       <RoleRequirementNote
         note={force ? "force_promotion(consistency ERROR 우회)은 destructive_admin 필요" : undefined}
         roles={force ? ["rebuild_operator", "destructive_admin"] : ["rebuild_operator"]}
@@ -420,7 +442,7 @@ function RebuildDbForm({
           </p>
         ) : null}
       </div>
-      <div className="checkbox-row">
+      {!resume ? <div className="checkbox-row">
         <Checkbox
           checked={force}
           id={forceId}
@@ -429,7 +451,7 @@ function RebuildDbForm({
         <label className="m-0 text-sm" htmlFor={forceId}>
           consistency ERROR 강제 승급 (force_promotion)
         </label>
-      </div>
+      </div> : null}
       <Field>
         <span className="flex items-center gap-1">
           <FieldLabel htmlFor={reasonId}>사유</FieldLabel>
@@ -455,20 +477,21 @@ function RebuildDbForm({
         />
       ) : null}
       <Button
-        disabled={pending || !confirmationOk}
+        disabled={pending || !confirmationOk || !resumeOk}
         onClick={() =>
           onRebuild({
             force_promotion: force,
             reason: reason || null,
             typed_confirmation: force ? confirmation : null,
             download_concurrency: 3,
-            materialize_concurrency: 2
+            materialize_concurrency: 2,
+            ...(resume ? { resume_from_batch_id: resumeBatchId.trim() } : {})
           })
         }
         type="button"
       >
         <Hammer aria-hidden="true" />
-        rebuild-db 실행
+        {resume ? "정합성부터 재개" : "rebuild-db 실행"}
       </Button>
     </div>
   );

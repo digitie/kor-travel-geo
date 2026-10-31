@@ -441,8 +441,10 @@ async def test_prepare_rebuild_uses_attempt_scoped_staging_root(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resume", [False, True])
 async def test_rebuild_route_launches_dagster_control_run(
     monkeypatch: pytest.MonkeyPatch,
+    resume: bool,
 ) -> None:
     """T-290k PR3: POST /rebuild-db launches the Dagster source_rebuild_db control run
     (integrity gate + materialize run inside the op), never materializing in the request."""
@@ -453,6 +455,13 @@ async def test_rebuild_route_launches_dagster_control_run(
         return "job-control"
 
     monkeypatch.setattr(admin, "launch_source_rebuild_dagster_run", fake_launch)
+    previous = "batch_" + "a" * 32
+
+    async def validate(self, match_id, previous_id):
+        assert (match_id, previous_id) == ("ms-1", previous)
+        return {}
+
+    monkeypatch.setattr(SourceRebuildService, "prepare_consistency_resume", validate)
 
     class FakeClient:
         def __init__(self) -> None:
@@ -484,7 +493,7 @@ async def test_rebuild_route_launches_dagster_control_run(
 
     response = await admin.rebuild_source_match_set_db(
         "ms-1",
-        SourceRebuildDbRequest(),
+        SourceRebuildDbRequest(resume_from_batch_id=previous if resume else None),
         request,
         ctx=ctx,
         client=cast("Any", client),
@@ -495,7 +504,10 @@ async def test_rebuild_route_launches_dagster_control_run(
         enqueued=True,
         job_id="job-control",
         forced_promotion=False,
-        message="rebuild prepare job queued; integrity gate will run asynchronously",
+        message=(
+            "정합성 재개 준비가 접수됐습니다. 원천 검증 뒤 새 배치를 시작합니다."
+            if resume else "rebuild prepare job queued; integrity gate will run asynchronously"
+        ),
     )
     assert launched["payload"] == {
         "source_match_set_id": "ms-1",
@@ -504,6 +516,7 @@ async def test_rebuild_route_launches_dagster_control_run(
         "reason": None,
         "download_concurrency": 3,
         "materialize_concurrency": 2,
+        **({"resume_from_batch_id": previous} if resume else {}),
     }
     assert client.audit is not None
     assert client.audit["outcome"] == "started"

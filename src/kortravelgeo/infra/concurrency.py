@@ -45,6 +45,7 @@ class AdvisoryLockNamespace(IntEnum):
     BACKUP_SCHEDULE = 0x4B47_00A4
     RUNTIME_WARM = 0x4B47_00A5
     SERVING_RELEASE_ACTIVATION = 0x4B47_00A6
+    SOURCE_STATE = 0x4B47_00A7
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +87,24 @@ class ConcurrentExecutionError(KorTravelGeoError):
 async def cross_process_lock(
     engine: AsyncEngine,
     key: AdvisoryLockKey,
+    *,
+    shared: bool = False,
 ) -> AsyncIterator[None]:
     """Acquire a session-level PostgreSQL advisory lock for one operation."""
 
     async with engine.connect() as conn:
+        acquire_sql = (
+            "SELECT pg_try_advisory_lock_shared(:lock_key)"
+            if shared
+            else "SELECT pg_try_advisory_lock(:lock_key)"
+        )
+        release_sql = (
+            "SELECT pg_advisory_unlock_shared(:lock_key)"
+            if shared
+            else "SELECT pg_advisory_unlock(:lock_key)"
+        )
         acquired = await conn.scalar(
-            text("SELECT pg_try_advisory_lock(:lock_key)"),
+            text(acquire_sql),
             {"lock_key": key.as_int()},
         )
         await conn.commit()
@@ -101,7 +114,7 @@ async def cross_process_lock(
             yield
         finally:
             await conn.scalar(
-                text("SELECT pg_advisory_unlock(:lock_key)"),
+                text(release_sql),
                 {"lock_key": key.as_int()},
             )
             await conn.commit()

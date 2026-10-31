@@ -259,7 +259,7 @@ def test_direct_serving_loads_record_their_own_release_outside_a_batch() -> None
 
     source = inspect.getsource(batch_dag.run_source_loader)
     leaf_source = inspect.getsource(batch_dag._source_leaf)
-    run_batch_source = inspect.getsource(batch_dag.run_full_load_batch)
+    run_batch_source = inspect.getsource(batch_dag._run_full_load_batch)
 
     assert frozenset(
         {"pobox_load", "sppn_makarea_load", "shp_polygons_load", "bulk_load"}

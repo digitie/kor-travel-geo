@@ -6741,6 +6741,11 @@ export interface components {
             materialize_concurrency: number;
             /** Reason */
             reason?: string | null;
+            /**
+             * Resume From Batch Id
+             * @description 완료 원천이 현재 DB와 일치하는 실패·취소 배치를 정합성부터 재개한다. 강제 승격과 함께 사용할 수 없다.
+             */
+            resume_from_batch_id?: string | null;
             /** Typed Confirmation */
             typed_confirmation?: string | null;
         };
