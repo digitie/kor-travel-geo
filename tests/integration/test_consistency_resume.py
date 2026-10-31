@@ -197,13 +197,16 @@ VALUES (:id,'full_load_batch','failed',CAST(:payload AS jsonb))
 
 
 @pytest.mark.asyncio
-async def test_resume_rejects_other_writer_interleaved_between_source_stages(completed_sources):
+@pytest.mark.parametrize("started_minutes_ago", [8, 15])
+async def test_resume_rejects_other_writer_interleaved_between_source_stages(
+    completed_sources, started_minutes_ago
+):
     f = completed_sources
     await f.conn.execute(text("""
 INSERT INTO load_jobs(job_id,kind,state,payload,started_at,finished_at)
 VALUES ('중간에끼어든변경','shp_polygons_load','failed','{}',
- now()-interval '8min',now()-interval '7min')
-"""))
+ now()-make_interval(mins => :minutes),now()-interval '7min')
+"""), {"minutes": started_minutes_ago})
     with pytest.raises(ConflictError, match="다른 원천"):
         await f.service.prepare_consistency_resume(f.match_id, BATCH)
 

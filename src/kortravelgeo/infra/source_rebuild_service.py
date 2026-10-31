@@ -399,7 +399,8 @@ UPDATE load_jobs
 SELECT job_id FROM load_jobs
  WHERE job_id <> ALL(CAST(:source_ids AS text[]))
    AND (right(kind, 5) = '_load' OR right(kind, 6) = '_delta')
-   AND (state IN ('queued', 'running') OR started_at >= :first_started)
+   AND (state IN ('queued', 'running') OR started_at >= :first_started
+        OR finished_at >= :first_started)
  LIMIT 1
 """),
                 {
