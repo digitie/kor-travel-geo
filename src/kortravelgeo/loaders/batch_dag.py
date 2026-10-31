@@ -583,14 +583,15 @@ async def run_mv_refresh(
     guard_kwargs: dict[str, Any] = (
         {"publication_guard": publication_guard} if publication_guard is not None else {}
     )
+    refresh_kwargs = dict(guard_kwargs)
     quality_run_id = _payload_str(payload, "serving_quality_run_id")
     if quality_run_id:
-        guard_kwargs["serving_quality_run_id"] = quality_run_id
+        refresh_kwargs["serving_quality_run_id"] = quality_run_id
     await refresh_mv(
         engine,
         concurrently=strategy != "swap",
         strategy="swap" if strategy == "swap" else "concurrent",
-        **guard_kwargs,
+        **refresh_kwargs,
     )
     if cancel_event is not None and cancel_event.is_set():
         raise LoadJobLeaseLostError("릴리스 활성화 전에 중지 요청을 확인했습니다.")
