@@ -22,7 +22,8 @@ async def test_polygon_address_join_preserves_road_owner_and_building_identifier
     try:
         await require_disposable_database(engine)
         async with engine.begin() as conn:
-            for name in ('tl_juso_text', 'tl_spbd_buld_polygon'):
+            for name in ('tl_juso_text', 'tl_spbd_buld_polygon', 'load_manifest',
+                         'serving_quality_runs', 'serving_coordinate_quarantine'):
                 await conn.execute(text(
                     f'CREATE TEMP TABLE {name} (LIKE public.{name} '
                     'INCLUDING DEFAULTS INCLUDING GENERATED) ON COMMIT DROP'
@@ -41,6 +42,10 @@ async def test_polygon_address_join_preserves_road_owner_and_building_identifier
                 "'4103113','0',131,0,ST_GeomFromText("
                 "'MULTIPOLYGON(((953000 1952000,953010 1952000,953010 1952010,"
                 "953000 1952010,953000 1952000)))',5179))"
+            ))
+            await conn.execute(text(
+                'CREATE TEMP TABLE mv_geocode_target ON COMMIT DROP AS '
+                'SELECT * FROM tl_juso_text'
             ))
             for code in ('C1', 'C2'):
                 result = (await conn.execute(text(CASE_SQL[code].sql))).mappings().one()

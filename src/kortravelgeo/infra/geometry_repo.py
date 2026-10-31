@@ -42,7 +42,14 @@ SELECT 'building'::text AS kind,
        NULL::text AS road_name,
        ST_AsGeoJSON(ST_Transform(p.geom, 4326), 6, 1)::jsonb AS geojson
   FROM tl_spbd_buld_polygon p
- WHERE (
+ WHERE EXISTS (
+       SELECT 1 FROM mv_geocode_target j
+        WHERE (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
+          AND p.bjd_cd = j.bjd_cd
+          AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+          AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+          AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+   ) AND ((
        CAST(:bd_mgt_sn AS text) IS NOT NULL
        AND p.bd_mgt_sn = CAST(:bd_mgt_sn AS text)
    )
@@ -56,7 +63,7 @@ SELECT 'building'::text AS kind,
        AND p.buld_mnnm = CAST(:buld_mnnm AS integer)
        AND p.buld_slno = CAST(:buld_slno AS integer)
        AND (CAST(:buld_se_cd AS text) IS NULL OR p.buld_se_cd = CAST(:buld_se_cd AS text))
-   )
+   ))
  ORDER BY CASE WHEN p.bd_mgt_sn = CAST(:bd_mgt_sn AS text) THEN 0 ELSE 1 END,
           p.bd_mgt_sn
  LIMIT 1

@@ -37,6 +37,7 @@ def test_export_specs_cover_t031_followup_cases_and_files() -> None:
         "c6_region_summary.csv",
         "c7_samples.csv",
         "c7_region_summary.csv",
+        "serving_coordinate_quarantine.csv",
     ]
     assert {spec.case_code for spec in EXPORT_SPECS} == set(DATA_QUALITY_CASES)
 
