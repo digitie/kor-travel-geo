@@ -662,7 +662,7 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     # The ADR-017 successor chain now lives in the Dagster-executed batch DAG leaf
     # (T-290j/T-290k retired the in-process JobQueue): serial source loads → consistency_check
     # → the promotion gate → mv_refresh swap.
-    dag_source = inspect.getsource(batch_dag.run_full_load_batch)
+    dag_source = inspect.getsource(batch_dag._run_full_load_batch)
 
     assert "consistency_check" in dag_source
     assert '"strategy": "swap"' in dag_source

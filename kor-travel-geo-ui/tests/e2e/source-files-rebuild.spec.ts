@@ -9,6 +9,44 @@ import { installSourceFilesMock } from "./fixtures/source-files";
 const REBUILD_FORM = ".rebuild-form";
 
 test.describe("DB 입력(rebuild-db) /admin/source-files (T-263)", () => {
+  test("정합성 재개는 완료 배치 ID와 정상 승격으로 제출한다", async ({ page }) => {
+    await installSourceFilesMock(page, {
+      responses: { "/rebuild-db": { enqueued: true, forced_promotion: false } }
+    });
+    await page.goto("/admin/source-files");
+    await page.getByRole("tab", { name: "매칭 세트" }).click();
+    const form = page.locator(REBUILD_FORM);
+    await form.getByRole("checkbox").check();
+    await form.getByLabel("실행 방식").selectOption("consistency");
+    const submit = form.getByRole("button", { name: "정합성부터 재개", exact: true });
+    await expect(submit).toBeDisabled();
+    await expect(form.getByRole("checkbox")).toHaveCount(0);
+    const previous = "batch_" + "a".repeat(32);
+    await form.getByLabel("재개할 이전 전체 배치 ID").fill(previous);
+    const sent = page.waitForRequest(request => request.method() === "POST" && request.url().endsWith("/rebuild-db"));
+    await submit.click();
+    expect((await sent).postDataJSON()).toMatchObject({
+      resume_from_batch_id: previous, force_promotion: false, typed_confirmation: null
+    });
+    await expect(page.locator(".panel", { hasText: "최근 결과" }).locator("pre")).toContainText('"enqueued": true');
+  });
+
+  test("원천 변경·적재 중 재개 거부를 표시하고 중복 실행하지 않는다", async ({ page }) => {
+    await installSourceFilesMock(page, {
+      errors: [{ path: "/rebuild-db", method: "POST", status: 409, body: "다른 원천 적재가 실행 중입니다." }]
+    });
+    let submissions = 0;
+    page.on("request", request => { if (request.method() === "POST" && request.url().endsWith("/rebuild-db")) submissions++; });
+    await page.goto("/admin/source-files");
+    await page.getByRole("tab", { name: "매칭 세트" }).click();
+    const form = page.locator(REBUILD_FORM);
+    await form.getByLabel("실행 방식").selectOption("consistency");
+    await form.getByLabel("재개할 이전 전체 배치 ID").fill("batch_" + "a".repeat(32));
+    await form.getByRole("button", { name: "정합성부터 재개", exact: true }).click();
+    await expect(page.locator(".panel", { hasText: "최근 결과" }).locator("pre")).toContainText("다른 원천 적재가 실행 중");
+    expect(submissions).toBe(1);
+  });
+
   test("force_promotion: 정확한 확인 문구 전에는 rebuild-db가 차단된다", async ({ page }) => {
     await installSourceFilesMock(page); // 기본 ms_active 자동 선택
     await page.goto("/admin/source-files");

@@ -52,6 +52,7 @@ from kortravelgeo.infra.concurrency import (
 )
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
 from kortravelgeo.infra.publication import PublicationGuard, load_job_publication_guard
+from kortravelgeo.infra.source_rebuild_service import SourceRebuildService
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.pobox_loader import load_pobox
@@ -465,7 +466,9 @@ async def run_source_loader(
         raise ValueError(msg) from exc
     key = AdvisoryLockKey.for_resource(namespace, _payload_lock_path(payload))
     try:
-        async with cross_process_lock(engine, key):
+        async with cross_process_lock(
+            engine, AdvisoryLockKey.global_key(AdvisoryLockNamespace.SOURCE_STATE), shared=True
+        ), cross_process_lock(engine, key):
             await loader(engine, payload, cancel_event, progress)
     except ConcurrentExecutionError as exc:
         await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
@@ -761,6 +764,49 @@ async def run_full_load_batch(
     orchestrator_run_id: str,
     lease_ttl_seconds: float = _DEFAULT_LEASE_TTL_SECONDS,
 ) -> dict[str, Any]:
+    """전체 적재 또는 검증된 완료 원천을 재사용하는 정합성 재개를 실행한다."""
+
+    async def execute(checked: dict[str, Any]) -> dict[str, Any]:
+        return await _run_full_load_batch(
+            engine,
+            batch_id=batch_id,
+            payload=checked,
+            cancel_event=cancel_event,
+            progress=progress,
+            orchestrator_run_id=orchestrator_run_id,
+            lease_ttl_seconds=lease_ttl_seconds,
+        )
+
+    resume_from = _payload_str(payload, "resume_from_batch_id")
+    if resume_from:
+        if _payload_bool(payload, "forced_promotion", default=False):
+            raise FullLoadBatchGateError("정합성 재개는 강제 승격을 허용하지 않습니다.")
+        async with cross_process_lock(
+            engine, AdvisoryLockKey.global_key(AdvisoryLockNamespace.SOURCE_STATE)
+        ):
+            checked = await SourceRebuildService(engine).prepare_consistency_resume(
+                _payload_str(payload, "source_match_set_id") or "",
+                resume_from,
+                current_batch_id=batch_id,
+                expected_manifest=payload.get("source_checkpoint"),
+            )
+            await progress(
+                stage="resume_consistency", message="완료 원천 재사용 검증 통과; 정합성부터 재개"
+            )
+            return await execute(checked)
+    return await execute(payload)
+
+
+async def _run_full_load_batch(
+    engine: AsyncEngine,
+    *,
+    batch_id: str,
+    payload: dict[str, Any],
+    cancel_event: asyncio.Event,
+    progress: ProgressReporter,
+    orchestrator_run_id: str,
+    lease_ttl_seconds: float = _DEFAULT_LEASE_TTL_SECONDS,
+) -> dict[str, Any]:
     """Drive the ADR-017 ``full_load_batch`` DAG inline as one Dagster run's body.
 
     ``batch_id`` is the pre-created batch root row (its source-loader children already exist
@@ -786,8 +832,10 @@ async def run_full_load_batch(
     )
     repo = AdminRepository(engine)
 
-    children = await _fetch_source_children(engine, batch_id)
-    if not children:
+    resuming = bool(_payload_str(payload, "resume_from_batch_id"))
+    children = [] if resuming else await _fetch_source_children(engine, batch_id)
+    reused = payload.get("reused_source_jobs", []) if resuming else []
+    if not children and not reused:
         msg = f"full_load_batch {batch_id} has no source children"
         raise FullLoadBatchGateError(msg)
     total_stages = len(children) + 2  # sources + consistency + mv_refresh
@@ -913,6 +961,7 @@ async def run_full_load_batch(
     return {
         "batch_id": batch_id,
         "source_children": len(children),
+        **({"reused_source_children": len(reused)} if resuming else {}),
         "consistency_report_id": report.report_id,
         "consistency_severity": report.severity_max,
         "forced_promotion": forced_promotion,

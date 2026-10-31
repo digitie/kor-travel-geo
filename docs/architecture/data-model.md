@@ -1,5 +1,9 @@
 # DATA MODEL — PostgreSQL + PostGIS 스키마
 
+## 정합성 단계 재개 이력
+
+[ADR-074](../adr/074-consistency-stage-resume.md)의 재개는 새 DDL 없이 `load_jobs.payload`에 원천 이력을 남긴다. `resume_from_batch_id`는 이전 실패·취소 배치, `source_batch_id`는 실제 원천 적재 배치, `reused_source_jobs`는 완료 자식 식별자, `source_checkpoint`는 서버가 검증한 전체 적재 manifest다. 이전 행의 상태·실행 ID를 바꾸지 않으며 새 배치에는 정합성·MV 자식만 생성한다. 새 snapshot의 source set에도 두 배치 식별자를 보존하고 정상 정합성 게이트는 새 배치에 연결한다.
+
 ## 원천 보존과 서빙 좌표 격리
 
 [ADR-073](../adr/073-serving-coordinate-quarantine.md)에 따라 `serving_quality_runs`는 정책 버전·적재 manifest 지문·판정 시작/완료 시각을, `serving_coordinate_quarantine`는 판정별 원본 식별자·좌표·파일·기준월·사유·주소 속성과 검증된 대체 좌표의 출처를 저장한다. `(run_id, entity_kind, entity_id)`가 격리 이력의 기본키다. 원천 테이블을 삭제·수정하지 않으며 과거 판정도 보존한다. 신규 DDL과 Alembic 0031은 같은 두 테이블을 생성한다.

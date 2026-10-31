@@ -1782,6 +1782,7 @@ class AsyncAddressClient:
         download_concurrency: int = 3,
         materialize_concurrency: int = 2,
         materialize: bool = True,
+        resume_from_batch_id: str | None = None,
         progress: Callable[..., Awaitable[None]] | None = None,
     ) -> tuple[SourceRebuildDbResponse, dict[str, Any] | None]:
         """Run the rebuild-db precondition + pre-load integrity gate (T-205b).
@@ -1797,6 +1798,7 @@ class AsyncAddressClient:
         the batch root for the mv_refresh stage); it never bypasses the integrity
         gate run here (doc ~1559, ADR-049 #13).
         """
+        from .exceptions import InvalidInputError
         from .infra.rustfs import RustfsClient, require_enabled_rustfs
         from .infra.source_rebuild_service import SourceRebuildService
 
@@ -1808,6 +1810,12 @@ class AsyncAddressClient:
                 message="rebuild precondition check started",
             )
         plan, stale = await service.prepare_rebuild(source_match_set_id)
+        if resume_from_batch_id and force_promotion:
+            raise InvalidInputError("정합성 재개는 강제 승격과 함께 사용할 수 없습니다.")
+        resume_payload = (
+            await service.prepare_consistency_resume(source_match_set_id, resume_from_batch_id)
+            if resume_from_batch_id else None
+        )
 
         config = require_enabled_rustfs(self.settings)
         rustfs = RustfsClient(config)
@@ -1840,7 +1848,9 @@ class AsyncAddressClient:
                 None,
             )
 
-        if materialize:
+        if resume_payload is not None:
+            batch_payload = resume_payload
+        elif materialize:
             if progress is not None:
                 await progress(
                     progress=0.25,
@@ -1878,7 +1888,9 @@ class AsyncAddressClient:
             forced_promotion=force_promotion,
             integrity_gate_ok=True,
             stale_jobs_closed=stale.stale_job_ids,
-            message="rebuild integrity gate passed; full_load_batch ready",
+            message=("정합성 재개 사전 검증 완료; 새 배치 준비"
+                     if resume_from_batch_id else
+                     "rebuild integrity gate passed; full_load_batch ready"),
         )
         return response, batch_payload
 

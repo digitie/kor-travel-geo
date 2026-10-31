@@ -73,8 +73,10 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resume", [False, True])
 async def test_source_rebuild_op_materializes_launches_and_links(
     monkeypatch: pytest.MonkeyPatch,
+    resume: bool,
 ) -> None:
     _FakeRepo.calls = []
     _patch_common(monkeypatch)
@@ -96,19 +98,37 @@ async def test_source_rebuild_op_materializes_launches_and_links(
         resources={"client": client, "settings": settings},
         op_config={
             "job_id": "rebuild-1",
-            "payload": {"source_match_set_id": "sms-1", "actor": "op", "force_promotion": False},
+            **({"resume_from_batch_id": "batch-previous"} if resume else {}),
+            "payload": {"source_match_set_id": "sms-1", "actor": "op", "force_promotion": False,
+                        **({"resume_from_batch_id": "batch-previous"} if resume else {})},
         },
     ) as ctx:
         result = await source_rebuild_execute.run_source_rebuild_db_op(ctx)
 
     assert result == {"job_id": "rebuild-1"}
     assert client.calls["prepare"]["source_match_set_id"] == "sms-1"
+    if resume:
+        assert client.calls["prepare"]["resume_from_batch_id"] == "batch-previous"
     assert launched["payload"] == {"children": [{"kind": "juso_text_load"}]}
     # the launched batch id is linked onto the rebuild control row + audited as enqueued
     assert _FakeRepo.calls == [("rebuild-1", "batch-downstream-1")]
     assert client.calls["record_enqueued"]["job_id"] == "batch-downstream-1"
     assert client.calls["record_enqueued"]["load_batch_id"] == "batch-downstream-1"
     assert "audit" not in client.calls  # no failure audit on the happy path
+
+
+@pytest.mark.asyncio
+async def test_resume_payload_without_capability_marker_cannot_start_full_reload(monkeypatch):
+    _patch_common(monkeypatch)
+    client = _FakeClient(object(), batch_payload={"children": []})
+    with build_op_context(
+        resources={"client": client, "settings": Settings(_env_file=None)},
+        op_config={"job_id": "resume-1", "payload": {
+            "source_match_set_id": "sms-1", "resume_from_batch_id": "batch-previous"
+        }},
+    ) as ctx, pytest.raises(ValueError, match="재개 표식"):
+        await source_rebuild_execute.run_source_rebuild_db_op(ctx)
+    assert client.calls == {}
 
 
 @pytest.mark.asyncio

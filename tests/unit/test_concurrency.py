@@ -92,6 +92,22 @@ async def test_cross_process_lock_raises_conflict_when_busy() -> None:
     assert conn.commits == 1
 
 
+@pytest.mark.asyncio
+async def test_shared_source_lock_is_released_after_failure() -> None:
+    conn = _FakeConnection(acquired=True)
+    with pytest.raises(RuntimeError):
+        async with cross_process_lock(
+            _FakeEngine(conn),  # type: ignore[arg-type]
+            AdvisoryLockKey.global_key(AdvisoryLockNamespace.SOURCE_STATE), shared=True,
+        ):
+            raise RuntimeError("적재 실패")
+    assert conn.calls == [
+        "SELECT pg_try_advisory_lock_shared(:lock_key)",
+        "SELECT pg_advisory_unlock_shared(:lock_key)",
+    ]
+    assert conn.commits == 2
+
+
 def test_cli_and_api_register_cross_process_lock_helpers() -> None:
     from kortravelgeo.loaders import batch_dag
 
