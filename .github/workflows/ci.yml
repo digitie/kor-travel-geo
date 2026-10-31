@@ -111,6 +111,7 @@ jobs:
             tests/integration/test_backup_restore_hot_swap_roundtrip.py \
             tests/integration/test_maintenance_statement_timeout.py \
             tests/integration/test_polygon_address_links.py \
+            tests/integration/test_serving_coordinate_quality.py \
             tests/integration/test_region_radius_lock_timeout.py \
             tests/integration/test_region_radius_swap.py \
             tests/integration/test_dead_client_statement_cancel.py
@@ -140,6 +141,7 @@ jobs:
               "test_backup_restore_hot_swap_roundtrip": 3,
               "test_maintenance_statement_timeout": 4,
               "test_polygon_address_links": 1,
+              "test_serving_coordinate_quality": 13,
               "test_region_radius_lock_timeout": 3,
               "test_region_radius_swap": 11,
               "test_dead_client_statement_cancel": 2,

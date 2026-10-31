@@ -117,6 +117,9 @@ async def test_refresh_mv_forwards_owner_guard_to_radius_parts(monkeypatch):
         yield conn
 
     engine = SimpleNamespace(begin=begin)
+    monkeypatch.setattr(postload, "prepare_serving_quality", AsyncMock(return_value="quality-1"))
+    quality_guard = AsyncMock()
+    monkeypatch.setattr(postload, "require_serving_quality", quality_guard)
     for name in (
         "normalize_mv_index_names",
         "rebuild_mv_next",
@@ -133,6 +136,13 @@ async def test_refresh_mv_forwards_owner_guard_to_radius_parts(monkeypatch):
         radius.reset_mock()
         await postload.refresh_mv(engine, strategy=strategy, publication_guard=guard)
         radius.assert_awaited_once_with(engine, publication_guard=guard)
+    # swap의 게시 transaction도 품질 판정과 기존 소유권을 함께 검증한다.
+    guard.reset_mock()
+    quality_guard.reset_mock()
+    composed = postload.shadow_swap_mv.await_args.kwargs["publication_guard"]
+    await composed(conn)
+    quality_guard.assert_awaited_once_with(conn, run_id="quality-1")
+    guard.assert_awaited_once_with(conn)
 
 
 def test_region_radius_rebuild_caps_its_lock_wait() -> None:

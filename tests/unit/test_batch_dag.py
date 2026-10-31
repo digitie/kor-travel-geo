@@ -108,7 +108,11 @@ class _Harness:
 
     async def run_consistency_check(self, engine, *, payload, progress):
         self.consistency_payloads.append(payload)
-        return SimpleNamespace(severity_max=self.severity, report_id="rep-1")
+        return SimpleNamespace(
+            severity_max=self.severity,
+            report_id="rep-1",
+            source_set={"serving_quality_run_id": "quality-1"},
+        )
 
     async def run_mv_refresh(
         self, engine, *, payload, job_id, progress, cancel_event=None, publication_guard=None
@@ -163,7 +167,9 @@ async def test_happy_path_runs_sources_then_consistency_then_mv(
     # sources ran in submission order, then consistency, then mv swap.
     assert harness.source_calls == ["juso_text_load", "locsum_load"]
     assert len(harness.consistency_payloads) == 1
-    assert harness.mv_payloads == [{"strategy": "swap", "load_batch_id": "batch-1"}]
+    assert harness.mv_payloads == [
+        {"strategy": "swap", "load_batch_id": "batch-1", "serving_quality_run_id": "quality-1"}
+    ]
     # consistency + mv child rows were created (executor='dagster', parented to the root).
     assert [kind for kind, _ in _FakeRepo.inserts] == ["consistency_check", "mv_refresh"]
     # every driven child was adopted under the batch run and converged to done.

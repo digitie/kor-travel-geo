@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.infra.serving_quality import ACTIVE_RUN_SQL
 from kortravelgeo.infra.sql import iter_sql_statements
 
 DATA_QUALITY_CASES = ("C2", "C4", "C6", "C7")
@@ -70,7 +71,10 @@ WITH base AS (
          k.geom AS bas_geom
     FROM tl_juso_text j
     JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
+    LEFT JOIN LATERAL (
+      SELECT k.bas_id, k.geom FROM tl_kodis_bas k WHERE k.bas_id = j.zip_no
+       ORDER BY e.geom <-> k.geom LIMIT 1
+    ) k ON true
    WHERE j.zip_no IS NOT NULL
 )
 SELECT 'C6' AS case_code,
@@ -448,6 +452,41 @@ SELECT 'C7' AS case_code,
  GROUP BY region_key
  ORDER BY rows DESC, region_key
  LIMIT :limit
+""",
+    ),
+    ExportSpec(
+        case_code="C4",
+        name="서빙 좌표·도형 격리 및 대체 판정 이력",
+        filename="serving_coordinate_quarantine.csv",
+        columns=(
+            "run_id",
+            "entity_kind",
+            "entity_id",
+            "source_kind",
+            "source_key",
+            "source_file",
+            "source_yyyymm",
+            "reasons",
+            "original_x",
+            "original_y",
+            "replacement_source_kind",
+            "replacement_source_key",
+            "replacement_source_file",
+            "replacement_source_yyyymm",
+            "replacement_x",
+            "replacement_y",
+            "source_attributes",
+        ),
+        sql=f"""
+SELECT run_id, entity_kind, entity_id, source_kind, source_key, source_file, source_yyyymm,
+       array_to_string(reasons, ',') AS reasons,
+       ST_X(original_geom) AS original_x, ST_Y(original_geom) AS original_y,
+       replacement_source_kind, replacement_source_key,
+       replacement_source_file, replacement_source_yyyymm,
+       ST_X(replacement_geom) AS replacement_x, ST_Y(replacement_geom) AS replacement_y,
+       source_attributes::text AS source_attributes
+  FROM serving_coordinate_quarantine WHERE run_id = ({ACTIVE_RUN_SQL})
+ ORDER BY entity_kind, entity_id LIMIT :limit
 """,
     ),
 )

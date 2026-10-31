@@ -13,8 +13,9 @@ def test_building_polygon_cases_use_natural_key_not_management_number() -> None:
     assert "p.bjd_cd = j.bjd_cd" in c1
     assert "p.bd_mgt_sn = j.bd_mgt_sn" not in c1
     assert "missing_resolve_key" in c2
-    assert "'error_count', count" in c2
-    assert "WITH serving_entrc AS MATERIALIZED" in c4
+    assert "'error_count', error_count" in c2
+    assert "WHERE NOT quarantined" in c2
+    assert "serving_entrc AS MATERIALIZED" in c4
     assert "FROM tl_roadaddr_entrc" in c4
     assert c4.index("FROM tl_locsum_entrc") < c4.index("FROM tl_roadaddr_entrc")
     assert "WHERE source_yyyymm IN (" in c4
@@ -36,12 +37,12 @@ def test_polygon_contains_cases_treat_boundary_points_as_inside() -> None:
 
     assert "ST_Covers(bas_geom, geom)" in c6
     assert "ST_Covers(emd_geom, geom)" in c7
-    assert "WITH serving_entrc AS MATERIALIZED" in c6
+    assert "serving_entrc AS MATERIALIZED" in c6
     assert c6.index("FROM tl_locsum_entrc") < c6.index("FROM tl_roadaddr_entrc")
     assert "WHERE source_yyyymm IN (" in c6
     assert "base AS MATERIALIZED" in c6
     assert "violations AS MATERIALIZED" in c6
-    assert "WITH serving_entrc AS MATERIALIZED" in c7
+    assert "serving_entrc AS MATERIALIZED" in c7
     assert c7.index("FROM tl_locsum_entrc") < c7.index("FROM tl_roadaddr_entrc")
     assert "WHERE source_yyyymm IN (" in c7
     assert "base AS MATERIALIZED" in c7

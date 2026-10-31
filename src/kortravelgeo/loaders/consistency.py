@@ -13,6 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
 from kortravelgeo.infra.admin_repo import AdminRepository
+from kortravelgeo.infra.serving_quality import (
+    ACTIVE_RUN_SQL,
+    SERVING_POINT_CTES,
+    prepare_serving_quality,
+    require_serving_quality,
+)
 
 ProgressReporter = Callable[[float, str], Awaitable[None]]
 
@@ -55,8 +61,8 @@ SELECT count(*)::bigint AS count,
     ),
     "C2": CaseSpec(
         name="SHP polygon에만 존재하는 BD_MGT_SN",
-        threshold="위반 1건 이상 ERROR",
-        sql="""
+        threshold="미격리 위반 1건 이상 ERROR, 서빙 제외·원천 보존한 도형 WARN",
+        sql=f"""
 WITH total AS (
   SELECT count(*)::bigint AS total FROM tl_spbd_buld_polygon
 ),
@@ -66,6 +72,11 @@ violations AS (
          p.bjd_cd,
          p.buld_mnnm,
          p.buld_slno,
+         EXISTS (
+           SELECT 1 FROM serving_coordinate_quarantine q
+            WHERE q.run_id = ({ACTIVE_RUN_SQL}) AND q.entity_kind = 'building_polygon'
+              AND q.entity_id = p.bd_mgt_sn
+         ) AS quarantined,
          CASE
            WHEN (p.rncode_full IS NULL AND (NULLIF(p.sig_cd, '') IS NULL
              OR NULLIF(p.rn_cd, '') IS NULL))
@@ -89,6 +100,8 @@ stats AS (
          count(*) FILTER (WHERE reason = 'missing_resolve_key')::bigint
            AS missing_resolve_key,
          count(*) FILTER (WHERE reason = 'missing_text')::bigint AS missing_text
+         , count(*) FILTER (WHERE quarantined)::bigint AS quarantined_count
+         , count(*) FILTER (WHERE NOT quarantined)::bigint AS error_count
     FROM violations
 )
 SELECT count,
@@ -96,7 +109,8 @@ SELECT count,
        jsonb_build_object(
          'missing_resolve_key', missing_resolve_key,
          'missing_text', missing_text,
-         'error_count', count
+         'quarantined_count', quarantined_count,
+         'error_count', error_count
        ) AS metric,
        COALESCE(
          (SELECT jsonb_agg(to_jsonb(s)) FROM (SELECT * FROM violations LIMIT 20) s),
@@ -106,33 +120,11 @@ SELECT count,
 """,
     ),
     "C3": CaseSpec(
-        name="대표 출입구가 해소되지 않은 건물",
+        name="검증된 서빙 좌표가 없는 건물",
         threshold="5% 초과 WARN, 그 이하는 INFO",
-        sql="""
-WITH serving_entrc AS MATERIALIZED (
-  SELECT DISTINCT ON (bd_mgt_sn)
-         bd_mgt_sn,
-         ent_man_no,
-         geom,
-         source_kind
-    FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             0 AS source_priority,
-             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
-        FROM tl_locsum_entrc
-       WHERE bd_mgt_sn IS NOT NULL
-      UNION ALL
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             1 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-       WHERE source_yyyymm IN (
-         SELECT DISTINCT source_yyyymm
-           FROM tl_juso_text
-          WHERE source_yyyymm IS NOT NULL
-       )
-    ) e
-   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
-),
+        sql="WITH "
+        + SERVING_POINT_CTES
+        + """,
 total AS (
   SELECT count(*)::bigint AS total FROM tl_juso_text
 ),
@@ -155,31 +147,9 @@ SELECT count(*)::bigint AS count,
     "C4": CaseSpec(
         name="출입구 좌표와 건물 polygon 거리 이상치",
         threshold="50m 초과 WARN, 500m 초과 ERROR",
-        sql="""
-WITH serving_entrc AS MATERIALIZED (
-  SELECT DISTINCT ON (bd_mgt_sn)
-         bd_mgt_sn,
-         ent_man_no,
-         geom,
-         source_kind
-    FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             0 AS source_priority,
-             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
-        FROM tl_locsum_entrc
-       WHERE bd_mgt_sn IS NOT NULL
-      UNION ALL
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             1 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-       WHERE source_yyyymm IN (
-         SELECT DISTINCT source_yyyymm
-           FROM tl_juso_text
-          WHERE source_yyyymm IS NOT NULL
-       )
-    ) e
-   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
-),
+        sql="WITH "
+        + SERVING_POINT_CTES
+        + """,
 distances AS MATERIALIZED (
   SELECT j.bd_mgt_sn,
          e.ent_man_no,
@@ -300,37 +270,18 @@ SELECT over_10m AS count,
     "C6": CaseSpec(
         name="우편번호 텍스트와 기초구역 polygon 불일치",
         threshold="zip_no polygon 누락 WARN, 좌표 외부 ERROR",
-        sql="""
-WITH serving_entrc AS MATERIALIZED (
-  SELECT DISTINCT ON (bd_mgt_sn)
-         bd_mgt_sn,
-         ent_man_no,
-         geom,
-         source_kind
-    FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             0 AS source_priority,
-             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
-        FROM tl_locsum_entrc
-       WHERE bd_mgt_sn IS NOT NULL
-      UNION ALL
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             1 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-       WHERE source_yyyymm IN (
-         SELECT DISTINCT source_yyyymm
-           FROM tl_juso_text
-          WHERE source_yyyymm IS NOT NULL
-       )
-    ) e
-   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
-),
+        sql="WITH "
+        + SERVING_POINT_CTES
+        + """,
 base AS MATERIALIZED (
   SELECT j.bd_mgt_sn, j.zip_no, e.ent_man_no, e.source_kind, e.geom,
          k.bas_id, k.geom AS bas_geom
     FROM tl_juso_text j
     JOIN serving_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
+    LEFT JOIN LATERAL (
+      SELECT k.bas_id, k.geom FROM tl_kodis_bas k WHERE k.bas_id = j.zip_no
+       ORDER BY e.geom <-> k.geom LIMIT 1
+    ) k ON true
    WHERE j.zip_no IS NOT NULL
 ),
 violations AS MATERIALIZED (
@@ -370,31 +321,9 @@ SELECT count,
     "C7": CaseSpec(
         name="행정구역 polygon과 출입구 좌표 불일치",
         threshold="polygon 누락 WARN, 좌표 외부 ERROR",
-        sql="""
-WITH serving_entrc AS MATERIALIZED (
-  SELECT DISTINCT ON (bd_mgt_sn)
-         bd_mgt_sn,
-         ent_man_no,
-         geom,
-         source_kind
-    FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             0 AS source_priority,
-             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
-        FROM tl_locsum_entrc
-       WHERE bd_mgt_sn IS NOT NULL
-      UNION ALL
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             1 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-       WHERE source_yyyymm IN (
-         SELECT DISTINCT source_yyyymm
-           FROM tl_juso_text
-          WHERE source_yyyymm IS NOT NULL
-       )
-    ) e
-   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
-),
+        sql="WITH "
+        + SERVING_POINT_CTES
+        + """,
 base AS MATERIALIZED (
   SELECT j.bd_mgt_sn, left(j.bjd_cd, 8) AS emd_cd, e.ent_man_no, e.source_kind,
          e.geom, p.geom AS emd_geom
@@ -439,31 +368,9 @@ SELECT count,
     "C8": CaseSpec(
         name="도로명 폴리라인과 출입구 좌표 인접성 불일치",
         threshold="같은 도로명 100m 밖 WARN",
-        sql="""
-WITH serving_entrc AS MATERIALIZED (
-  SELECT DISTINCT ON (bd_mgt_sn)
-         bd_mgt_sn,
-         ent_man_no,
-         geom,
-         source_kind
-    FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             0 AS source_priority,
-             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
-        FROM tl_locsum_entrc
-       WHERE bd_mgt_sn IS NOT NULL
-      UNION ALL
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             1 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-       WHERE source_yyyymm IN (
-         SELECT DISTINCT source_yyyymm
-           FROM tl_juso_text
-          WHERE source_yyyymm IS NOT NULL
-       )
-    ) e
-   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
-),
+        sql="WITH "
+        + SERVING_POINT_CTES
+        + """,
 base AS (
   SELECT j.bd_mgt_sn, j.rncode_full, e.ent_man_no, e.source_kind, e.geom
     FROM tl_juso_text j
@@ -596,6 +503,37 @@ SELECT CASE WHEN distinct_months > 1 THEN total ELSE 0 END AS count,
     ),
 }
 
+_QUARANTINE_REASONS: dict[str, list[str]] = {
+    "C4": [
+        "empty_coordinate",
+        "source_month_mismatch",
+        "missing_building_polygon",
+        "building_distance_over_500m",
+        "outside_building_polygon",
+    ],
+    "C6": ["missing_zip_polygon", "outside_zip_polygon"],
+    "C7": ["missing_emd_polygon", "outside_emd_polygon"],
+}
+
+_QUARANTINE_CASE_SQL = f"""
+WITH quarantined AS MATERIALIZED (
+  SELECT entity_id AS bd_mgt_sn, source_kind, source_key, reasons,
+         source_attributes -> 'building_distance_m' AS dist_m,
+         replacement_source_kind, replacement_source_key,
+         replacement_geom IS NOT NULL AS replaced
+    FROM serving_coordinate_quarantine
+   WHERE run_id = ({ACTIVE_RUN_SQL}) AND entity_kind = 'point'
+     AND reasons && CAST(:reasons AS text[])
+)
+SELECT count(*)::bigint AS count,
+       count(*) FILTER (WHERE replaced)::bigint AS replaced_count,
+       count(*) FILTER (WHERE NOT replaced)::bigint AS without_coordinate_count,
+       COALESCE((SELECT jsonb_agg(to_jsonb(s))
+                   FROM (SELECT * FROM quarantined ORDER BY bd_mgt_sn LIMIT 20) s),
+                '[]'::jsonb) AS sample
+  FROM quarantined
+"""
+
 DEFAULT_CASES = tuple(CASE_SQL.keys())
 
 
@@ -604,11 +542,31 @@ async def run_case(engine: AsyncEngine, code: str) -> ConsistencyCase:
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL statement_timeout = 0"))
         row = (await conn.execute(text(spec.sql))).mappings().one()
+        quarantined = None
+        if code in _QUARANTINE_REASONS:
+            quarantined = (
+                (
+                    await conn.execute(
+                        text(_QUARANTINE_CASE_SQL), {"reasons": _QUARANTINE_REASONS[code]}
+                    )
+                )
+                .mappings()
+                .one()
+            )
     count = int(row["count"] or 0)
     total = int(row["total"] or 0)
     ratio = (count / total) if total else 0.0
     metric = _metric(row.get("metric"))
     sample = _sample(row.get("sample"))
+    if quarantined and quarantined["count"]:
+        metric = metric or {}
+        metric["serving_violation_count"] = float(count)
+        for key in ("quarantined_count", "replaced_count", "without_coordinate_count"):
+            metric[key] = float(quarantined["count" if key == "quarantined_count" else key])
+        count += int(quarantined["count"])
+        total += int(quarantined["without_coordinate_count"])
+        ratio = (count / total) if total else 0.0
+        sample += tuple(q | {"quarantined": True} for q in _sample(quarantined["sample"]))
     return ConsistencyCase(
         code=code,
         name=spec.name,
@@ -631,6 +589,7 @@ async def run_all_cases(
     on_progress: ProgressReporter | None = None,
 ) -> ConsistencyReport:
     started_at = datetime.now(UTC)
+    quality_run_id = await prepare_serving_quality(engine)
     case_results: list[ConsistencyCase] = []
     for index, code in enumerate(cases, start=1):
         result = await run_case(engine, code)
@@ -638,11 +597,13 @@ async def run_all_cases(
         if on_progress is not None:
             await on_progress(index / len(cases), code)
     severity_max = _max_severity(tuple(case_results))
+    async with engine.begin() as conn:
+        await require_serving_quality(conn, run_id=quality_run_id)
     report = ConsistencyReport(
         report_id=f"consistency_{uuid4().hex}",
         scope=scope,
         severity_max=severity_max,
-        source_set=source_set or {},
+        source_set=(source_set or {}) | {"serving_quality_run_id": quality_run_id},
         started_at=started_at,
         finished_at=datetime.now(UTC),
         cases=tuple(case_results),
@@ -662,7 +623,9 @@ def _severity(
     if count == 0:
         return "OK"
     metric = metric or {}
-    if code in {"C2", "C9"}:
+    if code == "C2":
+        return "ERROR" if metric.get("error_count", float(count)) > 0 else "WARN"
+    if code == "C9":
         return "ERROR"
     if code in {"C4", "C6", "C7"} and metric.get("error_count", 0.0) > 0:
         return "ERROR"

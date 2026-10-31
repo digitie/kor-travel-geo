@@ -528,6 +528,7 @@ async def run_consistency_check(
 
     await progress(stage="resolve_links", message="정합성 검사 전 주소·도형 연결 해소")
     await resolve_text_geometry_links(engine)
+    await progress(stage="serving_quality", message="원천 좌표 격리·검증된 대체 좌표 판정")
     raw_cases = payload.get("cases")
     cases = tuple(raw_cases) if isinstance(raw_cases, list) and raw_cases else DEFAULT_CASES
     report = await run_all_cases(
@@ -582,6 +583,9 @@ async def run_mv_refresh(
     guard_kwargs: dict[str, Any] = (
         {"publication_guard": publication_guard} if publication_guard is not None else {}
     )
+    quality_run_id = _payload_str(payload, "serving_quality_run_id")
+    if quality_run_id:
+        guard_kwargs["serving_quality_run_id"] = quality_run_id
     await refresh_mv(
         engine,
         concurrently=strategy != "swap",
@@ -856,6 +860,9 @@ async def run_full_load_batch(
     if cancel_event.is_set():
         raise asyncio.CancelledError
     mv_payload: dict[str, Any] = {"strategy": "swap", "load_batch_id": batch_id}
+    quality_run_id = report.source_set.get("serving_quality_run_id")
+    if isinstance(quality_run_id, str) and quality_run_id:
+        mv_payload["serving_quality_run_id"] = quality_run_id
     if source_match_set_id:
         mv_payload["source_match_set_id"] = source_match_set_id
     if forced_promotion:

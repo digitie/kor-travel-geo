@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-073.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-074.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -16,6 +16,7 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
+| ADR-073 | 원천 좌표를 보존하고 검증된 좌표만 서빙한다 | [073-serving-coordinate-quarantine.md](073-serving-coordinate-quarantine.md) |
 | ADR-072 | 건물 도형의 주소 연결은 소재지 시군구 코드도 사용한다 | [072-polygon-address-sigungu-link.md](072-polygon-address-sigungu-link.md) |
 | ADR-071 | 보조 geometry timeout은 좌표와 분리하고 요청 수명을 따른다 | [071-optional-geometry-timeout-and-request-lifetime.md](071-optional-geometry-timeout-and-request-lifetime.md) |
 | ADR-070 | geo 스택을 odroid(192.168.1.13)에서 운영하고, 빈 호스트는 소스에서 serving DB에 직접 풀로드한다 (accepted 2026-10-15 — 이전은 dump 복원(지름길 (a))으로 실행, 풀로드는 다음 재적재 때, 소비자별 키, Track 1 기준선 규칙; 잔여 T-326a~c; Track 2, 호스트 쪽 정본은 Manager ADR-58) | [070-odroid-host-and-empty-host-full-load.md](070-odroid-host-and-empty-host-full-load.md) |
