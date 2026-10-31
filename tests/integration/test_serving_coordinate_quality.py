@@ -118,7 +118,7 @@ async def test_invalid_original_never_leaks_and_only_verified_alternative_is_ser
 INSERT INTO tl_navi_buld_centroid
  (bd_mgt_sn,sig_cd,bjd_cd,rn_cd,buld_se_cd,buld_mnnm,buld_slno,centroid_5179,
   source_yyyymm,source_file)
-VALUES (:physical,'31110',:bjd,'4307224','0',:main,ST_SetSRID(ST_MakePoint(:x,:y),5179),
+VALUES (:physical,'31110',:bjd,'4307224','0',:main,0,ST_SetSRID(ST_MakePoint(:x,:y),5179),
  :month,'검증후보.txt')
 """),
                     {
@@ -173,7 +173,7 @@ VALUES (:physical,'31110',:bjd,'4307224','0',:main,ST_SetSRID(ST_MakePoint(:x,:y
                 await conn.scalar(text("SELECT ST_AsEWKB(geom) FROM tl_locsum_entrc")) == original
             )
             select_sql = MV_SQL.split("CREATE MATERIALIZED VIEW mv_geocode_target AS", 1)[1]
-            select_sql = select_sql.split(";", 1)[0]
+            select_sql = select_sql.split("WITH DATA", 1)[0]
             row = (await conn.execute(text(select_sql))).mappings().one()
             replaced = alternative in ("verified", "boundary")
             assert (row["pt_5179"] is not None) is replaced
@@ -266,7 +266,7 @@ async def test_new_source_invalidates_quality_without_discarding_previous_audit(
                 == 0
             )
             select_sql = MV_SQL.split("CREATE MATERIALIZED VIEW mv_geocode_target AS", 1)[1]
-            row = (await conn.execute(text(select_sql.split(";", 1)[0]))).mappings().one()
+            row = (await conn.execute(text(select_sql.split("WITH DATA", 1)[0]))).mappings().one()
             assert row["pt_source"] == "entrance"
             assert row["pt_5179"] is not None
     finally:
