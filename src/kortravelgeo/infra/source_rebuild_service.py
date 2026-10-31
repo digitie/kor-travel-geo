@@ -393,18 +393,18 @@ UPDATE load_jobs
                     raise ConflictError(
                         "완료한 원천 작업의 파일·해시·기준월이 현재 구성과 다릅니다."
                     )
-            last_finished = max(row["finished_at"] for row in source_jobs)
+            first_started = min(row["started_at"] for row in source_jobs)
             other = await conn.scalar(
                 text("""
 SELECT job_id FROM load_jobs
  WHERE job_id <> ALL(CAST(:source_ids AS text[]))
    AND (right(kind, 5) = '_load' OR right(kind, 6) = '_delta')
-   AND (state IN ('queued', 'running') OR started_at > :last_finished)
+   AND (state IN ('queued', 'running') OR started_at >= :first_started)
  LIMIT 1
 """),
                 {
                     "source_ids": [row["job_id"] for row in source_jobs],
-                    "last_finished": last_finished,
+                    "first_started": first_started,
                 },
             )
             active_batch = await conn.scalar(
