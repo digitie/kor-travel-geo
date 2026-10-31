@@ -104,3 +104,53 @@ async def test_link_resolution_zero_still_means_unlimited(
         await postload.resolve_text_geometry_links(engine, statement_timeout_ms=0)
     finally:
         await engine.dispose()
+
+
+async def test_link_resolution_uses_emd_and_preserves_postcode_and_null_rules() -> None:
+    from kortravelgeo.infra.sql import POSTLOAD_SQL, iter_sql_statements
+
+    engine = await _engine(5_000)
+    try:
+        async with engine.begin() as conn:
+            # 임시 테이블만 사용하며 기존 서빙 테이블은 갱신하지 않는다.
+            for name in (
+                "tl_juso_text", "tl_locsum_entrc", "tl_navi_entrc", "tl_navi_buld_centroid"
+            ):
+                await conn.execute(text(
+                    f"CREATE TEMP TABLE {name} (id integer, bd_mgt_sn text, "
+                    "rncode_full text, bjd_cd text, buld_se_cd text, buld_mnnm integer, "
+                    "buld_slno integer, zip_no text) ON COMMIT DROP"
+                ))
+            await conn.execute(text(
+                "INSERT INTO tl_juso_text VALUES "
+                "(1,'43111340457177500004100009','431114571775','4311134022','0',41,9,'28187'),"
+                "(2,'nullable-fields','431114571776','4311134022',NULL,NULL,NULL,NULL)"
+            ))
+            await conn.execute(text(
+                "INSERT INTO tl_locsum_entrc VALUES "
+                "(1,NULL,'431114571775','4311134000','0',41,9,'28187'),"
+                "(2,NULL,'431114571775','4311135000','0',41,9,'28187'),"
+                "(3,NULL,'431114571775','4311134000','0',41,9,'28188'),"
+                "(4,NULL,'431114571775','4311134000','0',41,9,NULL),"
+                "(5,NULL,'431114571775','4311134000',NULL,41,9,'28187'),"
+                "(6,NULL,'431114571776','4311134000',NULL,NULL,NULL,NULL)"
+            ))
+            await conn.execute(text(
+                "INSERT INTO tl_navi_entrc VALUES "
+                "(1,NULL,'431114571775','4311134000','0',41,9,NULL),"
+                "(2,NULL,'431114571775','4311135000','0',41,9,NULL)"
+            ))
+            for sql in iter_sql_statements(POSTLOAD_SQL):
+                await conn.execute(text(sql))
+            locsum = dict((await conn.execute(text(
+                "SELECT id, bd_mgt_sn FROM tl_locsum_entrc ORDER BY id"
+            ))).all())
+            navi = dict((await conn.execute(text(
+                "SELECT id, bd_mgt_sn FROM tl_navi_entrc ORDER BY id"
+            ))).all())
+            expected = "43111340457177500004100009"
+            assert locsum == {1: expected, 2: None, 3: None, 4: expected, 5: None,
+                              6: "nullable-fields"}
+            assert navi == {1: expected, 2: None}
+    finally:
+        await engine.dispose()
