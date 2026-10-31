@@ -39,6 +39,7 @@ from typing import Any
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.core.source_categories import category_by_code
@@ -352,7 +353,7 @@ UPDATE load_jobs
                     actual_sources.get(key) != value for key, value in expected_sources.items()
                 ):
                     raise ConflictError("이전 배치와 현재 매칭 세트의 원천·기준월·해시가 다릅니다.")
-            source_jobs = (
+            source_jobs: list[RowMapping] = list(
                 (
                     await conn.execute(
                         text(
@@ -394,6 +395,24 @@ UPDATE load_jobs
                         "완료한 원천 작업의 파일·해시·기준월이 현재 구성과 다릅니다."
                     )
             first_started = min(row["started_at"] for row in source_jobs)
+            history_ids = [row["job_id"] for row in source_jobs]
+            cohort_id = previous_payload.get("source_cohort_batch_id")
+            if cohort_id is None and previous_payload.get("repair_from_batch_id"):
+                cohort_id = previous_batch_id
+            if cohort_id is not None:
+                if not isinstance(cohort_id, str):
+                    raise ConflictError("복구 원천 배치의 식별자를 확인하세요.")
+                source_jobs, cancelled_ids = await self._repair_resume_sources(
+                    conn,
+                    cohort_id=cohort_id,
+                    source_batch_id=source_batch_id,
+                    source_match_set_id=source_match_set_id,
+                    original_jobs=source_jobs,
+                    expected_sources=expected_sources,
+                    expected_children=expected_children,
+                )
+                history_ids.extend(cancelled_ids)
+                history_ids.extend(row["job_id"] for row in source_jobs)
             other = await conn.scalar(
                 text("""
 SELECT job_id FROM load_jobs
@@ -404,7 +423,7 @@ SELECT job_id FROM load_jobs
  LIMIT 1
 """),
                 {
-                    "source_ids": [row["job_id"] for row in source_jobs],
+                    "source_ids": history_ids,
                     "first_started": first_started,
                 },
             )
@@ -468,7 +487,158 @@ SELECT job_id FROM load_jobs WHERE kind = 'full_load_batch' AND state IN ('queue
                 resume_from_batch_id=previous_batch_id,
                 source_batch_id=source_batch_id,
             )
+            if cohort_id is not None:
+                payload["source_cohort_batch_id"] = cohort_id
+                payload["source_set"]["source_cohort_batch_id"] = cohort_id
             return payload
+
+    async def _repair_resume_sources(
+        self,
+        conn: AsyncConnection,
+        *,
+        cohort_id: str,
+        source_batch_id: str,
+        source_match_set_id: str,
+        original_jobs: list[RowMapping],
+        expected_sources: Mapping[str, Any],
+        expected_children: Mapping[str, Any],
+    ) -> tuple[list[RowMapping], list[str]]:
+        """취소된 SHP만 복구한 배치의 새 완료 작업과 기존 완료 작업을 대조한다."""
+        message = "복구 배치의 전자지도·재사용 원천·취소 이력을 확인할 수 없습니다."
+
+        async def root_payload(job_id: str, state: tuple[str, ...]) -> dict[str, Any]:
+            row = (
+                (
+                    await conn.execute(
+                        text("SELECT kind,state,payload FROM load_jobs WHERE job_id=:id"),
+                        {"id": job_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if row is None or row["kind"] != "full_load_batch" or row["state"] not in state:
+                raise ConflictError(message)
+            data = row["payload"]
+            if (
+                not isinstance(data, dict)
+                or data.get("source_match_set_id") != source_match_set_id
+                or data.get("forced_promotion")
+                or not isinstance(data.get("source_set"), dict)
+                or any(data["source_set"].get(k) != v for k, v in expected_sources.items())
+            ):
+                raise ConflictError(message)
+            return data
+
+        async def children(job_id: str) -> list[RowMapping]:
+            return list(
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT job_id,kind,state,payload,load_batch_id,started_at,finished_at "
+                            "FROM load_jobs WHERE parent_job_id=:id "
+                            "AND kind NOT IN ('consistency_check','mv_refresh') ORDER BY created_at"
+                        ),
+                        {"id": job_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+        cohort = await root_payload(cohort_id, ("failed", "cancelled"))
+        abandoned_id = cohort.get("repair_from_batch_id")
+        if (
+            cohort_id == source_batch_id
+            or cohort.get("source_batch_id") != source_batch_id
+            or not isinstance(abandoned_id, str)
+            or abandoned_id in (source_batch_id, cohort_id)
+            or "shp_polygons_load" not in expected_children
+        ):
+            raise ConflictError(message)
+        await root_payload(abandoned_id, ("cancelled",))
+        repaired = await children(cohort_id)
+        if len(repaired) != 1:
+            raise ConflictError(message)
+        replacement = repaired[0]
+        if (
+            replacement["kind"] != "shp_polygons_load"
+            or replacement["state"] != "done"
+            or replacement["load_batch_id"] != cohort_id
+            or replacement["started_at"] is None
+            or replacement["finished_at"] is None
+            or replacement["started_at"] > replacement["finished_at"]
+            or not isinstance(replacement["payload"], dict)
+            or replacement["payload"].get("mode") != "append"
+        ):
+            raise ConflictError(message)
+        identity = ("source_file_group_id", "source_file_ids", "group_sha256", "source_yyyymm")
+        if any(
+            replacement["payload"].get(k) != expected_children["shp_polygons_load"].get(k)
+            for k in identity
+        ):
+            raise ConflictError(message)
+        partitions = []
+        for key in ("repair_preserved_sidos", "repair_remaining_sidos"):
+            names = cohort.get(key)
+            if (
+                not isinstance(names, list)
+                or not names
+                or any(not isinstance(name, str) or not name for name in names)
+                or replacement["payload"].get(key) != names
+            ):
+                raise ConflictError(message)
+            partitions.extend(names)
+        if len(partitions) != len(set(partitions)) or len(partitions) != len(
+            expected_children["shp_polygons_load"]["source_file_ids"]
+        ):
+            raise ConflictError(message)
+        originals = [row for row in original_jobs if row["kind"] != "shp_polygons_load"]
+        reused = cohort.get("reused_source_jobs")
+        if (
+            not isinstance(reused, list)
+            or len(reused) != len(originals)
+            or any(
+                not isinstance(row, dict)
+                or not isinstance(row.get("job_id"), str)
+                or not isinstance(row.get("kind"), str)
+                for row in reused
+            )
+            or {(r["job_id"], r["kind"]) for r in reused}
+            != {(r["job_id"], r["kind"]) for r in originals}
+        ):
+            raise ConflictError(message)
+        abandoned = await children(abandoned_id)
+        if (
+            len(abandoned) != len(expected_children)
+            or {row["kind"] for row in abandoned} != expected_children.keys()
+        ):
+            raise ConflictError(message)
+        for row in abandoned:
+            if (
+                row["state"] != "cancelled"
+                or row["load_batch_id"] != abandoned_id
+                or row["finished_at"] is None
+                or not isinstance(row["payload"], dict)
+                or any(
+                    row["payload"].get(k) != expected_children[row["kind"]].get(k) for k in identity
+                )
+            ):
+                raise ConflictError(message)
+            if row["kind"] == "shp_polygons_load":
+                if (
+                    row["started_at"] is None
+                    or row["started_at"] < max(r["finished_at"] for r in original_jobs)
+                    or row["started_at"] > row["finished_at"]
+                    or row["finished_at"] > replacement["started_at"]
+                ):
+                    raise ConflictError(message)
+            elif row["started_at"] is not None:
+                raise ConflictError(message)
+        selected = [
+            replacement if row["kind"] == "shp_polygons_load" else row for row in original_jobs
+        ]
+        return selected, [row["job_id"] for row in abandoned]
 
     async def _build_group_refs(
         self, conn: AsyncConnection, source_match_set_id: str
