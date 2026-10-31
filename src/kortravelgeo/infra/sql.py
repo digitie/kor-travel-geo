@@ -1140,6 +1140,8 @@ CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_sppn_makarea_geom ON tl_sppn_makarea USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sppn_makarea_sig ON tl_sppn_makarea (sig_cd);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_address_resolve
+  ON tl_spbd_buld_polygon ((sig_cd || rn_cd), buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
   ON tl_spbd_buld_polygon (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_geom ON tl_sprd_manage USING GIST (geom);

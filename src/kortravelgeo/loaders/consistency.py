@@ -36,7 +36,7 @@ violations AS (
   SELECT j.bd_mgt_sn, j.sig_cd, j.rn, j.buld_mnnm, j.buld_slno
     FROM tl_juso_text j
     LEFT JOIN tl_spbd_buld_polygon p
-      ON p.rncode_full = j.rncode_full
+      ON (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
      AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
      AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
      AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
@@ -67,7 +67,8 @@ violations AS (
          p.buld_mnnm,
          p.buld_slno,
          CASE
-           WHEN p.rncode_full IS NULL
+           WHEN (p.rncode_full IS NULL AND (NULLIF(p.sig_cd, '') IS NULL
+             OR NULLIF(p.rn_cd, '') IS NULL))
              OR p.bjd_cd IS NULL
              OR p.buld_mnnm IS NULL
              OR p.buld_slno IS NULL
@@ -76,7 +77,7 @@ violations AS (
          END AS reason
     FROM tl_spbd_buld_polygon p
     LEFT JOIN tl_juso_text j
-      ON j.rncode_full = p.rncode_full
+      ON (j.rncode_full = p.rncode_full OR j.rncode_full = (p.sig_cd || p.rn_cd))
      AND j.buld_se_cd IS NOT DISTINCT FROM p.buld_se_cd
      AND j.buld_mnnm IS NOT DISTINCT FROM p.buld_mnnm
      AND j.buld_slno IS NOT DISTINCT FROM p.buld_slno
@@ -189,7 +190,7 @@ distances AS MATERIALIZED (
     JOIN LATERAL (
       SELECT ST_Distance(e.geom, p.geom) AS dist_m
         FROM tl_spbd_buld_polygon p
-       WHERE p.rncode_full = j.rncode_full
+       WHERE (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
          AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
          AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
          AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
@@ -263,7 +264,7 @@ distances AS (
     JOIN LATERAL (
       SELECT ST_Distance(n.centroid_5179, ST_Centroid(p.geom)) AS dist_m
         FROM tl_spbd_buld_polygon p
-       WHERE p.rncode_full = j.rncode_full
+       WHERE (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
          AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
          AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
          AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno

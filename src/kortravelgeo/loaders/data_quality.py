@@ -42,7 +42,7 @@ WITH distances AS (
              p.source_file AS polygon_source_file,
              p.geom
         FROM tl_spbd_buld_polygon p
-       WHERE p.rncode_full = j.rncode_full
+       WHERE (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
          AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
          AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
          AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
@@ -186,7 +186,8 @@ WITH missing_resolve_key AS (
          round(ST_Y(ST_Transform(ST_PointOnSurface(p.geom), 4326))::numeric, 8)::float8
            AS lat
     FROM tl_spbd_buld_polygon p
-   WHERE p.rncode_full IS NULL
+   WHERE (p.rncode_full IS NULL AND (NULLIF(p.sig_cd, '') IS NULL
+      OR NULLIF(p.rn_cd, '') IS NULL))
       OR p.bjd_cd IS NULL
       OR p.buld_mnnm IS NULL
       OR p.buld_slno IS NULL
@@ -206,7 +207,7 @@ missing_text AS (
          p.sig_cd,
          p.emd_cd,
          p.li_cd,
-         false AS missing_rncode_full,
+         (p.rncode_full IS NULL) AS missing_rncode_full,
          false AS missing_bjd_cd,
          false AS missing_buld_mnnm,
          false AS missing_buld_slno,
@@ -217,14 +218,15 @@ missing_text AS (
          round(ST_Y(ST_Transform(ST_PointOnSurface(p.geom), 4326))::numeric, 8)::float8
            AS lat
     FROM tl_spbd_buld_polygon p
-   WHERE p.rncode_full IS NOT NULL
+   WHERE (p.rncode_full IS NOT NULL OR (NULLIF(p.sig_cd, '') IS NOT NULL
+     AND NULLIF(p.rn_cd, '') IS NOT NULL))
      AND p.bjd_cd IS NOT NULL
      AND p.buld_mnnm IS NOT NULL
      AND p.buld_slno IS NOT NULL
      AND NOT EXISTS (
        SELECT 1
          FROM tl_juso_text j
-        WHERE j.rncode_full = p.rncode_full
+        WHERE (j.rncode_full = p.rncode_full OR j.rncode_full = (p.sig_cd || p.rn_cd))
           AND j.buld_se_cd IS NOT DISTINCT FROM p.buld_se_cd
           AND j.buld_mnnm IS NOT DISTINCT FROM p.buld_mnnm
           AND j.buld_slno IS NOT DISTINCT FROM p.buld_slno
@@ -264,7 +266,8 @@ SELECT count(*)::bigint AS rows,
        count(*) FILTER (WHERE buld_slno IS NULL)::bigint AS missing_buld_slno,
        count(*) FILTER (WHERE source_file IS NULL)::bigint AS null_source_file
   FROM tl_spbd_buld_polygon
- WHERE rncode_full IS NULL
+ WHERE (rncode_full IS NULL AND (NULLIF(sig_cd, '') IS NULL
+    OR NULLIF(rn_cd, '') IS NULL))
     OR bjd_cd IS NULL
     OR buld_mnnm IS NULL
     OR buld_slno IS NULL
