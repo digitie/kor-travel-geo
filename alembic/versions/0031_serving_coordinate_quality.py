@@ -19,5 +19,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS public.serving_coordinate_quarantine")
-    op.execute("DROP TABLE IF EXISTS public.serving_quality_runs")
+    # 판정 이력과 게시 중인 MV의 의존성을 보존한다. 이전 코드는 추가 테이블을 무시한다.
+    # 원천으로 MV를 재생성하면 격리했던 좌표가 다시 노출되므로 여기서 재생성하지 않는다.
+    pass
