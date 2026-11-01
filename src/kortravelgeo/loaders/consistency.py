@@ -41,13 +41,17 @@ WITH total AS (
 violations AS (
   SELECT j.bd_mgt_sn, j.sig_cd, j.rn, j.buld_mnnm, j.buld_slno
     FROM tl_juso_text j
-    LEFT JOIN tl_spbd_buld_polygon p
-      ON (p.rncode_full = j.rncode_full OR (p.sig_cd || p.rn_cd) = j.rncode_full)
-     AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+   WHERE NOT EXISTS (
+     SELECT 1 FROM tl_spbd_buld_polygon p
+      WHERE p.rncode_full = j.rncode_full AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
      AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
-     AND p.bjd_cd = j.bjd_cd
-   WHERE p.bd_mgt_sn IS NULL
+     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno AND p.bjd_cd = j.bjd_cd
+   ) AND NOT EXISTS (
+     SELECT 1 FROM tl_spbd_buld_polygon p
+      WHERE (p.sig_cd || p.rn_cd) = j.rncode_full AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+     AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno AND p.bjd_cd = j.bjd_cd
+   )
 )
 SELECT count(*)::bigint AS count,
        (SELECT total FROM total) AS total,
