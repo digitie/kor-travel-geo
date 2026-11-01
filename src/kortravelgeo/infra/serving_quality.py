@@ -67,6 +67,7 @@ SELECT run_id FROM serving_quality_runs
 """
 
 # MV와 검사에서 같은 원천 우선순위와 주소키를 사용한다.
+# 출입구 좌표가 없을 때만 같은 주소의 첫 NAVI를 읽어 전량 정렬·조인을 피한다.
 RAW_POINT_CTES = """
 raw_best_entrance AS (
   SELECT DISTINCT ON (bd_mgt_sn) * FROM (
@@ -84,12 +85,6 @@ raw_best_entrance AS (
      )
   ) e ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
-raw_best_navi AS (
-  SELECT DISTINCT ON (rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8))
-         * FROM tl_navi_buld_centroid
-   WHERE rncode_full IS NOT NULL AND bjd_cd IS NOT NULL
-   ORDER BY rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8), bd_mgt_sn
-),
 raw_serving_points AS (
   SELECT j.bd_mgt_sn, COALESCE(e.geom, n.centroid_5179) AS geom,
          e.ent_man_no,
@@ -100,11 +95,16 @@ raw_serving_points AS (
            AS source_yyyymm
     FROM tl_juso_text j
     LEFT JOIN raw_best_entrance e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN raw_best_navi n ON n.rncode_full = j.rncode_full
-     AND n.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
-     AND n.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-     AND n.buld_slno IS NOT DISTINCT FROM j.buld_slno
-     AND left(n.bjd_cd, 8) = left(j.bjd_cd, 8)
+    LEFT JOIN LATERAL (
+      SELECT n.bd_mgt_sn, n.centroid_5179, n.source_file, n.source_yyyymm
+        FROM tl_navi_buld_centroid n
+       WHERE e.geom IS NULL AND n.rncode_full = j.rncode_full
+         AND n.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND n.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND n.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND left(n.bjd_cd, 8) = left(j.bjd_cd, 8)
+       ORDER BY n.bd_mgt_sn LIMIT 1
+    ) n ON true
 )
 """
 
