@@ -1,5 +1,14 @@
 # JOURNAL — 작업 일지
 
+## 2026-11-03 — API 접근 로그의 공개 API 키 마스킹
+
+- 읽기 전용 로그 점검에서 odroid geo API가 이미지 CMD(`uvicorn kortravelgeo.api.app:app --port 12501`)의 기본 access log로 `/v2/geocode?key=`·`/v2/reverse?key=` 요청의 소비자 키를 평문 기록함을 확인했다. 컨테이너 로그는 회전 없는 json-file이다.
+- `kortravelgeo.api.log_redaction` 필터를 `create_app()`에서 `uvicorn.access`·`uvicorn.error`·`httpx` logger에 붙인다. 이름이 key·token·secret·password(passwd)로 끝나는 쿼리 값은 대소문자·`-`/`_`·percent-encoding과 무관하게 `***`로 가리고 클라이언트 주소·경로·이름·상태 코드는 남긴다(소비자 peer 집계 유지). httpx·httpcore logger는 WARNING이다.
+- uvicorn은 CLI·`uvicorn.run` 모두 logging 설정을 적용한 뒤 앱을 import하고, `dictConfig`는 logger filter를 지우지 않으므로 이미지 CMD 변경 없이 적용된다. 이미지 CMD를 실제 uvicorn CLI로 띄우는 시험을 수정보다 먼저 커밋해 평문 키 실패를 확인했다.
+- 적대 리뷰 반영: Starlette은 `&`로만 나누므로 `?key=AB;CD`·탭 포함 값의 꼬리가 남던 경로를 두 단계 마스킹으로 막고, 가린 traceback은 `exc_info`를 비워 JSON류 formatter가 원문을 다시 만들지 않게 했다. httpx·httpcore 레벨은 운영자가 정하지 않았을 때만 WARNING으로 둔다.
+- 별도 후속(이 PR 밖): epost 서버 가져오기가 실패하면 `str(HTTPStatusError)`(URL의 `serviceKey` 포함)를 업로드 세션 `error_message`로 DB에 저장한다. 로그가 아니라 이번 범위에서 제외했다.
+- 배포·기존 로그 정리·노출 키 교체는 geo 소유자 판단으로 남긴다. `--log-level trace`의 ASGI scope 덤프는 헤더 키까지 남기므로 운영에서 쓰지 않는다.
+
 ## 2026-11-03 — 전체 DB 정상 게시와 원천 보존·최종 UI 검증 완료
 
 - DB는 2026-11-02 19:41:58 KST 완료, 최초 시작부터 85시간 11분 29초·복구 배치 48시간 35분 3초다. 정상 게이트 ERROR 0·강제 승격 없음, MV 6,424,765건·건물 10,684,220건과 144개 레이어 전수 일치, 완료 원천 6종 재사용을 확인했다.

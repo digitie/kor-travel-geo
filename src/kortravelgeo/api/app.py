@@ -25,6 +25,7 @@ from kortravelgeo.api.admission import (
     admission_scope_setting_name,
     build_admission_controller,
 )
+from kortravelgeo.api.log_redaction import install_log_redaction
 from kortravelgeo.api.middleware.geoip_gate import install_geoip_gate
 from kortravelgeo.api.responses import error_payload, register_exception_handlers
 from kortravelgeo.client import AsyncAddressClient
@@ -153,6 +154,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    # uvicorn has already applied its logging config when it imports this module, so the
+    # filter is in place before the first access-log line (see log_redaction).
+    install_log_redaction()
     settings = get_settings()
     configure_slow_observability(settings)
     app = FastAPI(
