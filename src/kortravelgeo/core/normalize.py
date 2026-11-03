@@ -26,7 +26,8 @@ _DASH_TRANSLATION = str.maketrans(
 _BRACKET_RE = re.compile(r"[\(\[\{]([^)\]\}]*)[\)\]\}]")
 _ROAD_RE = re.compile(
     r"(?P<road>[가-힣0-9A-Za-z·.\-\s]+?(?:대로\d+(?:번)?길|로\d+(?:번)?길|대로|로|길))\s*"
-    r"(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
+    r"(?P<under>지하\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?"
+    r"(?:\s*(?:번지|번))?(?![가-힣]*길|로|\d)"
 )
 _JIBUN_RE = re.compile(
     r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
@@ -197,12 +198,15 @@ def parse_address(raw: str) -> AddrParts:
         lambda match: " " * len(match.group()), normalized_without_under
     )
 
-    road_match = _ROAD_RE.search(number_source)
+    road_source = _LEGAL_DONG_GA_RE.sub(
+        lambda match: " " * len(match.group()), normalized
+    )
+    road_match = _ROAD_RE.search(road_source)
     if road_match:
         road = normalize_spaces(road_match.group("road").split()[-1])
         main = int(road_match.group("main"))
         sub = int(road_match.group("sub") or 0)
-        detail = normalized_without_under[road_match.end() :].strip() or bracket_note
+        detail = normalized[road_match.end() :].strip() or bracket_note
         return AddrParts(
             raw=raw,
             normalized=normalized_without_under,
@@ -214,7 +218,7 @@ def parse_address(raw: str) -> AddrParts:
             road_nrm=compact(road),
             mnnm=main,
             slno=sub,
-            under=under,
+            under=bool(road_match.group("under")),
             detail=detail,
             bracket_note=bracket_note,
             is_road=True,

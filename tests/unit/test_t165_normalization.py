@@ -707,3 +707,17 @@ async def test_v1_geocode_dong_name_digit_answers_like_address_without_number(
     assert error["status"] == "ERROR"
     assert error["error"]["code"] == "INVALID_TYPE"
     assert error["error"]["text"] == "address number could not be parsed"
+
+
+@pytest.mark.parametrize(
+    ("query", "road", "number", "under", "detail"),
+    [
+        ("올림픽로35가길 10", "올림픽로35가길", 10, False, None),
+        ("하회종가길 40 지하1층", "하회종가길", 40, False, "지하1층"),
+        ("하회종가길 지하 40-2", "하회종가길", 40, True, None),
+    ],
+)
+def test_road_number_and_basement_detail_are_separate(query, road, number, under, detail):
+    parts = parse_address(query)
+    assert parts.is_road
+    assert (parts.road, parts.mnnm, parts.under, parts.detail) == (road, number, under, detail)
