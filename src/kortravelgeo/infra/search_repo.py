@@ -7,11 +7,39 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from kortravelgeo.core.normalize import compact, normalize_spaces
+from kortravelgeo.core.normalize import compact, normalize_spaces, parse_address
 from kortravelgeo.core.protocols import SearchLookup
 from kortravelgeo.dto.region import RegionHint, region_params
+from kortravelgeo.exceptions import InvalidAddressError
 
 from ._rows import map_region_search, map_search
+
+_SEARCH_ROAD_ADDRESS_SQL = text(
+    """
+SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno,
+       buld_se_cd, buld_nm, bjd_cd, adm_cd, adm_kor_nm, mntn_yn,
+       lnbr_mnnm, lnbr_slno, zip_no, si_nm, sgg_nm, emd_nm, li_nm,
+       pnu, pt_source,
+       CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_X(pt_4326) END AS lon,
+       CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_Y(pt_4326) END AS lat,
+       1.0::double precision AS score, count(*) OVER () AS total
+  FROM mv_geocode_target
+ WHERE rn_nrm = :road_nrm
+   AND buld_mnnm = :mnnm
+   AND buld_slno = :slno
+   AND buld_se_cd = :buld_se_cd
+   AND (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+   AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+   AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text))
+   AND (CAST(:li AS text) IS NULL OR li_nm = CAST(:li AS text))
+   AND (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+   AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+   AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+   AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+ ORDER BY bd_mgt_sn
+ LIMIT :limit OFFSET :offset
+"""
+)
 
 _SEARCH_EXACT_SQL = text(
     """
@@ -286,6 +314,35 @@ class SearchRepository:
                 ).mappings().all()
             total = int(rows[0]["total"]) if rows else 0
             return ([map_region_search(dict(row)) for row in rows], total)
+        # 완성된 도로명 주소의 번호·지역은 일반 문자열 유사도로 대체하지 않는다.
+        # 건물명·도로명 자동완성은 기존 정확/삼중자 검색을 그대로 사용한다.
+        if search_type == "address":
+            try:
+                parts = parse_address(query)
+            except InvalidAddressError:
+                parts = None
+            if parts is not None and parts.is_road and parts.mnnm is not None:
+                async with self.engine.connect() as conn:
+                    rows = (
+                        await conn.execute(
+                            _SEARCH_ROAD_ADDRESS_SQL,
+                            {
+                                **hint_params,
+                                "road_nrm": parts.road_nrm,
+                                "mnnm": parts.mnnm,
+                                "slno": parts.slno,
+                                "buld_se_cd": parts.buld_se_cd,
+                                "si": parts.si,
+                                "sgg": parts.sgg,
+                                "emd": parts.emd,
+                                "li": parts.li,
+                                "limit": size,
+                                "offset": offset,
+                            },
+                        )
+                    ).mappings().all()
+                total = int(rows[0]["total"]) if rows else 0
+                return ([map_search(dict(row)) for row in rows], total)
         exact_params = {
             "query_nrm": query_nrm,
             "limit": size,
