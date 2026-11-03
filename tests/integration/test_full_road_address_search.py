@@ -103,6 +103,7 @@ async def test_full_address_pagination_and_region_filter(repository):
     query = "경북 안동시 풍천면 하회종가길 40"
     assert await ids(repository, query, size=1) == (["a"], 2)
     assert await ids(repository, query, page=2, size=1) == (["b"], 2)
+    assert await ids(repository, query, page=3, size=1) == ([], 2)
     assert await ids(repository, query, region_hint=RegionHint(sig_cd="11")) == ([], 0)
 
 
@@ -120,3 +121,41 @@ async def test_incomplete_road_and_building_name_search_still_work(repository):
     assert await ids(repository, "하회종가길") == (list("abcdefg"), 7)
     assert await ids(repository, "검색시험건물") == (list("abcdefg"), 7)
     assert await ids(repository, "하회종가") == (list("abcdefg"), 7)
+
+
+@pytest.mark.asyncio
+async def test_numeric_building_name_keeps_exact_name_search(repository):
+    async with repository.engine.begin() as conn:
+        await conn.execute(text(
+            "UPDATE fixture SET buld_nm='서울로7017', buld_nm_nrm='서울로7017' "
+            "WHERE bd_mgt_sn='e'"
+        ))
+        for relation in ("mv_geocode_target", "mv_geocode_text_search"):
+            await conn.execute(text(f"REFRESH MATERIALIZED VIEW {relation}"))
+    assert await ids(repository, "서울로7017") == (["e"], 1)
+
+
+@pytest.mark.asyncio
+async def test_basement_floor_detail_is_not_underground_building(repository):
+    assert await ids(repository, "경북 안동시 풍천면 하회종가길 40 지하1층") == (["a", "b"], 2)
+
+
+@pytest.mark.asyncio
+async def test_numbered_road_keeps_its_identity(repository):
+    async with repository.engine.begin() as conn:
+        await conn.execute(text(
+            "UPDATE fixture SET rn='올림픽로35가길', rn_nrm='올림픽로35가길', "
+            "buld_mnnm=10 WHERE bd_mgt_sn='a'"
+        ))
+        await conn.execute(text(
+            "UPDATE fixture SET rn='올림픽로', rn_nrm='올림픽로', "
+            "buld_mnnm=35 WHERE bd_mgt_sn='b'"
+        ))
+        await conn.execute(text(
+            "UPDATE fixture SET rn='하회종가길40번길', rn_nrm='하회종가길40번길' "
+            "WHERE bd_mgt_sn='e'"
+        ))
+        for relation in ("mv_geocode_target", "mv_geocode_text_search"):
+            await conn.execute(text(f"REFRESH MATERIALIZED VIEW {relation}"))
+    assert await ids(repository, "올림픽로35가길 10") == (["a"], 1)
+    assert await ids(repository, "하회종가길40번길") == (["e"], 1)

@@ -314,6 +314,19 @@ class SearchRepository:
                 ).mappings().all()
             total = int(rows[0]["total"]) if rows else 0
             return ([map_region_search(dict(row)) for row in rows], total)
+        exact_params = {
+            "query_nrm": query_nrm,
+            "limit": size,
+            "offset": offset,
+            **hint_params,
+        }
+        async with self.engine.begin() as conn:
+            exact_rows = (
+                await conn.execute(_SEARCH_EXACT_SQL, exact_params)
+            ).mappings().all()
+            exact_total = int(exact_rows[0]["total"]) if exact_rows else 0
+            if exact_total > 0:
+                return ([map_search(dict(row)) for row in exact_rows], exact_total)
         # 완성된 도로명 주소의 번호·지역은 일반 문자열 유사도로 대체하지 않는다.
         # 건물명·도로명 자동완성은 기존 정확/삼중자 검색을 그대로 사용한다.
         if search_type == "address":
@@ -322,50 +335,35 @@ class SearchRepository:
             except InvalidAddressError:
                 parts = None
             if parts is not None and parts.is_road and parts.mnnm is not None:
+                address_params = {
+                    **hint_params,
+                    "road_nrm": parts.road_nrm,
+                    "mnnm": parts.mnnm,
+                    "slno": parts.slno,
+                    "buld_se_cd": parts.buld_se_cd,
+                    "si": parts.si,
+                    "sgg": parts.sgg,
+                    "emd": parts.emd,
+                    "li": parts.li,
+                    "limit": size,
+                    "offset": offset,
+                }
                 async with self.engine.connect() as conn:
                     rows = (
-                        await conn.execute(
-                            _SEARCH_ROAD_ADDRESS_SQL,
-                            {
-                                **hint_params,
-                                "road_nrm": parts.road_nrm,
-                                "mnnm": parts.mnnm,
-                                "slno": parts.slno,
-                                "buld_se_cd": parts.buld_se_cd,
-                                "si": parts.si,
-                                "sgg": parts.sgg,
-                                "emd": parts.emd,
-                                "li": parts.li,
-                                "limit": size,
-                                "offset": offset,
-                            },
-                        )
+                        await conn.execute(_SEARCH_ROAD_ADDRESS_SQL, address_params)
                     ).mappings().all()
-                total = int(rows[0]["total"]) if rows else 0
+                    total = int(rows[0]["total"]) if rows else 0
+                    if not rows and offset > 0:
+                        first = (
+                            await conn.execute(
+                                _SEARCH_ROAD_ADDRESS_SQL,
+                                {**address_params, "limit": 1, "offset": 0},
+                            )
+                        ).mappings().first()
+                        total = int(first["total"]) if first else 0
                 return ([map_search(dict(row)) for row in rows], total)
-        exact_params = {
-            "query_nrm": query_nrm,
-            "limit": size,
-            "offset": offset,
-            **hint_params,
-        }
         async with self.engine.begin() as conn:
             await conn.execute(text("SET LOCAL pg_trgm.similarity_threshold = 0.35"))
-            exact_rows = (
-                await conn.execute(
-                    _SEARCH_EXACT_SQL,
-                    exact_params,
-                )
-            ).mappings().all()
-            exact_total = int(exact_rows[0]["total"]) if exact_rows else 0
-            if exact_total > 0:
-                rows = exact_rows
-            else:
-                rows = (
-                    await conn.execute(
-                        _SEARCH_SQL,
-                        params,
-                    )
-                ).mappings().all()
+            rows = (await conn.execute(_SEARCH_SQL, params)).mappings().all()
         total = int(rows[0]["total"]) if rows else 0
         return ([map_search(dict(row)) for row in rows], total)

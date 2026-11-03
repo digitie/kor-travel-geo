@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "browser": "156.0.8078.4",
+  "checks": [
+    "실제 Pinvi 로그인",
+    "경북 안동시 풍천면 하회종가길 40 실제 Geo HTTP/DB → Pinvi 검색 → 주소 배지",
+    "경상북도 안동시 풍천면 하회종가길 40 실제 Geo HTTP/DB → Pinvi 검색 → 주소 배지",
+    "존재하지 않는 번호의 주소 행 대체 없음",
+    "브라우저는 Pinvi API 경유"
+  ],
+  "pinvi_revision": "169b584aa4d88cf17e765d96df389b121461bb17",
+  "geo_product_blobs": {
+    "src/kortravelgeo/core/normalize.py": "5b6f215b41f2eec3fbcb235e8eaf3c9a96c9b072",
+    "src/kortravelgeo/infra/search_repo.py": "6cd7c4e94dc03b997303772f40818652cf947372"
+  },
+  "negative_controls": [
+    {
+      "case": "old-review-head",
+      "expected_failures": 4,
+      "errors": 0
+    },
+    {
+      "case": "town",
+      "expected_failures": 3,
+      "errors": 0
+    },
+    {
+      "case": "number",
+      "expected_failures": 3,
+      "errors": 0
+    },
+    {
+      "case": "underground",
+      "expected_failures": 2,
+      "errors": 0
+    }
+  ]
+}

@@ -145,7 +145,7 @@ jobs:
               "test_backup_restore_hot_swap_roundtrip": 3,
               "test_maintenance_statement_timeout": 4,
               "test_polygon_address_links": 1,
-              "test_full_road_address_search": 8,
+              "test_full_road_address_search": 11,
               "test_serving_coordinate_quality": 13,
               "test_consistency_c1_selection": 3,
               "test_serving_point_selection": 3,
