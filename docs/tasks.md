@@ -1,3 +1,4 @@
+- [/] Pinvi650 — 공식 원천/실제COPY·MV·HTTP·두브라우저 WSL증거 완료, 최종리뷰·CI후Geo623머지. 운영0건원인은미확정이며동일endpoint/worker·DB/MV·요청입력의최종prod대조는Claude담당; 실제확인전이슈열림.
 # tasks.md — 백로그
 
 열린 `[ ]`(진행 중/대기/보류) task만 두는 백로그. 완료·종료 이력은
