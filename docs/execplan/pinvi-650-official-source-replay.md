@@ -21,3 +21,11 @@
 Pinvi684/PR687은6f47dad로 squash merge했다. 한도 예외 경계/handler1회, 독립 cache/upsert/Trip fence, 관리자 이동 뒤 원래 여행 재검증을 포함한다. 정확21e1ca4 두 최종 리뷰 잔여P0/P1/P2없음·CI9SUCCESS, WSL단위1988/관련PG88/실제UI5를 확인했다. #643 최신 체크를 갱신했고 운영 접근은 없었다.
 
 남은 범위는650, Telegram636/637/638묶음,641이다. Map1450실제prod area적재/확인은Claude담당이고671/672의다른Code작업은보존한다.
+
+## 실행 결과와 남은 경계
+
+- 테스트1a4c99f의 런타임 src tree는d46dfa1과 같다. 공식67행·26자리관리번호 원문을 실제COPY/MV/SQL/인증HTTP로 통과시켰고 원래40은약칭/정식명각1건이다. 좌표NULL도유지한다.
+- component실패대조3개(622전repository, 부번조건제거, 좌표NULL후보제거)가실제로실패했다. WSL전체pytest2008통과229선택건너뜀·실제PG12/0skip·mypy169/ruff/계층1/OpenAPIcheck통과.
+- 실제TCP Geo+Pinvi+웹 production build UI를Chromium·Firefox각4흐름/5검색으로확인했고pageerror0이다. 소유스택은종료했다. 타일·외부provider·가짜좌표를성공으로기록하지않는다.
+- 보존202605자료에서운영650이재현되지않았다. 임의SQL완화/번호대체/운영SHA추정을하지않는다. 읽기전용진단가이드와증거를전달하며Pinvi650과부모체크는열린상태로유지한다.
+- 로컬하네스초기정리이름길이·기본DB명환경·baseline확장초기화오류를수정했으며제품실패대조로세지않는다. PG최종은CI와같이기본scratch를초기화후12건통과했다.

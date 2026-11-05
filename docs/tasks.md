@@ -1,4 +1,4 @@
-- [/] Pinvi650 — 공식202605 Juso 원천40/40-1/68·hash를 기준으로 loader/MV/SQL/v2HTTP/소비자UI를 대조하고 재오픈 원인을 구분한다. 운영 접근 없이 WSL·두리뷰·정확CI 후 merge.
+- [/] Pinvi650 — 공식 원천/실제COPY·MV·HTTP·두브라우저 WSL증거 완료, 최종리뷰·CI후Geo623머지. 운영0건원인은미확정이며동일endpoint/worker·DB/MV·요청입력의최종prod대조는Claude담당; 실제확인전이슈열림.
 # tasks.md — 백로그
 
 열린 `[ ]`(진행 중/대기/보류) task만 두는 백로그. 완료·종료 이력은

@@ -1,0 +1,272 @@
+{
+  "issue": "digitie/pinvi#650",
+  "pull_request": "digitie/kor-travel-geo#623",
+  "test_source_revision": "1a4c99f39ce46acc0706a7eafc61e32d26068278",
+  "runtime_source_revision": "d46dfa10da435b94d820ba024d9af5f7edd1c766",
+  "runtime_src_tree": "6d31c56c44cac6321ebe6ffd074b798460feace1",
+  "runtime_changed": false,
+  "issue650_resolved": false,
+  "production_access": false,
+  "production_deploy": false,
+  "production_validation": false,
+  "fixture": {
+    "provider": "행정안전부 주소기반산업지원서비스",
+    "provider_url": "https://business.juso.go.kr/",
+    "source_yyyymm": "202605",
+    "archive": "202605_도로명주소 한글_전체분.zip",
+    "archive_sha256": "901afdd83f1a2dfdbd85eca4223aae2cef8fceb7692277c067d8779613d23039",
+    "member": "rnaddrkor_gyeongbuk.txt",
+    "member_sha256": "1c42d997c835ddc21d461f3307304d5cb28fb2570aeac3e538f815c531d09dfb",
+    "encoding": "cp949",
+    "line_ending": "CRLF",
+    "selection": "도로명 컬럼이 하회종가길인 모든67행; 원래 필드 보존; 좌표/명칭 보완 없음",
+    "excerpt_sha256": "c057a0bb32d71ea1ffcf0bde7cc5d5da3c7aeb64b04e73c139667692e6b0449c",
+    "row_count": 67,
+    "ids_are_26_characters": true,
+    "fabricated_coordinates": false
+  },
+  "source_sha256": {
+    ".github/workflows/ci.yml": "a0d1fedbf25d8b1b24cf99fff89d4e1904433fb7fba67b9604bd3583a94b1af4",
+    "tests/fixtures/juso_hahoe_202605.json": "fdf4a2b068ed3dd35474c83e69ab2764bac5eefe537d463448a934146b35c10c",
+    "tests/unit/test_hahoe_official_fixture.py": "54e31dfad5dea874d76f3e43cd1c3ecd6c66b546b7ce69e7c95331926daf1ac8",
+    "tests/integration/test_official_road_address_http.py": "5d38ae71fa300bb2cf7da1ed6af5ec951db2fb67dd7e1307c2c43cd270b3b485",
+    "src/kortravelgeo/infra/search_repo.py": "9126eee7f5c4412e71316ece680794d143613f28ead2a6c426f878b11d731fd4",
+    "src/kortravelgeo/core/normalize.py": "e92924ce4aa63262ec59290fc2d40307d66e7e21771f728e975143b7ccd61a2f",
+    "src/kortravelgeo/core/searcher.py": "1524018ed7c5c76eda26b2704d2ab219b9614fa89308313c7fd8b2c3bb812c2b",
+    "src/kortravelgeo/infra/sql.py": "8a86955fed0de4d7bfdc0c775c3936aa9366ad8443905756fd557cdd017345dd",
+    "src/kortravelgeo/loaders/text/juso_hangul_loader.py": "dc9b4b06c86134d132092fc31742056a66e042c87d56ed428618e2bdf462456f"
+  },
+  "verification": {
+    "pytest_without_opt_in_db": {
+      "passed": 2008,
+      "skipped": 229,
+      "scope": "standard full collection; opt-in DB/live skips not counted as passes"
+    },
+    "actual_postgres": {
+      "passed": 12,
+      "skipped": 0,
+      "scope": "existing full-road11 + new official loader/MV/authenticatedASGI15-request test1; owned PostGIS18 initialized like CI"
+    },
+    "mypy": {
+      "files": 169,
+      "errors": 0
+    },
+    "ruff": "pass",
+    "import_linter": {
+      "contracts_kept": 1,
+      "broken": 0
+    },
+    "openapi_check": "pass; contract unchanged",
+    "negative_controls": {
+      "scope": "component negative controls in disposable mirror; worktree runtime unchanged",
+      "cases": [
+        {
+          "case": "pre-622-search-repository",
+          "exit": 1,
+          "expected_assertion": "assert total == 1",
+          "log_sha256": "eef0c63d0dd10622112895eee846729fd7e86fac38ffbe2b6da54b24de9ec723",
+          "search_repository_sha256": "503a7f92ce80939582a05a421ea3ebc4cec48810c4601d67df55d31c7d433d71",
+          "core_searcher_sha256": "1524018ed7c5c76eda26b2704d2ab219b9614fa89308313c7fd8b2c3bb812c2b"
+        },
+        {
+          "case": "wrong-subnumber-acceptance",
+          "exit": 1,
+          "expected_assertion": "assert total == 1",
+          "log_sha256": "187c41a475ac2610d6f11a35f13c22afc491a5509df7e9acc7b3f353acb2a2d2",
+          "search_repository_sha256": "e0c001ecdd779e908d497ab4b763d1568f2adbdf75710426587a6c1e2b0ffae2",
+          "core_searcher_sha256": "1524018ed7c5c76eda26b2704d2ab219b9614fa89308313c7fd8b2c3bb812c2b"
+        },
+        {
+          "case": "drop-coordinate-null-candidates",
+          "exit": 1,
+          "expected_assertion": "payload[\"status\"] == \"OK\"",
+          "log_sha256": "114b38123b7181752c389553cf42ec223daf2095c4828b86a07265273e118ae7",
+          "search_repository_sha256": "9126eee7f5c4412e71316ece680794d143613f28ead2a6c426f878b11d731fd4",
+          "core_searcher_sha256": "8065940352509365a8602cf45ad1fe8c7070d49bf949f176116abd4c4a5652f2"
+        }
+      ]
+    },
+    "actual_ui": {
+      "chromium": {
+        "checks": [
+          "실제 사용자 로그인·실제 Pinvi API",
+          "보존 공식 원천67행→Geo 실제HTTP→Pinvi 통합검색→원래40 주소 배지",
+          "약칭/정식명 각각주소1행·40-1구분·없는999는주소0행",
+          "없는번호 후40 재검색 성공·좌표 없는 주소 후보 UI 보존"
+        ],
+        "results": [
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경상북도 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40-1",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40-1"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 999",
+            "status": 200,
+            "addresses": [],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          }
+        ],
+        "pageErrors": [],
+        "actualGeo": true,
+        "actualPinvi": true,
+        "actualPostgres": true,
+        "actualChromium": true,
+        "production": false,
+        "scope": "preserved official202605 Juso67rows, no fabricated coordinates; Map/weather external services and VWorld tiles not asserted; issue650 production cause remains unverified"
+      },
+      "firefox": {
+        "checks": [
+          "실제 사용자 로그인·실제 Pinvi API",
+          "보존 공식 원천67행→Geo 실제HTTP→Pinvi 통합검색→원래40 주소 배지",
+          "약칭/정식명 각각주소1행·40-1구분·없는999는주소0행",
+          "없는번호 후40 재검색 성공·좌표 없는 주소 후보 UI 보존"
+        ],
+        "results": [
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경상북도 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40-1",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40-1"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 999",
+            "status": 200,
+            "addresses": [],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          },
+          {
+            "query": "경북 안동시 풍천면 하회종가길 40",
+            "status": 200,
+            "addresses": [
+              "경상북도 안동시 하회종가길 40"
+            ],
+            "degraded_sources": [
+              "features",
+              "kakao",
+              "naver"
+            ]
+          }
+        ],
+        "pageErrors": [],
+        "actualGeo": true,
+        "actualPinvi": true,
+        "actualPostgres": true,
+        "actualChromium": false,
+        "actualFirefox": true,
+        "browser": "firefox",
+        "production": false,
+        "scope": "preserved official202605 Juso67rows, no fabricated coordinates; Map/weather external services and VWorld tiles not asserted; issue650 production cause remains unverified"
+      },
+      "screenshots_visually_checked": 2,
+      "owned_stacks_stopped": true,
+      "pinvi_checkout_revision": "21e1ca4d9060b74b3664f06d5212bcec0019c218",
+      "pinvi_merged_commit": "6f47dad57bb968da0468c3c1e15fbb24aaec8367",
+      "pinvi_whole_tree_identical": true,
+      "pinvi_tree": "e8f2c9c433009b0db7eb3765008bcfa73e1c47bc"
+    }
+  },
+  "limitations": [
+    "202605 preserved source success does not identify production source/month/serving MV/worker build.",
+    "Geo runtime source has not changed; issue650 stays open until actual production discrepancy is verified by Claude Code.",
+    "Coordinates were absent and no entrance/centroid was fabricated; no tile rendering/marker selection claimed.",
+    "features/kakao/naver degraded in owned UI; addresses source remained healthy. External Map/weather/VWorld services not tested.",
+    "ASGI test injects real client/settings at app boundary; separate actual TCP Geo/Pinvi lifespan+browser proof is recorded.",
+    "Initial local harness cleanup-length and suite-env/base-extension prerequisites were repaired; these are not product-negative controls."
+  ],
+  "next_action": "docs/runbooks/pinvi-650-read-only-diagnosis.md; authorized final prod diagnosis by Claude Code",
+  "owned_artifact_sha256": {
+    "650-pytest-all-final.log": "ba527bb168216be866d8ad2b4caa0d66d2787825b2bdf5a431dbe55bebfadaee",
+    "650-official-pg-final.log": "c322c615d08324521fd1de33c0b3979ad6531540ce11e03defa2c933bc88b8da",
+    "650-mypy.log": "866f135eda15a6396df37bd084c95fd89cee94239a37fcd17a9f9b0eb3878445",
+    "650-imports.log": "b00974062281a321c988be8e92b852720fb4cb6fcfdfd6805e4db87d92027af2",
+    "650-negative-controls.json": "e2bf893a86eb2b39c2e0b11a8fa5f29f0bf6ae2a5804e5a9998d2f095180410e",
+    "650-ui-chromium/650-ui-result.json": "c6ce99790757c9bf4535b3cec0c61fb6422f59ab895e32e57ca2e3223c2c82ce",
+    "650-ui-chromium/650-ui-official-address.png": "0e84fb916cc7e29ae799d8d4366039ab52941cf22ea612597d78a1b35aa56f12",
+    "650-ui-result-firefox.json": "2f0b1b3398167c55ace312ed0bbbbe32c6617997c3220867d38e5c9c939abc34",
+    "650-ui-official-address-firefox.png": "54b42f9ae526709540dc68acd09085356076d37c7b7717811fce6d9b6ab0a34a",
+    "650_live_stack.py": "4584576f96dab07159316fc86ea4d8940ea617ade4cb0d27381db7e1c66cd140",
+    "650_live_browser.cjs": "28b18e04ead250de87d551b3608b672309f37c99b70262a0e7be630732d3f62b"
+  }
+}

@@ -1,3 +1,11 @@
+## 2026-11-05 — Pinvi650 공식 원천 재현·검증 범위 확정
+
+- Geo 런타임은d46dfa1 그대로다. 테스트1a4c99f에서202605 공식67행 원문/26자리ID·hash를 보존하고 실제COPY/generated/MV/SQL/인증v2HTTP를 연결했다. 최신 코드의 약칭/정식40은각1행, 40-1/68분리·없는번호/지하/잘못된지역·hint거부·좌표NULL보존을 확인했다.
+- 이전622 전 repository·부번무시·좌표NULL후보제거 세 component대조가 각각실패했다. 전체pytest2008pass229skip(선택DB/live는성공으로세지않음), 실제PG12pass0skip, mypy169/ruff/import1/OpenAPIcheck가 통과했다.
+- 실제Geo/Pinvi API/production build UI는Chromium/Firefox 각각4흐름·5검색·pageerror0이다. Pinvi검토21e1/병합6f47의전체tree동일성을 근거로 썼다. 가짜좌표·외부Map/weather·VWorld타일·지도선택은검증하지않았다. 소유스택종료.
+- 이 결과로 운영650이해결됐다고보지않는다. docs/runbooks/pinvi-650-read-only-diagnosis.md와 docs/reviews/pinvi-650-official-source-replay.json에 코드/DB/MV/실제요청 대조와범위를남겼다. 운영최종확인은Claude담당이고이번에접근/배포/시험은없다.
+- 초안623→자주push를유지했다. 두최종전문리뷰·정확HEAD CI후테스트/진단보완PR을merge하고650은실운영원인확인까지열어둔다.
+
 ## 2026-11-05 — Pinvi650 공식 원천 재현 착수
 
 - Pinvi684/PR687을6f47dad로 병합한 뒤 최신650 운영 댓글을 반영했다. Geo 직접 호출도 약칭/정식명 모두40주소0건, 도로명만67건이다.
