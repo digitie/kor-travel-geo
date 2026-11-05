@@ -1,3 +1,9 @@
+## 2026-11-05 — Pinvi650 공식 원천 재현 착수
+
+- Pinvi684/PR687을6f47dad로 병합한 뒤 최신650 운영 댓글을 반영했다. Geo 직접 호출도 약칭/정식명 모두40주소0건, 도로명만67건이다.
+- Geo d46dfa1의 파서와 로컬202605 공식 원천40행의 구조 조건은 일치한다. 합성 fixture의 성공을 운영 증거로 삼지 않고 실제 원천→loader/MV/SQL/HTTP를 대조한다.
+- 계획: docs/execplan/pinvi-650-official-source-replay.md. 초안→자주push→WSL/UI→두전문적대리뷰→정확CI→merge 순서다. 운영 접근/배포/시험은 없고 최종prod는Claude담당이다.
+
 # RESUME — 작업 재개 가이드
 
 ## 2026-11-04 — Pinvi #650 전체 도로명 주소 검색
