@@ -1,0 +1,59 @@
+{
+  "pr": 621,
+  "review_head": "003ea6c0ff722f2e98c562b052c684a25697aa28",
+  "runtime_revision": "ea67c5c2f00869b8798c0d3b640f6da3ba3a1abc",
+  "local_tests": {
+    "focused_passed": 42,
+    "all_passed": 2050,
+    "skipped": 229,
+    "failed": 0,
+    "original_main_shipped_cli_negative_control": "failed_as_expected"
+  },
+  "remote_ci": {
+    "backend": "success",
+    "frontend": "success",
+    "dagster": "success",
+    "integration-postgis": "success",
+    "openapi": "success"
+  },
+  "review_window_minutes": 10,
+  "blocking_findings": 0,
+  "images": [
+    {
+      "kind": "api",
+      "id": "sha256:e17871015264ee505f8b0e01cb8b11279ea193f371c338611b2ff62283efa2c7",
+      "verified_source_files": {
+        "main": 170
+      },
+      "dependencies_unchanged": true
+    },
+    {
+      "kind": "dagster",
+      "id": "sha256:dea88832a06cd69d09840b48e307101043923dd5d522353a57ef607bd8bf8719",
+      "verified_source_files": {
+        "main": 170,
+        "dagster": 16
+      },
+      "dependencies_unchanged": true
+    }
+  ],
+  "ui_image": "unchanged_source_and_existing_image",
+  "arm_image_shipped_cmd": {
+    "result": "passed",
+    "fake_secret_leaked": false,
+    "unauthorized_status": 401
+  },
+  "verification_recovery": {
+    "failure": "코드 서버 검증기의 API 전용 의존성 요구",
+    "resumed_from": "완료된 코드 서버 이미지 검증",
+    "image_rebuilt": false
+  },
+  "deployment": {
+    "result": "공용 Manager 잠금 대기",
+    "runtime_replacement_started": false,
+    "database_reload": false
+  },
+  "live_ui": {
+    "result": "운영 교체 후 검증 대기"
+  }
+}
