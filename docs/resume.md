@@ -1,4 +1,31 @@
+## 2026-11-06 — #621 최종 리뷰·배포 준비
+
+- 로그 마스킹 #621을 직접 최종 리뷰하고 최신 main의 주소 검색 #622·#623을 통합했다. 추가 코드 수정은 없고 문서 충돌 3개를 보존적으로 해결했다.
+- WSL ext4 전체 백엔드 2,050개 통과·229개 조건부 생략, 로그 42개 및 정적 검사·OpenAPI 검사가 통과했다. 기존 main에서는 실제 uvicorn 시작 명령의 키 유출 단언이 실패하는 대조도 확인했다.
+- 다음은 원격 CI·최종 리뷰 창을 확인한 병합, API·코드 서버 새 이미지 배포, 실제 로그·로그인·검색·지도 검증이다. UI 소스는 운영 이미지와 같아 기존 UI 이미지를 유지한다. DB 재적재는 없다.
+
+## 2026-11-05 — Pinvi650 공식 원천 재현·검증 범위 확정
+
+- Geo 런타임은d46dfa1 그대로다. 테스트1a4c99f에서202605 공식67행 원문/26자리ID·hash를 보존하고 실제COPY/generated/MV/SQL/인증v2HTTP를 연결했다. 최신 코드의 약칭/정식40은각1행, 40-1/68분리·없는번호/지하/잘못된지역·hint거부·좌표NULL보존을 확인했다.
+- 이전622 전 repository·부번무시·좌표NULL후보제거 세 component대조가 각각실패했다. 전체pytest2008pass229skip(선택DB/live는성공으로세지않음), 실제PG12pass0skip, mypy169/ruff/import1/OpenAPIcheck가 통과했다.
+- 실제Geo/Pinvi API/production build UI는Chromium/Firefox 각각4흐름·5검색·pageerror0이다. Pinvi검토21e1/병합6f47의전체tree동일성을 근거로 썼다. 가짜좌표·외부Map/weather·VWorld타일·지도선택은검증하지않았다. 소유스택종료.
+- 이 결과로 운영650이해결됐다고보지않는다. docs/runbooks/pinvi-650-read-only-diagnosis.md와 docs/reviews/pinvi-650-official-source-replay.json에 코드/DB/MV/실제요청 대조와범위를남겼다. 운영최종확인은Claude담당이고이번에접근/배포/시험은없다.
+- 초안623→자주push를유지했다. 두최종전문리뷰·정확HEAD CI후테스트/진단보완PR을merge하고650은실운영원인확인까지열어둔다.
+
+## 2026-11-05 — Pinvi650 공식 원천 재현 착수
+
+- Pinvi684/PR687을6f47dad로 병합한 뒤 최신650 운영 댓글을 반영했다. Geo 직접 호출도 약칭/정식명 모두40주소0건, 도로명만67건이다.
+- Geo d46dfa1의 파서와 로컬202605 공식 원천40행의 구조 조건은 일치한다. 합성 fixture의 성공을 운영 증거로 삼지 않고 실제 원천→loader/MV/SQL/HTTP를 대조한다.
+- 계획: docs/execplan/pinvi-650-official-source-replay.md. 초안→자주push→WSL/UI→두전문적대리뷰→정확CI→merge 순서다. 운영 접근/배포/시험은 없고 최종prod는Claude담당이다.
+
 # RESUME — 작업 재개 가이드
+
+## 2026-11-04 — Pinvi #650 전체 도로명 주소 검색
+
+- 초안 #622에서 전체 주소를 도로명·건물명 전체 문자열과 비교하던 원인을 수정한다. 기존 주소 파서의 경북 등 약칭 정규화와 MV의 지역·본번·부번·지하 구분을 사용한다.
+- 두 독립 리뷰의 추가 경계를 보완했다. WSL 전체 백엔드 2,004개 통과·228개 조건부 생략, CI 동일 실제 PostGIS 123개 통과·생략 0개, 정적 검사 및 실제 Geo→Pinvi→Chromium 5항목을 통과했다. 수정 전·조건 제거 오구현은 실제 DB 단언 실패를 확인했다. 최종 SHA 재리뷰와 CI 후 병합한다. 운영 접속·배포·검증은 사용자 지시에 따라 Claude Code에게 남긴다.
+
+
 
 ## 2026-11-03 — 접근 로그 공개 API 키 마스킹 PR
 
