@@ -1,3 +1,10 @@
+## 2026-11-06 — #621 최종 리뷰와 최신 main 통합
+
+- #621의 시작 명령, uvicorn access/error 및 httpx 기록, 인코딩된 이름·세미콜론·중복 키, traceback 재구성 경계를 직접 검토했다. 추가 코드 결함은 발견하지 않았다. 전용 security-review 스킬은 설치돼 있지 않아 소스·호출 경로·회귀 시험을 직접 보안 검토했다.
+- 최신 main의 #622·#623을 통합하고 충돌한 변경 이력 3개를 모두 보존했다. 운영 API는 #623 버전임을 읽기 전용으로 확인했다. 이번 배포는 #621을 더한 API·코드 서버를 대상으로 하며, 변경 없는 UI 이미지는 보존한다.
+- WSL ext4에서 로그 시험 42개, 전체 백엔드 2,050개 통과·229개 조건부 생략, Ruff·엄격 mypy 170개 파일·의존 방향·OpenAPI 드리프트 검사를 통과했다. 기존 main 앱으로 실제 이미지 시작 명령 시험을 실행해 평문 가짜 키 단언 실패를 확인했다.
+- 기존 로그의 정리·키 교체 및 업로드 세션 오류 문자열 저장은 이번 변경 밖이다. 최종 원격 CI·리뷰 창 확인 후 병합하고, 새 이미지에서 가짜 키 로그 검사와 실제 관리 UI를 검증한다. 검증 전 배포 완료로 기록하지 않는다.
+
 ## 2026-11-05 — Pinvi650 공식 원천 재현·검증 범위 확정
 
 - Geo 런타임은d46dfa1 그대로다. 테스트1a4c99f에서202605 공식67행 원문/26자리ID·hash를 보존하고 실제COPY/generated/MV/SQL/인증v2HTTP를 연결했다. 최신 코드의 약칭/정식40은각1행, 40-1/68분리·없는번호/지하/잘못된지역·hint거부·좌표NULL보존을 확인했다.
@@ -29,6 +36,16 @@
 - Pinvi 통합 검색의 전체 주소가 Geo의 도로명·건물명 문자열 검색에서 탈락하는 경로를 조사한다. 기존 주소 파서의 시도 약칭 정규화를 재사용하고 건물 본번·부번을 지키는 검색을 검증한다.
 - 초안 PR을 먼저 만들고 구현·테스트를 나누어 원격에 기록한다. 사용자 지시에 따라 WSL 테스트 미러에서만 검증하고 운영 접속·배포는 하지 않는다. 최종 두 독립 리뷰와 CI 통과 후 병합한다.
 
+
+
+## 2026-11-03 — API 접근 로그의 공개 API 키 마스킹
+
+- 읽기 전용 로그 점검에서 odroid geo API가 이미지 CMD(`uvicorn kortravelgeo.api.app:app --port 12501`)의 기본 access log로 `/v2/geocode?key=`·`/v2/reverse?key=` 요청의 소비자 키를 평문 기록함을 확인했다. 컨테이너 로그는 회전 없는 json-file이다.
+- `kortravelgeo.api.log_redaction` 필터를 `create_app()`에서 `uvicorn.access`·`uvicorn.error`·`httpx` logger에 붙인다. 이름이 key·token·secret·password(passwd)로 끝나는 쿼리 값은 대소문자·`-`/`_`·percent-encoding과 무관하게 `***`로 가리고 클라이언트 주소·경로·이름·상태 코드는 남긴다(소비자 peer 집계 유지). httpx·httpcore logger는 WARNING이다.
+- uvicorn은 CLI·`uvicorn.run` 모두 logging 설정을 적용한 뒤 앱을 import하고, `dictConfig`는 logger filter를 지우지 않으므로 이미지 CMD 변경 없이 적용된다. 이미지 CMD를 실제 uvicorn CLI로 띄우는 시험을 수정보다 먼저 커밋해 평문 키 실패를 확인했다.
+- 적대 리뷰 반영: Starlette은 `&`로만 나누므로 `?key=AB;CD`·탭 포함 값의 꼬리가 남던 경로를 두 단계 마스킹으로 막고, 가린 traceback은 `exc_info`를 비워 JSON류 formatter가 원문을 다시 만들지 않게 했다. httpx·httpcore 레벨은 운영자가 정하지 않았을 때만 WARNING으로 둔다.
+- 별도 후속(이 PR 밖): epost 서버 가져오기가 실패하면 `str(HTTPStatusError)`(URL의 `serviceKey` 포함)를 업로드 세션 `error_message`로 DB에 저장한다. 로그가 아니라 이번 범위에서 제외했다.
+- 배포·기존 로그 정리·노출 키 교체는 geo 소유자 판단으로 남긴다. `--log-level trace`의 ASGI scope 덤프는 헤더 키까지 남기므로 운영에서 쓰지 않는다.
 
 ## 2026-11-03 — 전체 DB 정상 게시와 원천 보존·최종 UI 검증 완료
 
