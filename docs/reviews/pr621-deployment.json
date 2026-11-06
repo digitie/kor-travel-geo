@@ -1,0 +1,302 @@
+{
+  "pr": 621,
+  "review_head": "003ea6c0ff722f2e98c562b052c684a25697aa28",
+  "runtime_revision": "ea67c5c2f00869b8798c0d3b640f6da3ba3a1abc",
+  "local_tests": {
+    "focused_passed": 42,
+    "all_passed": 2050,
+    "skipped": 229,
+    "failed": 0,
+    "original_main_shipped_cli_negative_control": "failed_as_expected"
+  },
+  "remote_ci": {
+    "backend": "success",
+    "frontend": "success",
+    "dagster": "success",
+    "integration-postgis": "success",
+    "openapi": "success"
+  },
+  "review_window_minutes": 10,
+  "blocking_findings": 0,
+  "images": [
+    {
+      "kind": "api",
+      "id": "sha256:e17871015264ee505f8b0e01cb8b11279ea193f371c338611b2ff62283efa2c7",
+      "verified_source_files": {
+        "main": 170
+      },
+      "dependencies_unchanged": true
+    },
+    {
+      "kind": "dagster",
+      "id": "sha256:dea88832a06cd69d09840b48e307101043923dd5d522353a57ef607bd8bf8719",
+      "verified_source_files": {
+        "main": 170,
+        "dagster": 16
+      },
+      "dependencies_unchanged": true
+    }
+  ],
+  "ui_image": "unchanged_source_and_existing_image",
+  "arm_image_shipped_cmd": {
+    "result": "passed",
+    "fake_secret_leaked": false,
+    "unauthorized_status": 401
+  },
+  "verification_recovery": {
+    "failure": "코드 서버 검증기의 API 전용 의존성 요구",
+    "resumed_from": "완료된 코드 서버 이미지 검증",
+    "image_rebuilt": false
+  },
+  "deployment": {
+    "result": "healthy",
+    "runtime_revision": "ea67c5c2f00869b8798c0d3b640f6da3ba3a1abc",
+    "database_reload": false,
+    "normal_serving_release_preserved": true,
+    "runtime_settings_preserved": true,
+    "unselected_services_preserved": true,
+    "verified_at": "2026-11-06T05:18:51.557101+00:00"
+  },
+  "live_ui": {
+    "result": "passed",
+    "browsers": [
+      "chromium",
+      "firefox"
+    ],
+    "address_scenarios": 14,
+    "auth_scenarios": 2,
+    "structured_address_requests": 6,
+    "workflow_mutations": 0,
+    "original_screenshots": 32,
+    "originals": [
+      {
+        "name": "pr621-auth-chromium-20261106T053344142Z-admin.png",
+        "sha256": "3a1424b3648ffe253b3f834f59fb146f1377a12758d40e9dcadf65d8f7ef939b",
+        "bytes": 131057
+      },
+      {
+        "name": "pr621-auth-chromium-20261106T053344142Z-logout.png",
+        "sha256": "12477e18b1aa031c669b7da35a7c556148c52f92ffffa0f4b0bb9a093424eb5a",
+        "bytes": 28432
+      },
+      {
+        "name": "final-chromium-baseline-20261106T053519603Z-geocode-success.png",
+        "sha256": "23950de8f64bb5d8a2769de9290476411d1d540e2db39d28b618f91762353dbb",
+        "bytes": 263772
+      },
+      {
+        "name": "final-chromium-baseline-20261106T053519603Z-reverse-success.png",
+        "sha256": "04c0b22694d4022610070f8050f34f1d5fbf4521c952127439d14368a8bcdc0a",
+        "bytes": 660687
+      },
+      {
+        "name": "final-chromium-polygon-link-20261106T053519603Z-geocode-success.png",
+        "sha256": "84025d9a324ba018e60fab3926645be9734737e23c8743d0eeabf05d609ce9ac",
+        "bytes": 243978
+      },
+      {
+        "name": "final-chromium-polygon-link-20261106T053519603Z-reverse-success.png",
+        "sha256": "229eea38069e9515b84a3945d9e154161da8438a40d3958da1bdf92d24d0db50",
+        "bytes": 637921
+      },
+      {
+        "name": "final-chromium-ulsan-byeongyeong-20261106T053519603Z-geocode-success.png",
+        "sha256": "b117d21d26a849c616245c4e7e6abdf1bc8545534fe5d731867b549ad7566498",
+        "bytes": 306720
+      },
+      {
+        "name": "final-chromium-ulsan-byeongyeong-20261106T053519603Z-reverse-success.png",
+        "sha256": "cb7a328cdcee7351a0f31f40805f3f9ce7c4acf66af4810282ceef7aa48a54d6",
+        "bytes": 635180
+      },
+      {
+        "name": "final-chromium-ulsan-jongga-20261106T053519603Z-geocode-success.png",
+        "sha256": "6bdede84185ca4edc784c73340fcd2eaf7ae2564f1aeb474e27ea1e05d334835",
+        "bytes": 259470
+      },
+      {
+        "name": "final-chromium-ulsan-jongga-20261106T053519603Z-reverse-success.png",
+        "sha256": "fac58fce8b2bed5345c94a9246de1a23fc6984dbca309201b0370833ee645dd9",
+        "bytes": 485534
+      },
+      {
+        "name": "final-chromium-sangju-seongdong-20261106T053519603Z-geocode-success.png",
+        "sha256": "9248ed42632c83b29c2a976b9c43fd9e1dbec2a7b684a895b8334f5c240f3e20",
+        "bytes": 171180
+      },
+      {
+        "name": "final-chromium-sangju-seongdong-20261106T053519603Z-reverse-success.png",
+        "sha256": "4e5aac00ee1da0432a10f617bed07ff89cd09499303201950e3ea16f347d640f",
+        "bytes": 345666
+      },
+      {
+        "name": "final-chromium-code12-20261106T053519603Z-geocode-success.png",
+        "sha256": "2af6cd45a8302004f40c2d7cf2bba88658c1dcc22e09ede4685c3c1972bad8e7",
+        "bytes": 248143
+      },
+      {
+        "name": "final-chromium-code12-20261106T053519603Z-reverse-success.png",
+        "sha256": "a009173bd8fded4d9eeb536403b0ff459afed3681e6bee45bb4fcedc7226f7cf",
+        "bytes": 562306
+      },
+      {
+        "name": "final-chromium-no-verified-point-20261106T053519603Z-geocode-success.png",
+        "sha256": "91b449a12f08792e7ecdaeff2e1100070e198ca7b03d32c18b47180a48d675f7",
+        "bytes": 410330
+      },
+      {
+        "name": "final-chromium-no-verified-point-20261106T053519603Z-previous-point-before-null.png",
+        "sha256": "cfafd406661d7d8d726b04376de59adaf3aca52efeecdbd0e6a53a587f8dfe3c",
+        "bytes": 248142
+      },
+      {
+        "name": "pr621-auth-firefox-20261106T053353296Z-admin.png",
+        "sha256": "2af1b0acb22c11a824949449b61cf969a185f58e6aa53414b31b88fd3a0569df",
+        "bytes": 156181
+      },
+      {
+        "name": "pr621-auth-firefox-20261106T053353296Z-logout.png",
+        "sha256": "24136c6d5709f28c999b1f2cb63ef27025a630c1f4c90a6dd25399d0aecaf239",
+        "bytes": 43561
+      },
+      {
+        "name": "final-firefox-baseline-20261106T053634933Z-geocode-success.png",
+        "sha256": "bd0067d0a5e76e936eef0a9e4d448ee3a32abdfe672dcfe03736d31c01f418c2",
+        "bytes": 304812
+      },
+      {
+        "name": "final-firefox-baseline-20261106T053634933Z-reverse-success.png",
+        "sha256": "d1ce18d5764a429bb2af4cd2dfdcdf41ec79c129dc74c0049dba9feb084e5551",
+        "bytes": 699061
+      },
+      {
+        "name": "final-firefox-polygon-link-20261106T053634933Z-geocode-success.png",
+        "sha256": "574e88bd5d47d741ba415ea7943265d4c163bc9b1f86d316b091ba62ae79ab45",
+        "bytes": 299764
+      },
+      {
+        "name": "final-firefox-polygon-link-20261106T053634933Z-reverse-success.png",
+        "sha256": "5c436d4a84c8b2f4cc8187b6d7105b4972902aa0eba8c121d60376f3b5fe9b4e",
+        "bytes": 695709
+      },
+      {
+        "name": "final-firefox-ulsan-byeongyeong-20261106T053634933Z-geocode-success.png",
+        "sha256": "010f6aa9b654378a80def93174be42d38bf59d72ef2d7d38bffab421801afad0",
+        "bytes": 370269
+      },
+      {
+        "name": "final-firefox-ulsan-byeongyeong-20261106T053634933Z-reverse-success.png",
+        "sha256": "574a0209ae0246537a9f18dc9887b17d346210732f34ee8d9de243ccda79da55",
+        "bytes": 683501
+      },
+      {
+        "name": "final-firefox-ulsan-jongga-20261106T053634933Z-geocode-success.png",
+        "sha256": "2f08137cbbd0976d9f747bd47b53675784b8ebf775ef60a8228161b04222f9bd",
+        "bytes": 301040
+      },
+      {
+        "name": "final-firefox-ulsan-jongga-20261106T053634933Z-reverse-success.png",
+        "sha256": "1f24286608fc303133e2eb6e411439bd9d1809e3dbb71f8df1e4f0f3c906885a",
+        "bytes": 518580
+      },
+      {
+        "name": "final-firefox-sangju-seongdong-20261106T053634933Z-geocode-success.png",
+        "sha256": "598f52386a4c6b48b04fa0cc66ef8b6d43a827eb310621d90bfc5824f52483b9",
+        "bytes": 207129
+      },
+      {
+        "name": "final-firefox-sangju-seongdong-20261106T053634933Z-reverse-success.png",
+        "sha256": "9715bd0fd3223bc831e7815112d1501a706a3c18b7fa0c4e5e061c0861eb3fef",
+        "bytes": 406456
+      },
+      {
+        "name": "final-firefox-code12-20261106T053634933Z-geocode-success.png",
+        "sha256": "7e1fba6d2bc8b27cc9638cfa4011613439c7204dc7a1f27007ed72c5984c26d4",
+        "bytes": 309856
+      },
+      {
+        "name": "final-firefox-code12-20261106T053634933Z-reverse-success.png",
+        "sha256": "daf6f376471014fc247a6ed5f8b65ab7263450df5252078e624208757ba755eb",
+        "bytes": 628328
+      },
+      {
+        "name": "final-firefox-no-verified-point-20261106T053634933Z-geocode-success.png",
+        "sha256": "00e3fdce817480cb3a1ad7135c7e94fb6a245cb9ff0a742e7b6d13d152a9eed5",
+        "bytes": 489856
+      },
+      {
+        "name": "final-firefox-no-verified-point-20261106T053634933Z-previous-point-before-null.png",
+        "sha256": "9bf269edb2c42b6665f2f593f72010b1a74b2d0febfac28efb9da6e1e15acd08",
+        "bytes": 309670
+      }
+    ],
+    "completed_at": "2026-11-06T05:37:37.472000+00:00",
+    "all_originals_visually_reviewed": true
+  },
+  "running_source_verification": {
+    "result": "passed",
+    "checked_at": "2026-11-06T05:21:01.179476+00:00",
+    "containers": [
+      {
+        "kind": "api",
+        "verified_source_files": {
+          "main": 170
+        }
+      },
+      {
+        "kind": "dagster",
+        "verified_source_files": {
+          "main": 170,
+          "dagster": 16
+        }
+      }
+    ]
+  },
+  "live_log": {
+    "result": "passed",
+    "unauthorized_requests": 3,
+    "masked_access_records": 3,
+    "fake_secret_leaked": false,
+    "vworld_key_preserved": true,
+    "raw_logs_exported": false
+  },
+  "serving_release": {
+    "id": "b2baacde-2927-41f2-8f89-b460d5929fe6",
+    "version_token": "dv1-301b1ef37137fa2a5af1cbe18a3130d3",
+    "data_token": "dd1-4aa3f4543f7db74aba676ca2a6e5860e",
+    "source_batch": "batch_50b8d72d98244f9092c6df21584dd46d"
+  },
+  "remote_ci_checked_head": "003ea6c0ff722f2e98c562b052c684a25697aa28",
+  "native_wiki": {
+    "result": "published",
+    "wiki_head": "8f51bd543f5c37ba8eaebb9e878f0e4b6fd896e2",
+    "original_images": 32,
+    "all_image_references": 138,
+    "home_sidebar_preserved": true,
+    "all_originals_visually_reviewed": true,
+    "published_at": "2026-11-06T05:47:49.177090+00:00"
+  },
+  "operational_recoveries": [
+    {
+      "stage": "공용 잠금",
+      "action": "30분 대기 한도 뒤 같은 이미지로 공식 잠금 대기를 재개하고 유휴 상태·설정·서빙 릴리스를 다시 대조했다.",
+      "result": "passed"
+    },
+    {
+      "stage": "검증 호스트 브라우저",
+      "action": "필요한 Playwright Chromium·Firefox 실행 파일을 설치하고 기존 브라우저 정리는 비활성화했다.",
+      "result": "passed"
+    },
+    {
+      "stage": "인증·검색 검증기",
+      "action": "v2 필수 candidates[].address.full과 현재 공용 로그인 폼의 아이디 입력란으로 검증 기준을 수정했다.",
+      "result": "passed"
+    },
+    {
+      "stage": "문서 초안 CI",
+      "action": "OS 패키지 다운로드의 12분 제한 실패 뒤 integration-postgis 검사만 재실행해 통과했다.",
+      "checked_head": "35490c42cd50f054402010a4edda0b93d9f6cab6",
+      "result": "passed"
+    }
+  ]
+}

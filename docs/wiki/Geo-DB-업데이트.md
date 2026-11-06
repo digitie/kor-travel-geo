@@ -2,6 +2,46 @@
 
 [GitHub Wiki에서 보기](https://github.com/digitie/kor-travel-geo/wiki/202610-Geo-DB-%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8)
 
+## 2026-11-06 — #621 최종 리뷰와 최신 이미지 배포
+
+[PR #621](https://github.com/digitie/kor-travel-geo/pull/621)을 최종 리뷰하고 최신 main의 주소 검색 #622·#623과 통합해 병합했다. 원격 CI 5개와 CI 완료 뒤 10분 리뷰 창을 확인했다. WSL 전체 백엔드 2,050개·로그 42개 및 정적 검사가 통과했고, 기존 main의 실제 uvicorn 시작 명령에서는 가짜 키 노출 단언 실패를 확인했다.
+
+병합 커밋 ea67c5c의 새 ARM API·코드 서버 이미지를 공식 Manager 잠금 안에서 코드 서버→API 순서로 배포했다. 설치된 소스는 API 170개·코드 서버 186개가 일치하며 의존성도 보존했다. UI는 같은 소스의 기존 이미지를 유지했다. 정상 서빙 릴리스·원천 건수 기록·DB와 키 설정을 보존했고 재적재·강제 승격은 없었다.
+
+코드 서버 검증기가 API 전용 FastAPI를 요구해 실패한 경우에는 검증기만 고치고 이미 완성된 이미지의 검증부터 재개했다. 공용 잠금 점유로 중단된 배포는 다른 서비스를 건드리지 않고 공식 잠금 대기 뒤 이어갔다. 두 경우 모두 전체 빌드나 적재를 다시 하지 않았다.
+
+새 ARM 이미지의 실제 시작 명령과 교체된 운영 프로세스에서 가짜 키 요청의 401·마스킹을 확인했다. 운영 요청 3개 모두 접근 로그에 값 대신 별표가 남았다. 원문 로그나 실제 키는 매뉴얼에 싣지 않는다. 기존 로그 삭제·키 재교체·업로드 세션 오류 문자열 저장은 이 변경에 포함하지 않았다.
+
+실제 Linux에서 Chromium→Firefox 순서로 잘못된 비밀번호 401, 정상 로그인 200, HttpOnly·SameSite=Strict 쿠키, 보호 프록시, 로그아웃과 세션 차단을 확인했다. 정식명·약칭 전체 주소 검색은 각 1건, 없는 건물번호는 0건이었다. 아래 14개 주소 시나리오의 지오코딩·역지오코딩·실제 지도 타일·worker와 좌표 없는 주소의 이전 마커 제거도 통과했다. VWorld 런타임 설정과 타일은 기존 Geo 전용 키를 유지했다.
+
+검증 호스트에서 Playwright 실행 파일이 없으면 필요한 Chromium·Firefox 버전을 설치하고 브라우저 단계부터 재개한다. 검증기의 주소 검색은 v2 필수 주소인 candidates[].address.full을 사용한다. 로그인 화면 확인은 현재 공용 폼의 아이디 입력란을 기준으로 한다. 검증기의 의존성·주소 필드·화면 확인 기준을 현재 계약에 맞게 수정하고 두 브라우저의 전체 흐름을 재검증했다.
+
+인증 화면의 릴리스 시각 표시는 UTC이며 아래 본문 실측은 KST다. 스크린샷은 시간대나 내용을 수정하지 않은 원본이다.
+
+운영 로그 확인 완료 시각: **2026-11-06 14:20:13 KST**. 이 시각은 DB 로드 종료 시각과 구분한다.
+
+실제 UI 최종 완료 시각: **2026-11-06 14:37:37 KST**. 원본 32개를 모두 시각적으로 확인했다.
+
+| 브라우저 | 주소 시나리오 | 결과 | 수정하지 않은 스크린샷 |
+| --- | --- | --- | --- |
+| chromium | 기준 주소 — 서울 테헤란로 152 | 통과 | [지오코딩 원본](assets/final-chromium-baseline-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-baseline-20261106T053519603Z-reverse-success.png) |
+| chromium | 건물 도형 연결 주소 | 통과 | [지오코딩 원본](assets/final-chromium-polygon-link-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-polygon-link-20261106T053519603Z-reverse-success.png) |
+| chromium | 울산 병영성11길 1 | 통과 | [지오코딩 원본](assets/final-chromium-ulsan-byeongyeong-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-ulsan-byeongyeong-20261106T053519603Z-reverse-success.png) |
+| chromium | 울산 종가20길 6 | 통과 | [지오코딩 원본](assets/final-chromium-ulsan-jongga-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-ulsan-jongga-20261106T053519603Z-reverse-success.png) |
+| chromium | 상주 성동로 152-27 | 통과 | [지오코딩 원본](assets/final-chromium-sangju-seongdong-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-sangju-seongdong-20261106T053519603Z-reverse-success.png) |
+| chromium | 시도 코드 12 원천 주소 | 통과 | [지오코딩 원본](assets/final-chromium-code12-20261106T053519603Z-geocode-success.png) · [역지오코딩 원본](assets/final-chromium-code12-20261106T053519603Z-reverse-success.png) |
+| chromium | 검증 좌표 없음·이전 마커 제거 | 통과 | [지오코딩 원본](assets/final-chromium-no-verified-point-20261106T053519603Z-geocode-success.png) · [직전 마커 원본](assets/final-chromium-no-verified-point-20261106T053519603Z-previous-point-before-null.png) |
+| firefox | 기준 주소 — 서울 테헤란로 152 | 통과 | [지오코딩 원본](assets/final-firefox-baseline-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-baseline-20261106T053634933Z-reverse-success.png) |
+| firefox | 건물 도형 연결 주소 | 통과 | [지오코딩 원본](assets/final-firefox-polygon-link-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-polygon-link-20261106T053634933Z-reverse-success.png) |
+| firefox | 울산 병영성11길 1 | 통과 | [지오코딩 원본](assets/final-firefox-ulsan-byeongyeong-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-ulsan-byeongyeong-20261106T053634933Z-reverse-success.png) |
+| firefox | 울산 종가20길 6 | 통과 | [지오코딩 원본](assets/final-firefox-ulsan-jongga-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-ulsan-jongga-20261106T053634933Z-reverse-success.png) |
+| firefox | 상주 성동로 152-27 | 통과 | [지오코딩 원본](assets/final-firefox-sangju-seongdong-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-sangju-seongdong-20261106T053634933Z-reverse-success.png) |
+| firefox | 시도 코드 12 원천 주소 | 통과 | [지오코딩 원본](assets/final-firefox-code12-20261106T053634933Z-geocode-success.png) · [역지오코딩 원본](assets/final-firefox-code12-20261106T053634933Z-reverse-success.png) |
+| firefox | 검증 좌표 없음·이전 마커 제거 | 통과 | [지오코딩 원본](assets/final-firefox-no-verified-point-20261106T053634933Z-geocode-success.png) · [직전 마커 원본](assets/final-firefox-no-verified-point-20261106T053634933Z-previous-point-before-null.png) |
+
+- chromium 인증: [관리 홈](assets/pr621-auth-chromium-20261106T053344142Z-admin.png) · [로그아웃](assets/pr621-auth-chromium-20261106T053344142Z-logout.png)
+- firefox 인증: [관리 홈](assets/pr621-auth-firefox-20261106T053353296Z-admin.png) · [로그아웃](assets/pr621-auth-firefox-20261106T053353296Z-logout.png)
+
 ## 최종 완료: 정상 승격·새 키·실제 UI 검증
 
 DB 적재는 **2026-11-02 19:41:58 KST**에 MV·릴리스 기록 커밋을 마쳤다. 같은 복구 배치가 DONE, Dagster가 SUCCESS이며 강제 승격 없이 정상 게이트를 통과했다. 최초 DB 시작부터 최종 DB 완료까지 **85시간 11분 29초**, 완료 원천 6종을 재사용한 유실분 복구 배치는 **48시간 35분 3초**다. 아래 실측 표에서 실패·취소·대기와 내부 중첩 구간을 구분한다.
