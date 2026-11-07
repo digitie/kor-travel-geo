@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import math
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -8,7 +10,7 @@ import kortravelgeo.client as client_module
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.common import Point, ServiceMeta
 from kortravelgeo.dto.search import SearchInput, SearchResponse, SearchResultItem
-from kortravelgeo.dto.v2 import DatasetRef
+from kortravelgeo.dto.v2 import BBoxV2, DatasetRef
 from kortravelgeo.exceptions import GeometryTimeoutError
 from kortravelgeo.infra.geometry_repo import GeometryRepository
 from kortravelgeo.settings import Settings
@@ -191,4 +193,44 @@ async def test_geometry_option_has_its_own_key_and_failed_geometry_is_retried(
     cached = await client.geocode(_ADDRESS, limit=1, include_geometry=True)
     assert cached.candidates[0].geometry.geojson["coordinates"] == []
     assert calls == 2 and state["geocode_calls"] == 1
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service", ["geocode", "search"])
+@pytest.mark.parametrize("minimum,maximum", [
+    (float("-inf"), float("inf")), (float("nan"), 130.0),
+])
+async def test_nonfinite_bbox_preserves_the_cache_disabled_response(
+    cached_client, service, minimum, maximum,
+):
+    client, _ = cached_client
+    bbox = BBoxV2(min_lon=minimum, min_lat=32, max_lon=maximum, max_lat=39)
+    call = client.geocode if service == "geocode" else client.search
+    client.settings = client.settings.model_copy(update={"cache_memory_max_bytes": 0})
+    expected = await call(_ADDRESS, bbox=bbox)
+    client.settings = client.settings.model_copy(update={"cache_memory_max_bytes": 67108864})
+    for _ in range(2):
+        actual = await call(_ADDRESS, bbox=bbox)
+        assert actual.status == expected.status and actual.candidates == expected.candidates
+        if service == "search":
+            assert actual.total == expected.total
+        echoed = actual.input.bbox
+        assert echoed is not None
+        assert (math.isnan(echoed.min_lon) if math.isnan(minimum) else echoed.min_lon == minimum)
+        assert echoed.max_lon == maximum
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_finite_bbox_keeps_complete_response_caching(cached_client, monkeypatch):
+    client, state = cached_client
+    bbox = BBoxV2(min_lon=126, min_lat=36, max_lon=128, max_lat=38)
+    geocode = AsyncMock(wraps=client._geocode_v2)
+    monkeypatch.setattr(client, "_geocode_v2", geocode)
+    await client.geocode(_ADDRESS, bbox=bbox, limit=1)
+    await client.geocode(_ADDRESS, bbox=bbox, limit=1)
+    await client.search(_ADDRESS, bbox=bbox)
+    await client.search(_ADDRESS, bbox=bbox)
+    assert geocode.await_count == 1 and state["search_calls"] == 1
     await client.close()

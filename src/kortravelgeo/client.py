@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import datetime
@@ -235,6 +236,13 @@ def _cache_release_key(dataset: DatasetRef | None) -> str | None:
 _ResponseT = TypeVar("_ResponseT", bound=BaseModel)
 
 
+def _cacheable_bbox(bbox: BBoxV2 | None) -> bool:
+    # Preserve accepted SDK inputs that JSON would otherwise turn into null.
+    return bbox is None or all(math.isfinite(value) for value in (
+        bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat,
+    ))
+
+
 class AsyncAddressClient:
     """Async-only client facade for address geocoding operations."""
 
@@ -361,7 +369,8 @@ class AsyncAddressClient:
                 "dataset": None if dataset is None else dataset.model_dump(mode="json"),
             }),
             GeocodeV2Response, load,
-            enabled=self.settings.cache_enabled and dataset is not None and fallback == "none",
+            enabled=(self.settings.cache_enabled and dataset is not None
+                     and fallback == "none" and _cacheable_bbox(bbox)),
         )
         return response
 
@@ -918,7 +927,7 @@ class AsyncAddressClient:
                 "dataset": None if dataset is None else dataset.model_dump(mode="json"),
             }),
             SearchV2Response, load,
-            enabled=self.settings.cache_enabled and dataset is not None,
+            enabled=self.settings.cache_enabled and dataset is not None and _cacheable_bbox(bbox),
         )
         return result
 
