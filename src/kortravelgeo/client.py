@@ -7,8 +7,9 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import datetime
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, TypeVar
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .core.consistency_definitions import CASE_DEFINITIONS
@@ -149,6 +150,7 @@ from .infra.geometry_repo import GeometryRepository
 from .infra.hotswap import inspect_restore_hot_swap_plan, validate_maintenance_database
 from .infra.pobox_repo import PoboxRepository
 from .infra.public_api_keys import PublicApiKeyRepository
+from .infra.result_cache import CacheService, MemoryResultCache
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
 from .infra.source_group_service import (
@@ -230,6 +232,9 @@ def _cache_release_key(dataset: DatasetRef | None) -> str | None:
     return None if dataset is None else dataset.version_token
 
 
+_ResponseT = TypeVar("_ResponseT", bound=BaseModel)
+
+
 class AsyncAddressClient:
     """Async-only client facade for address geocoding operations."""
 
@@ -247,6 +252,7 @@ class AsyncAddressClient:
         self._owns_engine = engine is None
         self.closed = True
         self._dataset_ref_cache = DatasetRefCache()
+        self._memory_result_cache = MemoryResultCache(self.settings.cache_memory_max_bytes)
 
     async def dataset_ref(self) -> DatasetRef | None:
         """The active release's ``{version_token, data_token}`` (process cache, TTL 10 s).
@@ -259,6 +265,32 @@ class AsyncAddressClient:
 
         return await self._dataset_ref_cache.get(load)
 
+    async def _memory_response(
+        self,
+        service: CacheService,
+        cache_key: str,
+        response_type: type[_ResponseT],
+        loader: Callable[[], Awaitable[_ResponseT]],
+        *,
+        enabled: bool,
+    ) -> tuple[_ResponseT, bool]:
+        if not enabled or self.settings.cache_memory_max_bytes == 0:
+            return await loader(), False
+
+        async def load_payload() -> dict[str, Any]:
+            response = await loader()
+            if isinstance(response, GeocodeResponse):
+                return _geocode_cache_payload(response)
+            if isinstance(response, ReverseResponse):
+                return _reverse_cache_payload(response)
+            # query_id identifies this response, not the cached query result.
+            return response.model_dump(mode="json", exclude={"query_id"})
+
+        payload, hit = await self._memory_result_cache.get_or_load(
+            cache_key, load_payload, service=service,
+        )
+        return response_type.model_validate(payload), hit
+
     async def __aenter__(self) -> Self:
         if self.engine is None:
             self.engine = make_async_engine(self.settings)
@@ -269,6 +301,7 @@ class AsyncAddressClient:
         await self.close()
 
     async def close(self) -> None:
+        await self._memory_result_cache.aclose()
         if self.engine is not None and self._owns_engine:
             await self.engine.dispose()
         self.closed = True
@@ -298,21 +331,39 @@ class AsyncAddressClient:
         fallback: Literal["none", "api"] = "none",
         include_geometry: bool = False,
     ) -> GeocodeV2Response:
-        dataset = await self.dataset_ref()
-        response = await self._geocode_v2(
-            query,
-            road_address=road_address,
-            jibun_address=jibun_address,
-            keyword=keyword,
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
-            bbox=bbox,
-            limit=limit,
-            fallback=fallback,
-            include_geometry=include_geometry,
-            dataset=dataset,
+        inp = GeocodeV2Input(
+            query=query, road_address=road_address, jibun_address=jibun_address,
+            keyword=keyword, sig_cd=sig_cd, bjd_cd=bjd_cd, bbox=bbox,
+            limit=limit, fallback=fallback, include_geometry=include_geometry,
         )
-        return _with_dataset(response, dataset)
+        dataset = await self.dataset_ref()
+
+        async def load() -> GeocodeV2Response:
+            response = await self._geocode_v2(
+                query,
+                road_address=road_address,
+                jibun_address=jibun_address,
+                keyword=keyword,
+                sig_cd=sig_cd,
+                bjd_cd=bjd_cd,
+                bbox=bbox,
+                limit=limit,
+                fallback=fallback,
+                include_geometry=include_geometry,
+                dataset=dataset,
+            )
+            return _with_dataset(response, dataset)
+
+        response, _ = await self._memory_response(
+            "geocode",
+            make_cache_key("geocode_v2", {
+                "input": inp.model_dump(mode="json"),
+                "dataset": None if dataset is None else dataset.model_dump(mode="json"),
+            }),
+            GeocodeV2Response, load,
+            enabled=self.settings.cache_enabled and dataset is not None and fallback == "none",
+        )
+        return response
 
     async def _geocode_v2(
         self,
@@ -595,17 +646,24 @@ class AsyncAddressClient:
         # No release stamp (no active release, or the ledger read failed): the answer cannot be
         # keyed to a release, so the result cache is skipped both ways (ADR-069 구현 기록 10).
         use_cache = self._use_result_cache(fallback=fallback) and dataset is not None
-        if use_cache:
-            cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
-            if cached is not None:
-                return _cached_geocode_response(GeocodeResponse.model_validate(cached))
-        response = await core_geocode(
-            GeocodeRepository(self._engine()),
-            inp,
-            region_hint=region_hint,
+
+        async def load() -> GeocodeResponse:
+            if use_cache:
+                cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
+                if cached is not None:
+                    return _cached_geocode_response(GeocodeResponse.model_validate(cached))
+            response = await core_geocode(
+                GeocodeRepository(self._engine()), inp, region_hint=region_hint,
+            )
+            if use_cache:
+                await self._store_geocode_cache(cache_key, response)
+            return response
+
+        response, memory_hit = await self._memory_response(
+            "geocode", cache_key, GeocodeResponse, load, enabled=use_cache,
         )
-        if use_cache:
-            await self._store_geocode_cache(cache_key, response)
+        if memory_hit and response.status == "OK":
+            response = _cached_geocode_response(response)
         if fallback != "api" or response.status != "NOT_FOUND" or region_hint is not None:
             return response
         external = await ExternalGeocodeClient(self.settings).geocode(inp)
@@ -654,17 +712,24 @@ class AsyncAddressClient:
             dataset = await self.dataset_ref()
         cache_key = self._reverse_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset)
         use_cache = self._use_result_cache(fallback="local_only") and dataset is not None
-        if use_cache:
-            cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
-            if cached is not None:
-                return _cached_reverse_response(ReverseResponse.model_validate(cached))
-        response = await core_reverse_geocode(
-            ReverseRepository(self._engine()),
-            inp,
-            region_hint=region_hint,
+
+        async def load() -> ReverseResponse:
+            if use_cache:
+                cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
+                if cached is not None:
+                    return _cached_reverse_response(ReverseResponse.model_validate(cached))
+            response = await core_reverse_geocode(
+                ReverseRepository(self._engine()), inp, region_hint=region_hint,
+            )
+            if use_cache:
+                await self._store_reverse_cache(cache_key, response)
+            return response
+
+        response, memory_hit = await self._memory_response(
+            "reverse", cache_key, ReverseResponse, load, enabled=use_cache,
         )
-        if use_cache:
-            await self._store_reverse_cache(cache_key, response)
+        if memory_hit and response.status == "OK":
+            response = _cached_reverse_response(response)
         return response
 
     def _use_result_cache(
@@ -782,23 +847,30 @@ class AsyncAddressClient:
             include_geometry=include_geometry,
         )
         dataset = await self.dataset_ref()
-        response = await self._reverse_geocode_v1(
-            lon,
-            lat,
-            crs=crs,
-            zipcode=include_zipcode,
-            radius_m=inp.radius_m,
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
-            dataset=dataset,
+
+        async def load() -> ReverseV2Response:
+            response = await self._reverse_geocode_v1(
+                lon, lat, crs=crs, zipcode=include_zipcode, radius_m=inp.radius_m,
+                sig_cd=sig_cd, bjd_cd=bjd_cd, dataset=dataset,
+            )
+            result = reverse_v2_from_v1(inp, response)
+            enriched = await self._enrich_candidates_with_geometry(
+                result.candidates, include_geometry=inp.include_geometry
+            )
+            if enriched is not result.candidates:
+                result = result.model_copy(update={"candidates": enriched})
+            return _with_dataset(result, dataset)
+
+        result, _ = await self._memory_response(
+            "reverse",
+            make_cache_key("reverse_v2", {
+                "input": inp.model_dump(mode="json"),
+                "dataset": None if dataset is None else dataset.model_dump(mode="json"),
+            }),
+            ReverseV2Response, load,
+            enabled=self.settings.cache_enabled and dataset is not None,
         )
-        result = reverse_v2_from_v1(inp, response)
-        enriched = await self._enrich_candidates_with_geometry(
-            result.candidates, include_geometry=inp.include_geometry
-        )
-        if enriched is not result.candidates:
-            result = result.model_copy(update={"candidates": enriched})
-        return _with_dataset(result, dataset)
+        return result
 
     async def search(
         self,
@@ -825,21 +897,30 @@ class AsyncAddressClient:
             include_geometry=include_geometry,
         )
         dataset = await self.dataset_ref()
-        response = await self._search_v1(
-            query,
-            type="place" if type == "category" else type,
-            page=page,
-            size=size,
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
+
+        async def load() -> SearchV2Response:
+            response = await self._search_v1(
+                query, type="place" if type == "category" else type, page=page,
+                size=size, sig_cd=sig_cd, bjd_cd=bjd_cd,
+            )
+            result = search_v2_from_v1(inp, response)
+            enriched = await self._enrich_candidates_with_geometry(
+                result.candidates, include_geometry=inp.include_geometry
+            )
+            if enriched is not result.candidates:
+                result = result.model_copy(update={"candidates": enriched})
+            return _with_dataset(result, dataset)
+
+        result, _ = await self._memory_response(
+            "search",
+            make_cache_key("search_v2", {
+                "input": inp.model_dump(mode="json"),
+                "dataset": None if dataset is None else dataset.model_dump(mode="json"),
+            }),
+            SearchV2Response, load,
+            enabled=self.settings.cache_enabled and dataset is not None,
         )
-        result = search_v2_from_v1(inp, response)
-        enriched = await self._enrich_candidates_with_geometry(
-            result.candidates, include_geometry=inp.include_geometry
-        )
-        if enriched is not result.candidates:
-            result = result.model_copy(update={"candidates": enriched})
-        return _with_dataset(result, dataset)
+        return result
 
     async def regions_within_radius(
         self,

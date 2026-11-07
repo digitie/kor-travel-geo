@@ -100,6 +100,7 @@ class Settings(BaseSettings):
 
     cache_enabled: bool = True
     cache_ttl_days: int = Field(default=30, ge=1)
+    cache_memory_max_bytes: int = Field(default=64 * 1024 * 1024, ge=0)
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"

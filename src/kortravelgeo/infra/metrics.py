@@ -99,6 +99,13 @@ CACHE_EXPIRED = _gauge(
     "ktg_cache_expired_entries",
     "Expired rows currently in geo_cache.",
 )
+MEMORY_RESULT_CACHE_LOOKUPS = _counter(
+    "ktg_memory_result_cache_lookups_total",
+    "Process-local result-cache lookups by service and outcome.",
+    ("service", "outcome"),
+)
+
+
 LOAD_JOBS = _gauge(
     "ktg_load_jobs",
     "Load jobs by kind and persistent state.",
@@ -332,6 +339,10 @@ _SQL_WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 
 def record_external_api_call(provider: str, outcome: str) -> None:
     EXTERNAL_API_CALLS.labels(provider=provider, outcome=outcome).inc()
+
+
+def record_memory_result_cache(service: str, outcome: str) -> None:
+    MEMORY_RESULT_CACHE_LOOKUPS.labels(service=service, outcome=outcome).inc()
 
 
 def normalize_metric_method(method: str) -> str:

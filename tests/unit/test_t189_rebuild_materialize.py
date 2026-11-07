@@ -417,7 +417,7 @@ async def test_prepare_rebuild_uses_attempt_scoped_staging_root(
     client = AsyncAddressClient(
         settings=cast(
             "Any",
-            SimpleNamespace(rustfs_materialize_dir=tmp_path),
+            SimpleNamespace(rustfs_materialize_dir=tmp_path, cache_memory_max_bytes=0),
         ),
         engine=cast("Any", object()),
     )
