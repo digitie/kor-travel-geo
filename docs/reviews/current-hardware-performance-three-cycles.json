@@ -1,0 +1,226 @@
+{
+  "baseline_revision": "289353f50bf7892afd18b5b564cc93a887259969",
+  "hardware": {
+    "cpu_cores": 4,
+    "architecture": "aarch64",
+    "ram_gib": 7.5,
+    "api_limit_gib": 1.5,
+    "postgres_limit_gib": 3,
+    "postgres_version": "18.6"
+  },
+  "scope": "장비 증설·원천 재적재 없이 세 차례 원인 발굴·개선·검증",
+  "cycles": [
+    {
+      "number": 1,
+      "status": "완료",
+      "cause": "지역 조건의 reverse 후보를 구한 뒤에 반경을 적용하던 조회 경로",
+      "change": "지역 조건이 있는 경우만 후보 단계에 ST_DWithin을 적용하고 조건 없는 SQL은 보존",
+      "rejected_candidate": "조건 없는 조회까지 일괄 반경 조기 적용: 일부 표본이 악화돼 제외",
+      "correctness": {
+        "live_cases": 8,
+        "mismatches": 0,
+        "errors": 0,
+        "postgis_tests_passed": 4,
+        "unit_tests_passed": 7
+      },
+      "measurement": {
+        "kind": "같은 장비의 SQL 교차 순서 비교; HTTP 전체 응답시간 아님",
+        "concurrency": 1,
+        "warmup_per_variant": 2,
+        "samples_per_variant_per_case": 16,
+        "p95_method": "nearest_rank",
+        "cases": [
+          {
+            "case": "gangnam",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 7.682,
+                "p95_ms": 10.401
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 7.656,
+                "p95_ms": 9.268
+              }
+            }
+          },
+          {
+            "case": "gangnam_bjd",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 372.604,
+                "p95_ms": 1112.316
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 18.226,
+                "p95_ms": 50.406
+              }
+            }
+          },
+          {
+            "case": "gangnam_sig",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 32.446,
+                "p95_ms": 90.533
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 17.581,
+                "p95_ms": 269.938
+              }
+            }
+          },
+          {
+            "case": "sejong",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 19.063,
+                "p95_ms": 45.438
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 16.682,
+                "p95_ms": 37.899
+              }
+            }
+          },
+          {
+            "case": "ulsan",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 8.025,
+                "p95_ms": 30.845
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 9.264,
+                "p95_ms": 39.228
+              }
+            }
+          },
+          {
+            "case": "ulsan_sig",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 6.468,
+                "p95_ms": 32.925
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 6.86,
+                "p95_ms": 36.034
+              }
+            }
+          },
+          {
+            "case": "no_result",
+            "rows": 0,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 5.121,
+                "p95_ms": 9.204
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 5.625,
+                "p95_ms": 15.671
+              }
+            }
+          },
+          {
+            "case": "no_result_bjd",
+            "rows": 0,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 390.792,
+                "p95_ms": 724.67
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 5.748,
+                "p95_ms": 17.365
+              }
+            }
+          }
+        ]
+      },
+      "plan_execution_proof": [
+        {
+          "plan_mode": "force_custom_plan",
+          "variant": "before",
+          "execution_ms": 424.002,
+          "buffer_hits": 665,
+          "buffer_reads": 0,
+          "rows": 5.0
+        },
+        {
+          "plan_mode": "force_custom_plan",
+          "variant": "after",
+          "execution_ms": 11.923,
+          "buffer_hits": 120,
+          "buffer_reads": 0,
+          "rows": 5.0
+        },
+        {
+          "plan_mode": "force_generic_plan",
+          "variant": "before",
+          "error_type": "QueryCanceled",
+          "sqlstate": "57014"
+        },
+        {
+          "plan_mode": "force_generic_plan",
+          "variant": "after",
+          "execution_ms": 22.843,
+          "buffer_hits": 71,
+          "buffer_reads": 0,
+          "rows": 5.0
+        }
+      ],
+      "limitations": [
+        "공용 장비의 소표본이며 p95 이상치는 숨기지 않는다",
+        "강제 generic plan은 반사실 실험이며 현재 auto 관측에서 generic_plans는 0이다",
+        "기존 20초 검증 상한에 모델 초기화·접속이 포함된 문제를 진단하고 쿼리 측정과 분리했다"
+      ]
+    },
+    {
+      "number": 2,
+      "status": "진행 중"
+    },
+    {
+      "number": 3,
+      "status": "대기"
+    }
+  ]
+}

@@ -14,8 +14,7 @@ from kortravelgeo.dto.region import RegionHint, region_params
 from ._rows import map_reverse, map_sppn_area
 from .coordinates import project_point_to_5179, srid_from_crs
 
-_NEAREST_SQL = text(
-    """
+_NEAREST_SQL_BODY = """
 WITH target_pt AS (
   SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179) AS geom
 ),
@@ -28,6 +27,7 @@ knn_candidates AS MATERIALIZED (
          ST_Distance(t.pt_5179, p.geom) AS distance_m
     FROM mv_geocode_target t, target_pt p
    WHERE t.pt_5179 IS NOT NULL
+     {radius_filter}
      AND (CAST(:sig_cd_filter AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
      AND (CAST(:sig_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_prefix AS text))
      AND (CAST(:bjd_cd_filter AS text) IS NULL OR t.bjd_cd = CAST(:bjd_cd_filter AS text))
@@ -45,7 +45,11 @@ SELECT *
           bjd_cd ASC
  LIMIT :limit
 """
-)
+
+_NEAREST_SQL = text(_NEAREST_SQL_BODY.format(radius_filter=""))
+_REGION_NEAREST_SQL = text(_NEAREST_SQL_BODY.format(
+    radius_filter="AND ST_DWithin(t.pt_5179, p.geom, :radius_m)"
+))
 
 _RADIUS_SQL = text(
     """
@@ -116,7 +120,7 @@ class ReverseRepository:
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
-                    _NEAREST_SQL,
+                    _REGION_NEAREST_SQL if region_hint is not None else _NEAREST_SQL,
                     {
                         **region_params(region_hint),
                         "x": point.x,
