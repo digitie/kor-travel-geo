@@ -941,7 +941,8 @@
         "ready": true,
         "maintenance_work_mem_mib": 64,
         "parallel_maintenance_workers": 0,
-        "database_reload": false
+        "database_reload": false,
+        "build_duration_scope": "최종 성공한 생성 1회; 실패·원인 분석·재시도 대기 제외"
       },
       "issues_resolved": [
         "MV가 지원하지 않는 사전 LOCK 구문 제거 후 DDL 자체의 잠금 사용",
@@ -970,5 +971,586 @@
     "manual_security_review": "전용 security-review 스킬 미설치로 직접 diff·인증 경계·응답 격리·유한 label·실제 키 부재 검토",
     "actual_key_staged_matches": 0,
     "actual_key_tracked_matches": 0
-  }
+  },
+  "delivery": {
+    "state": "운영 반영·실행 소스·실제 UI·HTTP·Wiki 검증 완료",
+    "merged_pr": 628,
+    "merged_revision": "5c4f8424705672f49f14240f09ff52230e2e7935",
+    "reviewed_head": "a1bc731c079aa7eeb612c9553862349effc81c25",
+    "ci_checks_passed": 5,
+    "ci_green_observed_utc": "2026-11-07T11:22:34+00:00",
+    "final_review_utc": "2026-11-07T11:33:11+00:00",
+    "review_surface_counts": {
+      "conversation": 0,
+      "reviews": 0,
+      "inline_threads": 0
+    },
+    "review_window_seconds": 600,
+    "images": [
+      {
+        "kind": "api",
+        "id": "sha256:e51436c6f221d05946b0d24da1a646a88273c570c046ec6f630458fb1bfa8618",
+        "build_and_validation_seconds": 52.288899,
+        "verified_source_files": {
+          "main": 171
+        },
+        "dependencies_unchanged": true,
+        "cache_contract": "passed",
+        "bbox_contract": "passed"
+      },
+      {
+        "kind": "dagster",
+        "id": "sha256:28b099e3bc746fad36c047fef8a39e7542e1782c7ed3f8aba6be76d854ecc38e",
+        "build_and_validation_seconds": 50.063386,
+        "verified_source_files": {
+          "main": 171,
+          "dagster": 16
+        },
+        "dependencies_unchanged": true,
+        "cache_contract": "passed",
+        "bbox_contract": "passed"
+      }
+    ],
+    "actual_image_cmd": "시작·가짜 키 401·마스킹 통과; DB 접속 없이 검사",
+    "runtime_deployed": true,
+    "cleanup": {
+      "owned_disposable_database": "삭제 확인",
+      "owned_ssh_tunnel": "종료",
+      "test_dsn_files": "삭제",
+      "owned_probe_code_directories_removed": 3,
+      "private_browser_auth_states_removed": 2
+    },
+    "http_baseline": {
+      "scope": "기존 운영 API+UI 프록시; 신규 인덱스는 이미 존재; 렌더링 제외",
+      "warmup": 2,
+      "samples_per_case": 20,
+      "concurrency": 1,
+      "cases": [
+        {
+          "case": "geocode_geometry",
+          "p50_ms": 207.2628440000044,
+          "p95_ms": 817.6934089999995,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "reverse",
+          "p50_ms": 132.48769299999913,
+          "p95_ms": 167.65263399999822,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "reverse_geometry",
+          "p50_ms": 304.4145134999999,
+          "p95_ms": 501.5380359999981,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "search",
+          "p50_ms": 410.7595294999992,
+          "p95_ms": 854.0737660000013,
+          "errors": 0,
+          "unique_query_ids": true
+        }
+      ]
+    },
+    "remaining": [],
+    "includes_prs": [
+      626,
+      628
+    ],
+    "initial_prepared_attempt": {
+      "merged_revision": "3e3da65de8e194f0b60c0d621749564b8554412e",
+      "reviewed_head": "a204ccca796cc814369fb997f733b6a1316c1143",
+      "images": [
+        {
+          "kind": "api",
+          "id": "sha256:9ad6b920931c1592ce166686fba0bcd5873d9131d30ce15ae40032db3e5ecbbc",
+          "build_and_validation_seconds": 73.41855,
+          "verified_source_files": {
+            "main": 171
+          },
+          "dependencies_unchanged": true,
+          "cache_contract": "passed"
+        },
+        {
+          "kind": "dagster",
+          "id": "sha256:5d37f0486cfc758f2f79aeabdff5546a2c9e65a3ee410df2b516a1cda1b2e506",
+          "build_and_validation_seconds": 81.131819,
+          "verified_source_files": {
+            "main": 171,
+            "dagster": 16
+          },
+          "dependencies_unchanged": true,
+          "cache_contract": "passed"
+        }
+      ],
+      "actual_image_cmd": "시작·가짜 키 401·마스킹 통과; DB 접속 없이 검사"
+    },
+    "initial_images_deployed": false,
+    "initial_wait_cancelled": "운영 교체 전 내 대기만 취소해 bbox 호환성 수정을 포함했다",
+    "bbox_validation": {
+      "focused": 32,
+      "pytest": 2082,
+      "optional_skipped": 234,
+      "ruff": "passed",
+      "strict_mypy_files": 171,
+      "import_contracts": 1,
+      "openapi_changed": false
+    },
+    "deployed_at_utc": "2026-11-07T11:50:03.173596+00:00",
+    "canonical_manager_lock": true,
+    "non_selected_containers_unchanged": true,
+    "runtime_sources": {
+      "result": "passed",
+      "checked_at": "2026-11-07T14:15:52.301023+00:00",
+      "containers": [
+        {
+          "kind": "api",
+          "verified_source_files": {
+            "main": 171
+          }
+        },
+        {
+          "kind": "dagster",
+          "verified_source_files": {
+            "main": 171,
+            "dagster": 16
+          }
+        }
+      ]
+    },
+    "live_log_check": {
+      "at": "2026-11-07T14:15:55.734145+00:00",
+      "revision": "5c4f8424705672f49f14240f09ff52230e2e7935",
+      "result": "passed",
+      "unauthorized_requests": 3,
+      "masked_access_records": 3,
+      "fake_secret_leaked": false,
+      "vworld_key_preserved": true,
+      "trace_logging": false,
+      "raw_logs_exported": false
+    },
+    "post_deployment_database": {
+      "result": "passed",
+      "checked_at": "2026-11-07T14:23:01.710174+00:00",
+      "database": {
+        "mode": "after",
+        "alembic_version": "0032_road_address_exact_index",
+        "index_valid": true,
+        "verified": true
+      },
+      "serving_release_id": "b2baacde-2927-41f2-8f89-b460d5929fe6",
+      "row_counts": {
+        "mv_geocode_target": 6424765,
+        "mv_geocode_text_search": 6424765,
+        "tl_juso_parcel_link": 1770572,
+        "tl_juso_text": 6424765,
+        "tl_locsum_entrc": 6410683,
+        "tl_navi_buld_centroid": 10683827,
+        "tl_navi_entrc": 12846,
+        "tl_roadaddr_entrc": 6411242,
+        "tl_spbd_buld_polygon": 10684220
+      },
+      "source_set_unchanged": true,
+      "normal_release_unchanged": true,
+      "mutations": 0
+    },
+    "memory_cache_observation": {
+      "checked_at": "2026-11-07T14:23:53.015778+00:00",
+      "settings": {
+        "cache_enabled": true,
+        "cache_memory_max_bytes": 67108864
+      },
+      "revision": "5c4f8424705672f49f14240f09ff52230e2e7935",
+      "memory_limit_bytes": 1610612736,
+      "container_memory_usage": "127.3MiB / 1.5GiB",
+      "result": "passed",
+      "hit_counter_increase": 20.0,
+      "scope": "실제 운영 API 프로세스; HTTP 전체의 DB 호출 0회 의미 아님"
+    },
+    "sequential_live_ui": [
+      {
+        "browser": "chromium",
+        "result": "passed",
+        "auth": {
+          "result": "passed",
+          "browser": "chromium",
+          "wrong_password": 401,
+          "login": 200,
+          "cookie_http_only": true,
+          "cookie_same_site": "Strict",
+          "protected_proxy": 200,
+          "logout": 200,
+          "unauthenticated_proxy": 401,
+          "regional_reverse_http": 200,
+          "regional_reverse_candidates": 11,
+          "regional_reverse_address_candidates": 10,
+          "regional_reverse_sppn_candidates": 1,
+          "regional_reverse_address_codes_matched": true,
+          "completed_at": "2026-11-07T14:21:00.940Z"
+        },
+        "structured_address_search_totals": [
+          1,
+          1,
+          0
+        ],
+        "cases": [
+          {
+            "case": "baseline",
+            "point_available": true,
+            "repeat_query_id_unique": true,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "polygon-link",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "ulsan-byeongyeong",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "ulsan-jongga",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "sangju-seongdong",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "code12",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "no-verified-point",
+            "point_available": false,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": true
+          }
+        ],
+        "workflow_mutations": 0,
+        "vworld_key_preserved": true,
+        "completed_at": "2026-11-07T14:22:04.934Z"
+      },
+      {
+        "browser": "firefox",
+        "result": "passed",
+        "auth": {
+          "result": "passed",
+          "browser": "firefox",
+          "wrong_password": 401,
+          "login": 200,
+          "cookie_http_only": true,
+          "cookie_same_site": "Strict",
+          "protected_proxy": 200,
+          "logout": 200,
+          "unauthenticated_proxy": 401,
+          "regional_reverse_http": 200,
+          "regional_reverse_candidates": 11,
+          "regional_reverse_address_candidates": 10,
+          "regional_reverse_sppn_candidates": 1,
+          "regional_reverse_address_codes_matched": true,
+          "completed_at": "2026-11-07T14:22:30.038Z"
+        },
+        "structured_address_search_totals": [
+          1,
+          1,
+          0
+        ],
+        "cases": [
+          {
+            "case": "baseline",
+            "point_available": true,
+            "repeat_query_id_unique": true,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "polygon-link",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "ulsan-byeongyeong",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "ulsan-jongga",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "sangju-seongdong",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "code12",
+            "point_available": true,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": false
+          },
+          {
+            "case": "no-verified-point",
+            "point_available": false,
+            "repeat_query_id_unique": null,
+            "previous_point_cleared": true
+          }
+        ],
+        "workflow_mutations": 0,
+        "vworld_key_preserved": true,
+        "completed_at": "2026-11-07T14:23:36.008Z"
+      }
+    ],
+    "http_comparison": {
+      "result": "passed",
+      "revision": "5c4f8424705672f49f14240f09ff52230e2e7935",
+      "scope": "실제 관리 UI 프록시 HTTP; 렌더링·공개 키 인증 경로 제외",
+      "baseline": "기존 운영 코드; 3회차 인덱스는 이미 생성된 상태",
+      "before_completed_at": "2026-11-07T10:32:43.172Z",
+      "after_completed_at": "2026-11-07T14:26:22.126Z",
+      "samples_per_case": 20,
+      "warmup": 2,
+      "concurrency": 1,
+      "p95_method": "nearest_rank",
+      "cases": [
+        {
+          "case": "geocode_geometry",
+          "before_p50_ms": 207.2628440000044,
+          "after_p50_ms": 141.7556125000001,
+          "before_p95_ms": 817.6934089999995,
+          "after_p95_ms": 203.94812699999966,
+          "result_identical_without_query_id": true,
+          "errors": 0
+        },
+        {
+          "case": "reverse",
+          "before_p50_ms": 132.48769299999913,
+          "after_p50_ms": 151.73289849999946,
+          "before_p95_ms": 167.65263399999822,
+          "after_p95_ms": 231.06257299999925,
+          "result_identical_without_query_id": true,
+          "errors": 0
+        },
+        {
+          "case": "reverse_geometry",
+          "before_p50_ms": 304.4145134999999,
+          "after_p50_ms": 142.5433120000007,
+          "before_p95_ms": 501.5380359999981,
+          "after_p95_ms": 249.83616600000096,
+          "result_identical_without_query_id": true,
+          "errors": 0
+        },
+        {
+          "case": "search",
+          "before_p50_ms": 410.7595294999992,
+          "after_p50_ms": 160.3318865000001,
+          "before_p95_ms": 854.0737660000013,
+          "after_p95_ms": 508.1306889999978,
+          "result_identical_without_query_id": true,
+          "errors": 0
+        }
+      ]
+    },
+    "wiki": {
+      "result": "passed",
+      "wiki_head": "a777ff700f2a0caa169bf14ba9244fb9b16305ec",
+      "page_url": "https://github.com/digitie/kor-travel-geo/wiki/202610-Geo-DB-%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8",
+      "source_prefix_preserved": true,
+      "previous_originals_preserved": 138,
+      "home_sidebar_preserved": true,
+      "edited_images": 0,
+      "rendered_page_verified": true,
+      "raw_page_matches": true,
+      "checked_at": "2026-11-07T14:33:12.041835+00:00",
+      "published_originals": 32,
+      "original_hashes_matched": 32
+    },
+    "original_screenshots": [
+      {
+        "path": "docs/wiki/assets/perf626-chromium-baseline-20261107T142103545Z-geocode-success.png",
+        "sha256": "f8b696975f71d4ae1c6e70bef5a2ba9ceaca2d259e2feba1d640d42201f434fe",
+        "bytes": 263499
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-baseline-20261107T142103545Z-reverse-success.png",
+        "sha256": "1edbf184104985ec7ff2a39ce25dd5ba57799e9be2f622f48f03a318bd89b1e0",
+        "bytes": 660332
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-polygon-link-20261107T142103545Z-geocode-success.png",
+        "sha256": "e9923cd93048ab08b7dbafec887a2c5884c719978902f769b267fb8ea1843581",
+        "bytes": 243831
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-polygon-link-20261107T142103545Z-reverse-success.png",
+        "sha256": "b1d94f5470f62a2ee436d6fadfd3400c0353cc20a7c34d0caf2ed9a3fd0fe7ae",
+        "bytes": 637683
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-ulsan-byeongyeong-20261107T142103545Z-geocode-success.png",
+        "sha256": "fbf0c0de3278119d64a81db75e4d26be87511625911a623dfe9e35914055bb1b",
+        "bytes": 306514
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-ulsan-byeongyeong-20261107T142103545Z-reverse-success.png",
+        "sha256": "6e4d52b8293df8abcd580a9762dcafdb28c20f3ba5296759d289b1c30572b29b",
+        "bytes": 634520
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-ulsan-jongga-20261107T142103545Z-geocode-success.png",
+        "sha256": "94696c29e95f5b7720c833465d3e8593f49ee7cce262acb52aa17e2add26af2b",
+        "bytes": 259333
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-ulsan-jongga-20261107T142103545Z-reverse-success.png",
+        "sha256": "9272eddd08ad4c1ff930a2cae7563a5da272361319b8709f84f05d8455052b60",
+        "bytes": 485709
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-sangju-seongdong-20261107T142103545Z-geocode-success.png",
+        "sha256": "41f9ed72651a0d78ca97c9c673bb7caaa8122d51b9afd2a9dab5abc83e92a430",
+        "bytes": 170407
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-sangju-seongdong-20261107T142103545Z-reverse-success.png",
+        "sha256": "fc5c097f12a97d6635abf70e19a4bfdc95d5bf0dcfa3026c186ef31759e72d9a",
+        "bytes": 345781
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-code12-20261107T142103545Z-geocode-success.png",
+        "sha256": "08db2d47c9f7270b6b6cbb2e8bde44a22485b94724b81c451a9e96b68b04b86b",
+        "bytes": 247989
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-code12-20261107T142103545Z-reverse-success.png",
+        "sha256": "d05f1da1c3f81c0b54d066fd9c89e76b85f862b7756df2f4fdc41baf79ad9793",
+        "bytes": 562510
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-no-verified-point-20261107T142103545Z-geocode-success.png",
+        "sha256": "a22e9a4efead7a5c98d24d49f455d63f91b3ac8ef16d1295dd84c093a849a06d",
+        "bytes": 410214
+      },
+      {
+        "path": "docs/wiki/assets/perf626-chromium-no-verified-point-20261107T142103545Z-previous-point-before-null.png",
+        "sha256": "6de51a26b901a22dfc4cef0f54ba8304ac2d1175b7cf67e28c0977ab3f7d10f1",
+        "bytes": 248072
+      },
+      {
+        "path": "docs/wiki/assets/perf626-auth-chromium-20261107T142055293Z-admin.png",
+        "sha256": "3a1424b3648ffe253b3f834f59fb146f1377a12758d40e9dcadf65d8f7ef939b",
+        "bytes": 131057
+      },
+      {
+        "path": "docs/wiki/assets/perf626-auth-chromium-20261107T142055293Z-logout.png",
+        "sha256": "12477e18b1aa031c669b7da35a7c556148c52f92ffffa0f4b0bb9a093424eb5a",
+        "bytes": 28432
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-baseline-20261107T142233561Z-geocode-success.png",
+        "sha256": "f11f84cbb1439cef4a8ff5c05c9b1bd30ba32dfcc181d0da020cdc04ad9a4c14",
+        "bytes": 290886
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-baseline-20261107T142233561Z-reverse-success.png",
+        "sha256": "c6b04219ccbc2ce904a226d2f918e91eb15337f659ef16b890149ae93bea8097",
+        "bytes": 699129
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-polygon-link-20261107T142233561Z-geocode-success.png",
+        "sha256": "0f8c9f33bcafa40d7d79b4cc69109caf20b6c3d877ba3beda1692a79ab2283c6",
+        "bytes": 299888
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-polygon-link-20261107T142233561Z-reverse-success.png",
+        "sha256": "2e5fa3b5f819b9a07097b23e24b4e8f5401e9cf87f9d51be217a89b9eb2df415",
+        "bytes": 695689
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-ulsan-byeongyeong-20261107T142233561Z-geocode-success.png",
+        "sha256": "740b58e53f11063c70c5bf86a59c78aa3916928c29ae302a3e6e6bccd6aa200e",
+        "bytes": 370237
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-ulsan-byeongyeong-20261107T142233561Z-reverse-success.png",
+        "sha256": "22cc46ea2e13e057c15de0f6e0a43011cf8bb2e3b3e8b8c406a3889c5b8c6c89",
+        "bytes": 683662
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-ulsan-jongga-20261107T142233561Z-geocode-success.png",
+        "sha256": "fdfe6ecb691760bbbc28174b1e99115f27349e75cf0df7214483e6d593a4e534",
+        "bytes": 301045
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-ulsan-jongga-20261107T142233561Z-reverse-success.png",
+        "sha256": "497a1591090357b5c80979bb0af2ca0b621446fa37f27f04992a00f7c0cdb086",
+        "bytes": 518474
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-sangju-seongdong-20261107T142233561Z-geocode-success.png",
+        "sha256": "f71208a838e2334296743b8a5c464637e9b6ef8df20ce428f174af622dde7a0b",
+        "bytes": 206832
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-sangju-seongdong-20261107T142233561Z-reverse-success.png",
+        "sha256": "8dc339d1e02bd321540e8724adf3cbc0f6f3ad05ff511a483913f300a9675674",
+        "bytes": 406545
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-code12-20261107T142233561Z-geocode-success.png",
+        "sha256": "ad88f6fcd8769005a9b71f89f16cf9d4b988bbf561def579a3414b40b48d12ad",
+        "bytes": 309902
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-code12-20261107T142233561Z-reverse-success.png",
+        "sha256": "5354b253ba69924849654103ce7947e40fa29b1c3591d28b638dd8a5828f475d",
+        "bytes": 628563
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-no-verified-point-20261107T142233561Z-geocode-success.png",
+        "sha256": "2a7f0e7f55acac931c96107c6d9aba4550df790fe755d6530d6feea7cd6b3215",
+        "bytes": 489848
+      },
+      {
+        "path": "docs/wiki/assets/perf626-firefox-no-verified-point-20261107T142233561Z-previous-point-before-null.png",
+        "sha256": "fbe24df84329e4404b875e7b7b87fe7da3135c46338a862bf0a43baea1dbeb37",
+        "bytes": 309622
+      },
+      {
+        "path": "docs/wiki/assets/perf626-auth-firefox-20261107T142214586Z-admin.png",
+        "sha256": "2af1b0acb22c11a824949449b61cf969a185f58e6aa53414b31b88fd3a0569df",
+        "bytes": 156181
+      },
+      {
+        "path": "docs/wiki/assets/perf626-auth-firefox-20261107T142214586Z-logout.png",
+        "sha256": "24136c6d5709f28c999b1f2cb63ef27025a630c1f4c90a6dd25399d0aecaf239",
+        "bytes": 43561
+      }
+    ],
+    "edited_screenshots": 0,
+    "documentation_pr": 627,
+    "verification_issues_resolved": [
+      "SPPN 보조 후보까지 법정동 주소 코드로 검사한 검증기를 수정; 주소 10개와 보조 1개를 구분하고 Chromium→Firefox 재검증",
+      "Firefox 세션을 Chromium에서 재사용해 HTTP 401; 브라우저 식별 보호를 유지하고 새 Chromium 로그인으로 HTTP 측정만 재개"
+    ]
+  },
+  "measurement_baseline_scope": "MV 약7.5GiB·인덱스 약4.73GiB는 3회차 인덱스 추가 전 관측; 새 인덱스291987456바이트 추가"
 }

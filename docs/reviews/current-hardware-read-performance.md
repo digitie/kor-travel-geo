@@ -71,3 +71,20 @@ WSL ext4 필수 검사·실제 PostGIS·정확한 최종 HEAD의 CI·리뷰 창�
 [메모리 자원 설정](https://www.postgresql.org/docs/18/runtime-config-resource.html),
 [인덱스 연산자 클래스](https://www.postgresql.org/docs/18/indexes-opclass.html),
 [PostGIS ST_DWithin](https://postgis.net/docs/ST_DWithin.html).
+
+## 운영 반영 뒤 확인
+
+#626·#628을 포함한 5c4f842를 2026-11-07 20:50:03 KST에 반영했다. 실행 소스·스키마 0032·정상 데이터셋과 Chromium→Firefox 주소 14개·인증 2개 흐름을 확인했다. 메모리 캐시 적중은 실제 API에서 20회 늘었다.
+
+관리 UI 프록시 HTTP의 같은 입력 4종을 각각 예열 2회·측정 20회·동시성 1로 비교했다. 배포 전에도 새 복합 인덱스는 이미 존재했다. query_id를 제외한 전체 내용은 같고 오류 0이다.
+
+| HTTP 조회 | p50 전→후 (ms) | p95 전→후 (ms) |
+| --- | --- | --- |
+| 도형 geocode | 207.263→141.756 | 817.693→203.948 |
+| 일반 reverse | 132.488→151.733 | 167.653→231.063 |
+| 도형 reverse | 304.415→142.543 | 501.538→249.836 |
+| search | 410.760→160.332 | 854.074→508.131 |
+
+일반 reverse의 p50·p95는 이번 표본에서 증가했다. 공유 장비의 약 4시간 간격 비교이며 원인을 확정하지 않았다. 브라우저 렌더링·외부 공개 키 인증 경로는 포함하지 않는다. 위의 라이브러리·SQL 측정과 구분한다. 최초 MV 약 7.5GiB·인덱스 약 4.73GiB는 3회차 인덱스 278.5MiB 추가 전 관측이다.
+
+[Wiki의 따라 하기와 원본 화면](https://github.com/digitie/kor-travel-geo/wiki/202610-Geo-DB-업데이트) 뒤의 9절에 성공 원본 32개·실패 단계 재개와 기존 DB 전체 로드 실측을 함께 기록했다. 세 회차와 최종 전달의 정본은 [측정·검증 기록](current-hardware-performance-three-cycles.json)이다.

@@ -1040,3 +1040,95 @@ DB 로드 시간은 같은 전체 배치의 DB `started_at`부터 `finished_at`�
 | 원본 스크린샷 파일명·담당 운영자에게 전달할 사항 |  |
 
 작업을 마치면 **로그아웃**한다. 새 사람이 이어받을 때는 이 기록표와 원본 화면을 함께 전달한다.
+
+## 9. 조회 성능 개선 후 따라 하기 (2026-11-07)
+
+현재 장비에서 원인 발굴 → 개선 → 검증을 세 차례 수행한 뒤 [PR #626](https://github.com/digitie/kor-travel-geo/pull/626)과 [bbox 입력 호환성 보완 PR #628](https://github.com/digitie/kor-travel-geo/pull/628)을 병합했다. API·코드 서버의 새 ARM 이미지를 반영했고 아래 화면을 Chromium → Firefox 순서로 다시 확인했다. 이 확인에는 원천 재업로드나 DB 재적재가 필요하지 않다.
+
+기존 전체 DB 로드 실측 **85시간 11분 29초**는 이 문서 앞부분의 값이다. 아래 조회 성능·인덱스 시간과 구분한다.
+
+### 9.1 같은 주소를 두 번 조회하기
+
+1. 8.1의 방법으로 로그인한 뒤 관리 UI의 주소 경로를 /debug/geocode 로 바꾼다. 화면 제목은 Geocode다.
+2. address에 서울특별시 강남구 테헤란로 152를 넣고 type은 road, fallback은 none으로 고른다. 다른 값은 기본값으로 둔다.
+3. 실행을 누른다. 응답이 OK이며 첫 주소가 테헤란로 152인지, point의 lon·lat 숫자와 지도 마커가 보이는지 확인한다.
+4. 같은 입력으로 실행을 한 번 더 누른다. 주소·좌표·dataset 값은 같고 JSON의 query_id는 새 값이어야 한다. 첫 값과 두 번째 값을 아래 기록표에 남긴다.
+5. 도형이 없다는 경고가 나오면 geometry_error와 query_id·시각을 기록한다. 선택적 도형 실패를 이유로 전체 원천 적재를 다시 시작하지 않는다. 다음 조회에서 다시 확인할 수 있다.
+
+### 9.2 좌표로 되찾고 로그인 상태 확인하기
+
+1. 직전 응답의 point.lon과 point.lat을 복사한다.
+2. 관리 UI의 주소 경로를 /debug/reverse 로 바꾼다. 화면 제목은 Reverse다.
+3. lon·lat에 복사한 값을 넣고 radius_m은 200으로 둔 뒤 조회를 누른다.
+4. 응답이 OK이고 후보에 같은 건물이 포함되는지, 지도와 마커가 보이는지 확인한다.
+5. 로그아웃을 누른다. 로그인 화면으로 이동하고 관리 화면이 로그인 없이 열리지 않아야 한다.
+
+### 9.3 결과 기록표
+
+| 확인 항목 | 기록 |
+| --- | --- |
+| 확인한 시각·브라우저 | |
+| 입력 주소 | |
+| 첫 query_id / 두 번째 query_id | |
+| 주소·좌표·dataset 동일 여부 | |
+| 역지오코딩의 같은 건물 포함 여부 | |
+| 도형 경고 또는 오류 | |
+| 로그아웃 확인 | |
+
+### 9.4 이번 개선의 측정값과 한계
+
+| 회차 | 원인과 적용 | 같은 장비의 대표 결과 |
+| --- | --- | --- |
+| 1 | 지역 조건의 역지오코딩 후보를 반경 안으로 먼저 줄임 | 서버 실행 424.002 → 11.923ms, buffer hit 665 → 120 |
+| 2 | 64MiB 메모리 결과 캐시와 같은 요청 공유 | 반복 v2 geocode 내부 p50 53.808 → 1.656ms, 반복 geometry reverse 282.536 → 2.821ms |
+| 3 | 정확 도로명주소 복합 인덱스 | 서버 실행 12.225 → 0.452ms, 버퍼 접근 400 → 5 |
+
+서버 SQL·라이브러리 내부 시간은 브라우저에서 느끼는 전체 시간과 다르다. 2회차는 8종, 3회차는 14종의 응답 내용·좌표·건수가 같았다. 실패·부분 도형 실패는 캐시에 보관하지 않고, 추적 ID·가변 응답은 요청마다 분리한다. 선택적 도형 실패의 다음 요청 재시도도 검증했다.
+
+최종 성공한 인덱스 생성 1회는 **187.296초**, 추가 인덱스는 약 **278.5MiB**다. 이 시간에는 실패한 시도·원인 분석·재시도 대기가 포함되지 않는다. 실패 이력은 삭제하지 않고 [전체 검토와 수치](https://github.com/digitie/kor-travel-geo/blob/5c4f8424705672f49f14240f09ff52230e2e7935/docs/reviews/current-hardware-read-performance.md)에 연결했다.
+
+관리 UI의 기존 캐시 통계는 DB 영속 캐시 기준이다. 메모리 적중은 별도 ktg_memory_result_cache_lookups_total로 관측한다. 캐시에 적중해도 10초 주기의 데이터셋 지문 갱신·공개 API 인증에는 DB 조회가 생길 수 있다. 고유 입력과 짧은 검색어의 첫 조회 비용도 남는다. 수치는 공유 장비의 소표본이며 전체 운영 p95·QPS 보장은 아니다.
+
+관리 UI 프록시를 통한 실제 HTTP도 같은 입력 4종을 각각 예열 2회·측정 20회·동시성 1로 비교했다. 배포 전에도 3회차 인덱스는 이미 존재했다. 응답에서 query_id만 제외한 전체 내용이 같고, 요청마다 추적 ID가 새로 발급됐다. 아래 값에는 브라우저 화면 렌더링과 외부 공개 키 인증 경로가 포함되지 않는다. 공유 장비의 시간차 비교이며 전체 운영 p95 보장은 아니다.
+
+| HTTP 조회 | p50 전 → 후 (ms) | p95 전 → 후 (ms) | 내용·오류 |
+| --- | --- | --- | --- |
+| geocode_geometry | 207.263 → 141.756 | 817.693 → 203.948 | 동일·0 |
+| reverse | 132.488 → 151.733 | 167.653 → 231.063 | 동일·0 |
+| reverse_geometry | 304.415 → 142.543 | 501.538 → 249.836 | 동일·0 |
+| search | 410.760 → 160.332 | 854.074 → 508.131 | 동일·0 |
+
+일반 reverse는 이번 표본에서 p50 132.488 → 151.733ms, p95 167.653 → 231.063ms로 늘었다. 이 값도 그대로 보존한다. 공유 장비의 시간차 표본이므로 차이의 원인은 확정하지 않았다.
+
+### 9.5 배포 뒤 실제 화면 원본
+
+확인 완료: **2026-11-07 23:26:22 KST**. 소스 해시·의존성·실제 API 시작 명령과 로그 마스킹을 확인하고, 공식 Manager 잠금 안에서 마이그레이션 → 코드 서버 → API 순서로 반영했다. 기존 UI·PostgreSQL·RustFS·공용 Dagster와 정상 서빙 릴리스·원천·키 설정을 보존했다.
+
+아래 32개 화면은 수정하지 않은 원본이다. 같은 주소 재실행에서는 응답 내용 동일·새 query_id를 확인했고, 별도의 실제 HTTP 검사에서 지역 조건 역지오코딩과 정식명·약칭·없는 건물번호 검색도 확인했다.
+
+| 브라우저 | 시나리오 | 결과 | 원본 화면 |
+| --- | --- | --- | --- |
+| chromium | 서울 테헤란로 152·같은 입력 재실행 | 통과 | [지오코딩](assets/perf626-chromium-baseline-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-baseline-20261107T142103545Z-reverse-success.png) |
+| chromium | 건물 도형 연결 주소 | 통과 | [지오코딩](assets/perf626-chromium-polygon-link-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-polygon-link-20261107T142103545Z-reverse-success.png) |
+| chromium | 울산 병영성11길 1 | 통과 | [지오코딩](assets/perf626-chromium-ulsan-byeongyeong-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-ulsan-byeongyeong-20261107T142103545Z-reverse-success.png) |
+| chromium | 울산 종가20길 6 | 통과 | [지오코딩](assets/perf626-chromium-ulsan-jongga-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-ulsan-jongga-20261107T142103545Z-reverse-success.png) |
+| chromium | 상주 성동로 152-27 | 통과 | [지오코딩](assets/perf626-chromium-sangju-seongdong-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-sangju-seongdong-20261107T142103545Z-reverse-success.png) |
+| chromium | 시도 코드 12 원천 주소 | 통과 | [지오코딩](assets/perf626-chromium-code12-20261107T142103545Z-geocode-success.png) · [역지오코딩](assets/perf626-chromium-code12-20261107T142103545Z-reverse-success.png) |
+| chromium | 검증 좌표 없음·이전 마커 제거 | 통과 | [지오코딩](assets/perf626-chromium-no-verified-point-20261107T142103545Z-geocode-success.png) · [좌표 없는 주소 조회 직전](assets/perf626-chromium-no-verified-point-20261107T142103545Z-previous-point-before-null.png) |
+| firefox | 서울 테헤란로 152·같은 입력 재실행 | 통과 | [지오코딩](assets/perf626-firefox-baseline-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-baseline-20261107T142233561Z-reverse-success.png) |
+| firefox | 건물 도형 연결 주소 | 통과 | [지오코딩](assets/perf626-firefox-polygon-link-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-polygon-link-20261107T142233561Z-reverse-success.png) |
+| firefox | 울산 병영성11길 1 | 통과 | [지오코딩](assets/perf626-firefox-ulsan-byeongyeong-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-ulsan-byeongyeong-20261107T142233561Z-reverse-success.png) |
+| firefox | 울산 종가20길 6 | 통과 | [지오코딩](assets/perf626-firefox-ulsan-jongga-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-ulsan-jongga-20261107T142233561Z-reverse-success.png) |
+| firefox | 상주 성동로 152-27 | 통과 | [지오코딩](assets/perf626-firefox-sangju-seongdong-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-sangju-seongdong-20261107T142233561Z-reverse-success.png) |
+| firefox | 시도 코드 12 원천 주소 | 통과 | [지오코딩](assets/perf626-firefox-code12-20261107T142233561Z-geocode-success.png) · [역지오코딩](assets/perf626-firefox-code12-20261107T142233561Z-reverse-success.png) |
+| firefox | 검증 좌표 없음·이전 마커 제거 | 통과 | [지오코딩](assets/perf626-firefox-no-verified-point-20261107T142233561Z-geocode-success.png) · [좌표 없는 주소 조회 직전](assets/perf626-firefox-no-verified-point-20261107T142233561Z-previous-point-before-null.png) |
+
+- chromium: [관리 홈](assets/perf626-auth-chromium-20261107T142055293Z-admin.png) · [로그아웃](assets/perf626-auth-chromium-20261107T142055293Z-logout.png)
+- firefox: [관리 홈](assets/perf626-auth-firefox-20261107T142214586Z-admin.png) · [로그아웃](assets/perf626-auth-firefox-20261107T142214586Z-logout.png)
+
+### 9.6 확인 중 문제가 생겼을 때
+
+- 로그인 상태인데 401이 나오면 해당 브라우저에서 새로 로그인한다. 다른 브라우저의 저장된 세션을 복사해서 쓰지 않는다. 이번 HTTP 측정도 Firefox 세션을 Chromium에서 재사용해 거부됐으며 새 Chromium 로그인 뒤 같은 측정만 다시 진행했다.
+- 지역 조건의 응답 코드를 비교할 때는 도로명·지번 주소 후보를 확인한다. 국가지점번호(SPPN) 보조 후보에는 주소·법정동 코드가 없을 수 있다. 이번 검사에서는 주소 10개가 모두 요청한 코드와 일치했고, 보조 후보 1개까지 주소 코드로 검사하던 검증기를 고친 뒤 두 브라우저를 다시 통과했다.
+- point가 없는 주소도 검증된 건물 도형은 표시될 수 있다. JSON 안을 스크롤해 point 값을 확인하고, 이전 주소의 핀 마커가 남지 않았는지 확인한다. 도형만 있다는 이유로 임의 좌표를 넣지 않는다.
+- 배포가 정상 완료됐다면 남은 화면·조회 검증부터 이어간다. 이번에는 2026-11-07 20:50:03 KST에 5c4f842의 API·코드 서버 반영을 마쳤고, 이후 검증기 문제는 해당 단계만 재개했다. 원천 적재·MV 재생성과 같은 이미지의 재빌드는 하지 않았다.
