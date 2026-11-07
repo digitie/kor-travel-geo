@@ -973,13 +973,13 @@
     "actual_key_tracked_matches": 0
   },
   "delivery": {
-    "state": "이미지 검증 완료·공용 Manager 잠금 대기",
-    "merged_pr": 626,
-    "merged_revision": "3e3da65de8e194f0b60c0d621749564b8554412e",
-    "reviewed_head": "a204ccca796cc814369fb997f733b6a1316c1143",
+    "state": "호환성 보완 병합·새 ARM 이미지 검증 완료·공식 공용 잠금 대기",
+    "merged_pr": 628,
+    "merged_revision": "5c4f8424705672f49f14240f09ff52230e2e7935",
+    "reviewed_head": "a1bc731c079aa7eeb612c9553862349effc81c25",
     "ci_checks_passed": 5,
-    "ci_green_observed_utc": "2026-11-07T09:56:40+00:00",
-    "final_review_utc": "2026-11-07T10:07:04+00:00",
+    "ci_green_observed_utc": "2026-11-07T11:22:34+00:00",
+    "final_review_utc": "2026-11-07T11:33:11+00:00",
     "review_surface_counts": {
       "conversation": 0,
       "reviews": 0,
@@ -989,24 +989,26 @@
     "images": [
       {
         "kind": "api",
-        "id": "sha256:9ad6b920931c1592ce166686fba0bcd5873d9131d30ce15ae40032db3e5ecbbc",
-        "build_and_validation_seconds": 73.41855,
+        "id": "sha256:e51436c6f221d05946b0d24da1a646a88273c570c046ec6f630458fb1bfa8618",
+        "build_and_validation_seconds": 52.288899,
         "verified_source_files": {
           "main": 171
         },
         "dependencies_unchanged": true,
-        "cache_contract": "passed"
+        "cache_contract": "passed",
+        "bbox_contract": "passed"
       },
       {
         "kind": "dagster",
-        "id": "sha256:5d37f0486cfc758f2f79aeabdff5546a2c9e65a3ee410df2b516a1cda1b2e506",
-        "build_and_validation_seconds": 81.131819,
+        "id": "sha256:28b099e3bc746fad36c047fef8a39e7542e1782c7ed3f8aba6be76d854ecc38e",
+        "build_and_validation_seconds": 50.063386,
         "verified_source_files": {
           "main": 171,
           "dagster": 16
         },
         "dependencies_unchanged": true,
-        "cache_contract": "passed"
+        "cache_contract": "passed",
+        "bbox_contract": "passed"
       }
     ],
     "actual_image_cmd": "시작·가짜 키 401·마스킹 통과; DB 접속 없이 검사",
@@ -1057,6 +1059,49 @@
       "공용 Manager 잠금 안에서 0032 마이그레이션·CS→API",
       "실제 운영 프로세스·Chromium→Firefox·반복 응답·HTTP 후측정",
       "수정하지 않은 화면 원본과 Wiki 후속 기록"
-    ]
+    ],
+    "includes_prs": [
+      626,
+      628
+    ],
+    "initial_prepared_attempt": {
+      "merged_revision": "3e3da65de8e194f0b60c0d621749564b8554412e",
+      "reviewed_head": "a204ccca796cc814369fb997f733b6a1316c1143",
+      "images": [
+        {
+          "kind": "api",
+          "id": "sha256:9ad6b920931c1592ce166686fba0bcd5873d9131d30ce15ae40032db3e5ecbbc",
+          "build_and_validation_seconds": 73.41855,
+          "verified_source_files": {
+            "main": 171
+          },
+          "dependencies_unchanged": true,
+          "cache_contract": "passed"
+        },
+        {
+          "kind": "dagster",
+          "id": "sha256:5d37f0486cfc758f2f79aeabdff5546a2c9e65a3ee410df2b516a1cda1b2e506",
+          "build_and_validation_seconds": 81.131819,
+          "verified_source_files": {
+            "main": 171,
+            "dagster": 16
+          },
+          "dependencies_unchanged": true,
+          "cache_contract": "passed"
+        }
+      ],
+      "actual_image_cmd": "시작·가짜 키 401·마스킹 통과; DB 접속 없이 검사"
+    },
+    "initial_images_deployed": false,
+    "initial_wait_cancelled": "운영 교체 전 내 대기만 취소해 bbox 호환성 수정을 포함했다",
+    "bbox_validation": {
+      "focused": 32,
+      "pytest": 2082,
+      "optional_skipped": 234,
+      "ruff": "passed",
+      "strict_mypy_files": 171,
+      "import_contracts": 1,
+      "openapi_changed": false
+    }
   }
 }
