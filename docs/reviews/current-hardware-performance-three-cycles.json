@@ -941,7 +941,8 @@
         "ready": true,
         "maintenance_work_mem_mib": 64,
         "parallel_maintenance_workers": 0,
-        "database_reload": false
+        "database_reload": false,
+        "build_duration_scope": "최종 성공한 생성 1회; 실패·원인 분석·재시도 대기 제외"
       },
       "issues_resolved": [
         "MV가 지원하지 않는 사전 LOCK 구문 제거 후 DDL 자체의 잠금 사용",
@@ -970,5 +971,92 @@
     "manual_security_review": "전용 security-review 스킬 미설치로 직접 diff·인증 경계·응답 격리·유한 label·실제 키 부재 검토",
     "actual_key_staged_matches": 0,
     "actual_key_tracked_matches": 0
+  },
+  "delivery": {
+    "state": "이미지 검증 완료·공용 Manager 잠금 대기",
+    "merged_pr": 626,
+    "merged_revision": "3e3da65de8e194f0b60c0d621749564b8554412e",
+    "reviewed_head": "a204ccca796cc814369fb997f733b6a1316c1143",
+    "ci_checks_passed": 5,
+    "ci_green_observed_utc": "2026-11-07T09:56:40+00:00",
+    "final_review_utc": "2026-11-07T10:07:04+00:00",
+    "review_surface_counts": {
+      "conversation": 0,
+      "reviews": 0,
+      "inline_threads": 0
+    },
+    "review_window_seconds": 600,
+    "images": [
+      {
+        "kind": "api",
+        "id": "sha256:9ad6b920931c1592ce166686fba0bcd5873d9131d30ce15ae40032db3e5ecbbc",
+        "build_and_validation_seconds": 73.41855,
+        "verified_source_files": {
+          "main": 171
+        },
+        "dependencies_unchanged": true,
+        "cache_contract": "passed"
+      },
+      {
+        "kind": "dagster",
+        "id": "sha256:5d37f0486cfc758f2f79aeabdff5546a2c9e65a3ee410df2b516a1cda1b2e506",
+        "build_and_validation_seconds": 81.131819,
+        "verified_source_files": {
+          "main": 171,
+          "dagster": 16
+        },
+        "dependencies_unchanged": true,
+        "cache_contract": "passed"
+      }
+    ],
+    "actual_image_cmd": "시작·가짜 키 401·마스킹 통과; DB 접속 없이 검사",
+    "runtime_deployed": false,
+    "cleanup": {
+      "owned_disposable_database": "삭제 확인",
+      "owned_ssh_tunnel": "종료",
+      "test_dsn_files": "삭제",
+      "owned_probe_code_directories_removed": 3
+    },
+    "http_baseline": {
+      "scope": "기존 운영 API+UI 프록시; 신규 인덱스는 이미 존재; 렌더링 제외",
+      "warmup": 2,
+      "samples_per_case": 20,
+      "concurrency": 1,
+      "cases": [
+        {
+          "case": "geocode_geometry",
+          "p50_ms": 207.2628440000044,
+          "p95_ms": 817.6934089999995,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "reverse",
+          "p50_ms": 132.48769299999913,
+          "p95_ms": 167.65263399999822,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "reverse_geometry",
+          "p50_ms": 304.4145134999999,
+          "p95_ms": 501.5380359999981,
+          "errors": 0,
+          "unique_query_ids": true
+        },
+        {
+          "case": "search",
+          "p50_ms": 410.7595294999992,
+          "p95_ms": 854.0737660000013,
+          "errors": 0,
+          "unique_query_ids": true
+        }
+      ]
+    },
+    "remaining": [
+      "공용 Manager 잠금 안에서 0032 마이그레이션·CS→API",
+      "실제 운영 프로세스·Chromium→Firefox·반복 응답·HTTP 후측정",
+      "수정하지 않은 화면 원본과 Wiki 후속 기록"
+    ]
   }
 }
