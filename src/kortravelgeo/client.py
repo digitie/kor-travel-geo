@@ -354,7 +354,7 @@ class AsyncAddressClient:
                 keyword=keyword,
                 sig_cd=sig_cd,
                 bjd_cd=bjd_cd,
-                bbox=bbox,
+                bbox=inp.bbox,
                 limit=limit,
                 fallback=fallback,
                 include_geometry=include_geometry,
@@ -369,8 +369,10 @@ class AsyncAddressClient:
                 "dataset": None if dataset is None else dataset.model_dump(mode="json"),
             }),
             GeocodeV2Response, load,
-            enabled=(self.settings.cache_enabled and dataset is not None
-                     and fallback == "none" and _cacheable_bbox(bbox)),
+            enabled=(
+                self.settings.cache_enabled and dataset is not None
+                and fallback == "none" and _cacheable_bbox(inp.bbox)
+            ),
         )
         return response
 
@@ -927,7 +929,9 @@ class AsyncAddressClient:
                 "dataset": None if dataset is None else dataset.model_dump(mode="json"),
             }),
             SearchV2Response, load,
-            enabled=self.settings.cache_enabled and dataset is not None and _cacheable_bbox(bbox),
+            enabled=(
+                self.settings.cache_enabled and dataset is not None and _cacheable_bbox(inp.bbox)
+            ),
         )
         return result
 

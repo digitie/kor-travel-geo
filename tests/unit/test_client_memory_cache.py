@@ -198,14 +198,17 @@ async def test_geometry_option_has_its_own_key_and_failed_geometry_is_retried(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service", ["geocode", "search"])
+@pytest.mark.parametrize("as_mapping", [False, True])
 @pytest.mark.parametrize("minimum,maximum", [
     (float("-inf"), float("inf")), (float("nan"), 130.0),
 ])
 async def test_nonfinite_bbox_preserves_the_cache_disabled_response(
-    cached_client, service, minimum, maximum,
+    cached_client, service, minimum, maximum, as_mapping,
 ):
     client, _ = cached_client
     bbox = BBoxV2(min_lon=minimum, min_lat=32, max_lon=maximum, max_lat=39)
+    if as_mapping:
+        bbox = bbox.model_dump()
     call = client.geocode if service == "geocode" else client.search
     client.settings = client.settings.model_copy(update={"cache_memory_max_bytes": 0})
     expected = await call(_ADDRESS, bbox=bbox)
@@ -223,9 +226,12 @@ async def test_nonfinite_bbox_preserves_the_cache_disabled_response(
 
 
 @pytest.mark.asyncio
-async def test_finite_bbox_keeps_complete_response_caching(cached_client, monkeypatch):
+@pytest.mark.parametrize("as_mapping", [False, True])
+async def test_finite_bbox_keeps_complete_response_caching(cached_client, monkeypatch, as_mapping):
     client, state = cached_client
     bbox = BBoxV2(min_lon=126, min_lat=36, max_lon=128, max_lat=38)
+    if as_mapping:
+        bbox = bbox.model_dump()
     geocode = AsyncMock(wraps=client._geocode_v2)
     monkeypatch.setattr(client, "_geocode_v2", geocode)
     await client.geocode(_ADDRESS, bbox=bbox, limit=1)
@@ -233,4 +239,20 @@ async def test_finite_bbox_keeps_complete_response_caching(cached_client, monkey
     await client.search(_ADDRESS, bbox=bbox)
     await client.search(_ADDRESS, bbox=bbox)
     assert geocode.await_count == 1 and state["search_calls"] == 1
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_bbox_key_and_loader_share_the_validated_snapshot(cached_client, monkeypatch):
+    client, _ = cached_client
+    bounds = {"min_lon": 126, "min_lat": 36, "max_lon": 128, "max_lat": 38}
+
+    async def stamp():
+        bounds["max_lon"] = 130
+        return _STAMP
+
+    monkeypatch.setattr(client, "dataset_ref", stamp)
+    result = await client.geocode(_ADDRESS, bbox=bounds, limit=1)
+    assert bounds["max_lon"] == 130
+    assert result.input.bbox.max_lon == 128
     await client.close()
