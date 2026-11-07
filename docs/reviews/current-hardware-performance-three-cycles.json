@@ -1,0 +1,974 @@
+{
+  "baseline_revision": "289353f50bf7892afd18b5b564cc93a887259969",
+  "hardware": {
+    "cpu_cores": 4,
+    "architecture": "aarch64",
+    "ram_gib": 7.5,
+    "api_limit_gib": 1.5,
+    "postgres_limit_gib": 3,
+    "postgres_version": "18.6"
+  },
+  "scope": "장비 증설·원천 재적재 없이 세 차례 원인 발굴·개선·검증",
+  "cycles": [
+    {
+      "number": 1,
+      "status": "완료",
+      "cause": "지역 조건의 reverse 후보를 구한 뒤에 반경을 적용하던 조회 경로",
+      "change": "지역 조건이 있는 경우만 후보 단계에 ST_DWithin을 적용하고 조건 없는 SQL은 보존",
+      "rejected_candidate": "조건 없는 조회까지 일괄 반경 조기 적용: 일부 표본이 악화돼 제외",
+      "correctness": {
+        "live_cases": 8,
+        "mismatches": 0,
+        "errors": 0,
+        "postgis_tests_passed": 4,
+        "unit_tests_passed": 7
+      },
+      "measurement": {
+        "kind": "같은 장비의 SQL 교차 순서 비교; HTTP 전체 응답시간 아님",
+        "concurrency": 1,
+        "warmup_per_variant": 2,
+        "samples_per_variant_per_case": 16,
+        "p95_method": "nearest_rank",
+        "cases": [
+          {
+            "case": "gangnam",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 7.682,
+                "p95_ms": 10.401
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 7.656,
+                "p95_ms": 9.268
+              }
+            }
+          },
+          {
+            "case": "gangnam_bjd",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 372.604,
+                "p95_ms": 1112.316
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 18.226,
+                "p95_ms": 50.406
+              }
+            }
+          },
+          {
+            "case": "gangnam_sig",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 32.446,
+                "p95_ms": 90.533
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 17.581,
+                "p95_ms": 269.938
+              }
+            }
+          },
+          {
+            "case": "sejong",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 19.063,
+                "p95_ms": 45.438
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 16.682,
+                "p95_ms": 37.899
+              }
+            }
+          },
+          {
+            "case": "ulsan",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 8.025,
+                "p95_ms": 30.845
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 9.264,
+                "p95_ms": 39.228
+              }
+            }
+          },
+          {
+            "case": "ulsan_sig",
+            "rows": 5,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 6.468,
+                "p95_ms": 32.925
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 6.86,
+                "p95_ms": 36.034
+              }
+            }
+          },
+          {
+            "case": "no_result",
+            "rows": 0,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 5.121,
+                "p95_ms": 9.204
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 5.625,
+                "p95_ms": 15.671
+              }
+            }
+          },
+          {
+            "case": "no_result_bjd",
+            "rows": 0,
+            "mismatches": 0,
+            "errors": [],
+            "summary": {
+              "before": {
+                "n": 16,
+                "p50_ms": 390.792,
+                "p95_ms": 724.67
+              },
+              "after": {
+                "n": 16,
+                "p50_ms": 5.748,
+                "p95_ms": 17.365
+              }
+            }
+          }
+        ]
+      },
+      "plan_execution_proof": [
+        {
+          "plan_mode": "force_custom_plan",
+          "variant": "before",
+          "execution_ms": 424.002,
+          "buffer_hits": 665,
+          "buffer_reads": 0,
+          "rows": 5.0
+        },
+        {
+          "plan_mode": "force_custom_plan",
+          "variant": "after",
+          "execution_ms": 11.923,
+          "buffer_hits": 120,
+          "buffer_reads": 0,
+          "rows": 5.0
+        },
+        {
+          "plan_mode": "force_generic_plan",
+          "variant": "before",
+          "error_type": "QueryCanceled",
+          "sqlstate": "57014"
+        },
+        {
+          "plan_mode": "force_generic_plan",
+          "variant": "after",
+          "execution_ms": 22.843,
+          "buffer_hits": 71,
+          "buffer_reads": 0,
+          "rows": 5.0
+        }
+      ],
+      "limitations": [
+        "공용 장비의 소표본이며 p95 이상치는 숨기지 않는다",
+        "강제 generic plan은 반사실 실험이며 현재 auto 관측에서 generic_plans는 0이다",
+        "기존 20초 검증 상한에 모델 초기화·접속이 포함된 문제를 진단하고 쿼리 측정과 분리했다"
+      ]
+    },
+    {
+      "number": 2,
+      "status": "완료",
+      "cause": "DB 캐시 적중마다 UPDATE·왕복, v2 변환·보조 geometry·검색 경로의 반복 실행",
+      "change": "릴리스·전체 옵션별 64MiB LRU·300초 TTL, 동일 키 요청 공유, 정상 v2 최종 응답 보관",
+      "correctness": {
+        "live_cases": 8,
+        "mismatches": 0,
+        "errors": 0,
+        "postgis_release_tests_passed": 3,
+        "full_pytest_passed": 2070,
+        "focused_after_buffer_fix_passed": 20,
+        "query_id": "호출마다 새 값",
+        "degraded_geometry": "캐시 제외 후 다음 요청 재시도"
+      },
+      "measurement": {
+        "kind": "같은 ARM 장비의 실제 AsyncAddressClient 경로; HTTP 인증·전송 제외",
+        "order": [
+          "before",
+          "after",
+          "after",
+          "before"
+        ],
+        "concurrency": 1,
+        "warmup_per_case": 2,
+        "samples_per_variant_per_case": 24,
+        "cases": [
+          {
+            "case": "v1_geocode",
+            "before": {
+              "n": 24,
+              "p50_ms": 68.3232,
+              "p95_ms": 213.9203,
+              "p99_ms": 405.5095
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 2.2254,
+              "p95_ms": 10.0801,
+              "p99_ms": 20.922
+            },
+            "before_db_statements": 24,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v1_reverse",
+            "before": {
+              "n": 24,
+              "p50_ms": 55.0151,
+              "p95_ms": 141.6439,
+              "p99_ms": 148.6009
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 3.5247,
+              "p95_ms": 10.6882,
+              "p99_ms": 10.7612
+            },
+            "before_db_statements": 24,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_geocode",
+            "before": {
+              "n": 24,
+              "p50_ms": 53.8079,
+              "p95_ms": 98.2916,
+              "p99_ms": 237.8742
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 1.6556,
+              "p95_ms": 5.1287,
+              "p99_ms": 6.7499
+            },
+            "before_db_statements": 24,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_geocode_geometry",
+            "before": {
+              "n": 24,
+              "p50_ms": 98.5442,
+              "p95_ms": 210.2261,
+              "p99_ms": 243.2268
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 1.7806,
+              "p95_ms": 9.8371,
+              "p99_ms": 13.2831
+            },
+            "before_db_statements": 48,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_reverse",
+            "before": {
+              "n": 24,
+              "p50_ms": 41.7004,
+              "p95_ms": 66.9074,
+              "p99_ms": 95.9315
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 3.0386,
+              "p95_ms": 6.0825,
+              "p99_ms": 10.7054
+            },
+            "before_db_statements": 24,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_reverse_geometry",
+            "before": {
+              "n": 24,
+              "p50_ms": 282.536,
+              "p95_ms": 685.6433,
+              "p99_ms": 802.118
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 2.8212,
+              "p95_ms": 8.1261,
+              "p99_ms": 8.9953
+            },
+            "before_db_statements": 146,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_search",
+            "before": {
+              "n": 24,
+              "p50_ms": 130.1127,
+              "p95_ms": 203.0338,
+              "p99_ms": 210.5362
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 1.3963,
+              "p95_ms": 10.6672,
+              "p99_ms": 17.1756
+            },
+            "before_db_statements": 48,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          },
+          {
+            "case": "v2_search_geometry",
+            "before": {
+              "n": 24,
+              "p50_ms": 148.9862,
+              "p95_ms": 277.0203,
+              "p99_ms": 371.3855
+            },
+            "after": {
+              "n": 24,
+              "p50_ms": 3.0526,
+              "p95_ms": 11.5344,
+              "p99_ms": 25.4904
+            },
+            "before_db_statements": 48,
+            "after_db_statements": 0,
+            "result_mismatches": 0
+          }
+        ],
+        "unique_inputs": {
+          "before": [
+            {
+              "summary": {
+                "n": 12,
+                "p50_ms": 40.4493,
+                "p95_ms": 72.4238,
+                "p99_ms": 72.4238
+              },
+              "counts": {
+                "db_statements": 12,
+                "cache_updates": 12
+              },
+              "samples_ms": [
+                27.960972860455513,
+                60.75605098158121,
+                27.25830301642418,
+                36.079456098377705,
+                34.380679950118065,
+                34.94538296945393,
+                29.61891400627792,
+                57.660099817439914,
+                72.42376287467778,
+                71.32381619885564,
+                53.184185875579715,
+                44.81922904960811
+              ]
+            },
+            {
+              "summary": {
+                "n": 12,
+                "p50_ms": 44.8506,
+                "p95_ms": 97.7216,
+                "p99_ms": 97.7216
+              },
+              "counts": {
+                "db_statements": 13,
+                "cache_updates": 12
+              },
+              "samples_ms": [
+                72.7973859757185,
+                92.00837090611458,
+                44.17867190204561,
+                34.271868877112865,
+                34.283536951988935,
+                30.838731909170747,
+                33.759377896785736,
+                31.005866825580597,
+                52.205855026841164,
+                48.03037899546325,
+                97.72161301225424,
+                45.52246700040996
+              ]
+            }
+          ],
+          "after": [
+            {
+              "summary": {
+                "n": 12,
+                "p50_ms": 52.4582,
+                "p95_ms": 85.6925,
+                "p99_ms": 85.6925
+              },
+              "counts": {
+                "db_statements": 12,
+                "cache_updates": 12
+              },
+              "samples_ms": [
+                35.30211187899113,
+                54.253211012110114,
+                76.79875008761883,
+                73.05788295343518,
+                85.6925321277231,
+                38.63141103647649,
+                39.22761604189873,
+                50.75240205042064,
+                55.754516972228885,
+                36.38572501949966,
+                39.322413969784975,
+                54.163954919204116
+              ]
+            },
+            {
+              "summary": {
+                "n": 12,
+                "p50_ms": 69.5753,
+                "p95_ms": 230.3166,
+                "p99_ms": 230.3166
+              },
+              "counts": {
+                "db_statements": 12,
+                "cache_updates": 12
+              },
+              "samples_ms": [
+                230.3165839985013,
+                132.42782093584538,
+                59.982779901474714,
+                68.34044307470322,
+                104.14774995297194,
+                94.33399280533195,
+                79.97956802137196,
+                70.81014406867325,
+                32.84436510875821,
+                52.25049005821347,
+                59.20806294307113,
+                58.89070895500481
+              ]
+            }
+          ],
+          "interpretation": "고유 입력은 동일 DB 경로와 추가 직렬화 비용을 가지며 이번 소표본에서 지연 개선을 주장하지 않음"
+        },
+        "cold_identical_burst": {
+          "before": [
+            {
+              "concurrency": 8,
+              "requests": 32,
+              "wall_ms": 2078.858,
+              "requests_per_second": 15.39,
+              "summary": {
+                "n": 32,
+                "p50_ms": 404.3436,
+                "p95_ms": 1191.2544,
+                "p99_ms": 1363.0817
+              },
+              "counts": {
+                "db_statements": 32,
+                "cache_updates": 32
+              },
+              "mismatches": 0
+            },
+            {
+              "concurrency": 8,
+              "requests": 32,
+              "wall_ms": 1390.524,
+              "requests_per_second": 23.01,
+              "summary": {
+                "n": 32,
+                "p50_ms": 218.5985,
+                "p95_ms": 740.0272,
+                "p99_ms": 1066.0469
+              },
+              "counts": {
+                "db_statements": 32,
+                "cache_updates": 32
+              },
+              "mismatches": 0
+            }
+          ],
+          "after": [
+            {
+              "concurrency": 8,
+              "requests": 32,
+              "wall_ms": 274.898,
+              "requests_per_second": 116.41,
+              "summary": {
+                "n": 32,
+                "p50_ms": 3.2492,
+                "p95_ms": 88.5563,
+                "p99_ms": 92.2062
+              },
+              "counts": {
+                "db_statements": 1,
+                "cache_updates": 1
+              },
+              "mismatches": 0
+            },
+            {
+              "concurrency": 8,
+              "requests": 32,
+              "wall_ms": 238.018,
+              "requests_per_second": 134.44,
+              "summary": {
+                "n": 32,
+                "p50_ms": 2.8552,
+                "p95_ms": 67.3263,
+                "p99_ms": 70.3306
+              },
+              "counts": {
+                "db_statements": 1,
+                "cache_updates": 1
+              },
+              "mismatches": 0
+            }
+          ]
+        }
+      },
+      "memory": {
+        "max_bytes": 67108864,
+        "retained_charged_bytes": 67107744,
+        "unique_payloads": 50000,
+        "peak_rss_kib": [
+          151108,
+          151100
+        ],
+        "peak_rss_before_stress_kib": [
+          84088,
+          84068
+        ],
+        "charged_bytes_after_close": 0,
+        "issue": "orjson의 큰 내부 할당을 장기 보관하던 문제를 정확한 크기 버퍼 복사로 수정",
+        "serialization_probe_28000": {
+          "raw_rss_kib": 235880,
+          "copy_rss_kib": 69232,
+          "same_getsizeof_sum": 59432890
+        }
+      },
+      "limits": [
+        "영속 캐시와 공개 API 인증의 DB 경로는 유지",
+        "데이터셋 지문 TTL 10초·미적중/고유 입력은 기존 DB 비용 잔존",
+        "캐시 바이트 예산은 프로세스 전체 RSS 한도가 아님",
+        "공유 장비·소표본이며 전체 운영 p95/QPS 보장이 아님"
+      ]
+    },
+    {
+      "number": 3,
+      "status": "완료",
+      "cause": "캐시 미적중 정확 도로명주소의 도로명·행정구역 BitmapAnd와 본번·부번 후처리",
+      "change": "도로명 text_pattern_ops·본번·부번·지하 여부 복합 B-tree; 조회 SQL·후보·정확한 total 유지",
+      "correctness": {
+        "live_cases": 14,
+        "mismatches": 0,
+        "errors": 0,
+        "postgis_query_index_tests_passed": 16,
+        "migration_upgrade_downgrade_upgrade": "통과",
+        "mv_physical_identity_unchanged": true
+      },
+      "measurement": {
+        "kind": "같은 ARM 장비의 인덱스 생성 전후 SQL 비교; HTTP 전체 응답시간 아님",
+        "order": [
+          "before",
+          "인덱스 생성",
+          "after"
+        ],
+        "concurrency": 1,
+        "warmup_per_case": 2,
+        "samples_per_variant_per_case": 16,
+        "cases": [
+          {
+            "case": "seoul",
+            "service": "geocode",
+            "rows": 1,
+            "total": null,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 17.2955,
+              "p95_ms": 39.967
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 8.5265,
+              "p95_ms": 16.867
+            },
+            "server_execution_before_ms": 12.225,
+            "server_execution_after_ms": 0.452,
+            "buffers_before": 400,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "hahoe",
+            "service": "geocode",
+            "rows": 1,
+            "total": null,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 5.4768,
+              "p95_ms": 32.462
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 3.1458,
+              "p95_ms": 10.1434
+            },
+            "server_execution_before_ms": 1.59,
+            "server_execution_after_ms": 0.288,
+            "buffers_before": 71,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "sejong",
+            "service": "geocode",
+            "rows": 1,
+            "total": null,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 4.5484,
+              "p95_ms": 22.8209
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 3.6242,
+              "p95_ms": 6.6285
+            },
+            "server_execution_before_ms": 1.075,
+            "server_execution_after_ms": 0.318,
+            "buffers_before": 110,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "busan",
+            "service": "geocode",
+            "rows": 1,
+            "total": null,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 46.2418,
+              "p95_ms": 215.1897
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 2.7138,
+              "p95_ms": 6.7995
+            },
+            "server_execution_before_ms": 42.847,
+            "server_execution_after_ms": 0.325,
+            "buffers_before": 381,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "suwon",
+            "service": "geocode",
+            "rows": 0,
+            "total": 0,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 8.0358,
+              "p95_ms": 35.0696
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 2.0963,
+              "p95_ms": 7.4257
+            },
+            "server_execution_before_ms": 1.556,
+            "server_execution_after_ms": 0.336,
+            "buffers_before": 10,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "no_city",
+            "service": "geocode",
+            "rows": 1,
+            "total": null,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 25.2486,
+              "p95_ms": 68.5779
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 4.4957,
+              "p95_ms": 17.7925
+            },
+            "server_execution_before_ms": 10.791,
+            "server_execution_after_ms": 0.458,
+            "buffers_before": 2462,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "no_result",
+            "service": "geocode",
+            "rows": 0,
+            "total": 0,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 3.8556,
+              "p95_ms": 14.5367
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 5.1738,
+              "p95_ms": 16.8845
+            },
+            "server_execution_before_ms": 11.832,
+            "server_execution_after_ms": 0.459,
+            "buffers_before": 400,
+            "buffers_after": 4,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "seoul",
+            "service": "search",
+            "rows": 1,
+            "total": 1,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 23.8787,
+              "p95_ms": 72.4147
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 14.8234,
+              "p95_ms": 40.5749
+            },
+            "server_execution_before_ms": 13.624,
+            "server_execution_after_ms": 0.618,
+            "buffers_before": 400,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "hahoe",
+            "service": "search",
+            "rows": 1,
+            "total": 1,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 6.8731,
+              "p95_ms": 74.3001
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 6.4012,
+              "p95_ms": 12.926
+            },
+            "server_execution_before_ms": 1.402,
+            "server_execution_after_ms": 0.643,
+            "buffers_before": 71,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "sejong",
+            "service": "search",
+            "rows": 1,
+            "total": 1,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 8.6647,
+              "p95_ms": 246.3598
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 5.1765,
+              "p95_ms": 17.1193
+            },
+            "server_execution_before_ms": 5.84,
+            "server_execution_after_ms": 0.676,
+            "buffers_before": 110,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "busan",
+            "service": "search",
+            "rows": 1,
+            "total": 1,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 125.8984,
+              "p95_ms": 316.028
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 6.5282,
+              "p95_ms": 11.6744
+            },
+            "server_execution_before_ms": 121.695,
+            "server_execution_after_ms": 0.628,
+            "buffers_before": 381,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "suwon",
+            "service": "search",
+            "rows": 0,
+            "total": 0,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 24.1427,
+              "p95_ms": 55.1148
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 6.3983,
+              "p95_ms": 17.5177
+            },
+            "server_execution_before_ms": 1.488,
+            "server_execution_after_ms": 0.489,
+            "buffers_before": 10,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "no_city",
+            "service": "search",
+            "rows": 1,
+            "total": 1,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 21.0976,
+              "p95_ms": 65.3679
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 7.5154,
+              "p95_ms": 11.9678
+            },
+            "server_execution_before_ms": 8.579,
+            "server_execution_after_ms": 8.739,
+            "buffers_before": 2462,
+            "buffers_after": 5,
+            "selected_index": "idx_mv_road_address_exact"
+          },
+          {
+            "case": "no_result",
+            "service": "search",
+            "rows": 0,
+            "total": 0,
+            "result_mismatches": 0,
+            "before": {
+              "n": 16,
+              "p50_ms": 3.4518,
+              "p95_ms": 10.3082
+            },
+            "after": {
+              "n": 16,
+              "p50_ms": 4.6877,
+              "p95_ms": 16.979
+            },
+            "server_execution_before_ms": 17.555,
+            "server_execution_after_ms": 0.57,
+            "buffers_before": 400,
+            "buffers_after": 4,
+            "selected_index": "idx_mv_road_address_exact"
+          }
+        ]
+      },
+      "index": {
+        "name": "idx_mv_road_address_exact",
+        "bytes": 291987456,
+        "build_seconds": 187.296,
+        "valid": true,
+        "ready": true,
+        "maintenance_work_mem_mib": 64,
+        "parallel_maintenance_workers": 0,
+        "database_reload": false
+      },
+      "issues_resolved": [
+        "MV가 지원하지 않는 사전 LOCK 구문 제거 후 DDL 자체의 잠금 사용",
+        "기본 로케일 정렬 인덱스 생성을 소유 PID·SQL 확인 뒤 취소; 동등 비교를 지원하는 text_pattern_ops로 변경 후 재검증",
+        "생성 후 검증기의 추정 행 수 동일성 조건 제거; MV 물리 식별자·유효 인덱스·14종 결과 동일성으로 확인"
+      ],
+      "limits": [
+        "생성 전후 물리 인덱스 비교이며 AB 교차 순서 실험이 아님",
+        "공유 장비·소표본의 일부 빈 결과·실행시간 이상치는 그대로 보존",
+        "약 278.5MiB 인덱스 저장공간 추가; 모두 RAM 상주한다는 의미가 아님",
+        "짧은 검색어의 첫 broad 조회 병목은 남으며 용어 사전·좁은 투영은 후속 검증 후보"
+      ]
+    }
+  ],
+  "final_validation": {
+    "pytest_passed": 2071,
+    "optional_tests_skipped": 234,
+    "ruff": "통과",
+    "mypy_strict_source_files": 171,
+    "import_contracts_kept": 1,
+    "openapi_changed": false,
+    "actual_postgis_query_index": 16,
+    "actual_postgis_release": 3,
+    "scratch_migration_roundtrip": "통과",
+    "codegraph": "Linux CLI sync/status 최신",
+    "manual_security_review": "전용 security-review 스킬 미설치로 직접 diff·인증 경계·응답 격리·유한 label·실제 키 부재 검토",
+    "actual_key_staged_matches": 0,
+    "actual_key_tracked_matches": 0
+  }
+}

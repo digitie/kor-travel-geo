@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-074.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-076.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -16,6 +16,7 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
+| ADR-075 | 릴리스와 조회 옵션에 종속된 제한 용량 메모리 결과 캐시 | [075-bounded-memory-result-cache.md](075-bounded-memory-result-cache.md) |
 | ADR-074 | 완료 원천을 검증하고 정합성부터 새 배치로 재개한다 | [074-consistency-stage-resume.md](074-consistency-stage-resume.md) |
 | ADR-073 | 원천 좌표를 보존하고 검증된 좌표만 서빙한다 | [073-serving-coordinate-quarantine.md](073-serving-coordinate-quarantine.md) |
 | ADR-072 | 건물 도형의 주소 연결은 소재지 시군구 코드도 사용한다 | [072-polygon-address-sigungu-link.md](072-polygon-address-sigungu-link.md) |

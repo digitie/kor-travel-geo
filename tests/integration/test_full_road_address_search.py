@@ -12,6 +12,7 @@ from sqlalchemy import text
 from kortravelgeo.dto.region import RegionHint
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.search_repo import SearchRepository
+from kortravelgeo.infra.sql import ROAD_ADDRESS_INDEX_SQL
 from kortravelgeo.settings import Settings
 from tests.integration._pg_guard import require_disposable_database
 
@@ -159,3 +160,32 @@ async def test_numbered_road_keeps_its_identity(repository):
             await conn.execute(text(f"REFRESH MATERIALIZED VIEW {relation}"))
     assert await ids(repository, "올림픽로35가길 10") == (["a"], 1)
     assert await ids(repository, "하회종가길40번길") == (["e"], 1)
+
+
+@pytest.mark.asyncio
+async def test_compound_road_index_preserves_exact_total_options_and_null_point(repository):
+    async with repository.engine.begin() as conn:
+        await conn.execute(text("UPDATE fixture SET pt_4326=NULL WHERE bd_mgt_sn='b'"))
+        await conn.execute(text("REFRESH MATERIALIZED VIEW mv_geocode_target"))
+    cases = [
+        ("경북 안동시 풍천면 하회종가길 40", {}),
+        ("경북 안동시 풍천면 하회종가길 40", {"page": 2, "size": 1}),
+        ("경북 안동시 풍천면 하회종가길 지하 40-2", {}),
+        ("경북 안동시 풍천면 하회종가길 40-2", {}),
+        ("경북 안동시 풍천면 하회종가길 40", {"region_hint": RegionHint(sig_cd="11")}),
+        ("경북 안동시 풍천면 하회종가길 999", {}),
+        ("하회종가길", {}),
+    ]
+    before = [await ids(repository, query, **options) for query, options in cases]
+    assert before[:4] == [(["a", "b"], 2), (["b"], 2), (["d"], 1), (["c"], 1)]
+    async with repository.engine.begin() as conn:
+        await conn.execute(text(ROAD_ADDRESS_INDEX_SQL))
+        # 새 DB 생성과 동일한 DDL이며 반복 적용과 일반 MV refresh도 견뎌야 한다.
+        await conn.execute(text(ROAD_ADDRESS_INDEX_SQL))
+        await conn.execute(text("REFRESH MATERIALIZED VIEW mv_geocode_target"))
+        definition = await conn.scalar(text("""
+SELECT indexdef FROM pg_indexes
+ WHERE schemaname=current_schema() AND indexname='idx_mv_road_address_exact'
+"""))
+        assert "(rn_nrm text_pattern_ops, buld_mnnm, buld_slno, buld_se_cd)" in definition
+    assert [await ids(repository, query, **options) for query, options in cases] == before

@@ -1,6 +1,6 @@
 # ADR-071: 보조 geometry timeout은 좌표와 분리하고 요청 수명을 따른다
 
-- 상태: accepted
+- 상태: accepted (2026-11-07 ADR-075로 정상 geometry 결과의 제한 용량 메모리 캐시 허용)
 - 날짜: 2026-10-15
 - 결정자: 사용자(실패 격리·CPU/메모리 개선·실측 기반 튜닝), Codex
 

@@ -1,3 +1,10 @@
+## 2026-11-07 — 조회 성능 3회 반복 개선 진행
+
+- 장비 증설 없이 원인 발굴 → 개선 → 검증을 3회 반복한다. 첫 회차의 지역 조건 reverse 반경 조기 적용은 실제 SQL 8사례 결과 동일·PostGIS 4개·단위 7개를 통과했다. 대표 서버 실행 424.002→11.923ms이며 조건 없는 SQL은 유지했다.
+- 2회차의 64MiB 메모리 결과 캐시·동일 키 요청 공유는 실제 ARM 8종 결과 동일·PostGIS 릴리스 검사 3개를 통과했다. 반복 v2 geocode p50 53.808→1.656ms이며 HTTP 전체 시간은 아니다. 추적 ID 재사용·직렬화 버퍼 과다 보관을 수정했고 5만 결과 최고 RSS는 약 148MiB다.
+- 3회차의 정확 도로명주소 복합 인덱스는 운영 14종 결과 동일·PostGIS 16개·마이그레이션 왕복을 통과했다. 대표 서버 실행 12.225→0.452ms, 버퍼 접근 400→5이며 원천·MV 재적재는 없었다.
+- 세 회차와 최종 WSL 필수 검사(pytest 2,071개 등)를 마쳤다. 최종 HEAD의 CI·리뷰 창과 병합·이미지 검증을 진행한다. 계획·수치는 docs/execplan/geo-readonly-performance-three-cycles.md 및 docs/reviews/current-hardware-performance-three-cycles.json, 전체 방안 검토는 docs/reviews/current-hardware-read-performance.md다.
+
 ## 2026-11-06 — Wiki의 화면별 따라 하기 절차
 
 - DB 업데이트 Wiki 맨 뒤의 8절에 처음 사용하는 사람을 위한 클릭 순서·단계별 완료 기준·실패 시 재개 위치와 기록표를 추가했다. 완료 확인은 8.7, 새 갱신은 8.1, 실패 재개는 8.9에서 시작한다.

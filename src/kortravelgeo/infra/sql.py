@@ -1341,6 +1341,11 @@ SELECT level, code, name, parent_sido_cd, parent_sig_cd, part_no, geom
 ANALYZE region_radius_parts;
 """
 
+ROAD_ADDRESS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_mv_road_address_exact
+  ON mv_geocode_target (rn_nrm text_pattern_ops, buld_mnnm, buld_slno, buld_se_cd);
+"""
+
 MV_SQL = f"""
 SET search_path = public, x_extension;
 
@@ -1446,6 +1451,7 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);
 CREATE INDEX idx_mv_road
   ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
+{ROAD_ADDRESS_INDEX_SQL}
 CREATE INDEX idx_mv_jibun
   ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
 CREATE INDEX idx_mv_jibun_name_exact

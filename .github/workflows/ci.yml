@@ -112,6 +112,7 @@ jobs:
             tests/integration/test_maintenance_statement_timeout.py \
             tests/integration/test_polygon_address_links.py \
             tests/integration/test_full_road_address_search.py \
+            tests/integration/test_reverse_radius_pushdown.py \
             tests/integration/test_official_road_address_http.py \
             tests/integration/test_serving_coordinate_quality.py \
             tests/integration/test_consistency_c1_selection.py \
