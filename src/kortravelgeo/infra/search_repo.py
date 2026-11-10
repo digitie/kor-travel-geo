@@ -142,25 +142,34 @@ SELECT *, count(*) OVER () AS total
 """
 )
 
+# 행정구역 이름 후보(T-311). geocode가 도로·지번을 못 찾으면 이 SQL로 떨어지므로(``client.py``
+# ``_geocode_road_or_region_candidates``) 적재처럼 못 찾는 주소가 이어지는 호출자가 매번 탄다.
+# 2026-11-10 odroid(CPU 포화)에서 이 SQL이 statement_timeout 5초를 넘겨 geocode가 504를 냈다 —
+# 같은 주소는 다시 보내도 같은 504라 Map MOIS 적재 run이 끝났다. 결과는 그대로 두고 비용만 줄인다.
+#
+# - 대표점(ST_PointOnSurface + ST_Transform)은 페이지에 남은 행에만 계산한다(LIMIT 뒤 LATERAL).
+# - 행정구역 전체 이름의 공백 제거(regexp_replace)는 행마다 한 번만 한다(``normalized``).
+# - 길이 하한으로 regexp 전에 거른다. 네 점수 조건은 모두 ``query_nrm``이 공백 뺀 title의 부분
+#   문자열(또는 그 LIKE 패턴)일 때만 참이고, 공백 제거는 길이를 줄이기만 하므로
+#   ``char_length(title) >= (query_nrm 길이 - '%' 수 - '\' 수)``는 일치의 필요조건이다.
+#   '%'는 빈 문자열과도, '\'는 escape로 다음 글자와 묶여 한 글자로 맞을 수 있어 둘 다 뺀다.
+#   전체 주소 입력(``... 올림픽로 123``)은 어떤 행정구역 이름보다 길어 여기서 거의 다 빠진다.
 _DISTRICT_SEARCH_SQL = text(
     """
-WITH query_input AS (
-  SELECT regexp_replace(:query, '\\s+', '', 'g') AS query_nrm
+WITH query_input AS MATERIALIZED (
+  SELECT q.query_nrm,
+         char_length(replace(replace(q.query_nrm, '%', ''), '\\', '')) AS min_title_len
+    FROM (SELECT regexp_replace(:query, '\\s+', '', 'g') AS query_nrm) q
 ),
 districts AS (
-  SELECT c.ctprvn_cd AS code,
+  SELECT 1 AS level,
+         c.ctprvn_cd AS code,
          c.ctp_kor_nm AS title,
          c.ctp_kor_nm AS si_nm,
          NULL::text AS sgg_nm,
          NULL::text AS emd_nm,
          NULL::text AS li_nm,
-         c.ctprvn_cd AS region_code,
-         CASE WHEN ST_IsEmpty(c.geom) THEN NULL
-              ELSE ST_X(ST_Transform(ST_PointOnSurface(c.geom), 4326))
-          END AS lon,
-         CASE WHEN ST_IsEmpty(c.geom) THEN NULL
-              ELSE ST_Y(ST_Transform(ST_PointOnSurface(c.geom), 4326))
-          END AS lat
+         c.ctprvn_cd AS region_code
     FROM tl_scco_ctprvn c
    WHERE (
        CAST(:sig_cd_filter AS text) IS NULL
@@ -179,19 +188,14 @@ districts AS (
        OR c.ctprvn_cd = left(CAST(:bjd_cd_prefix AS text), 2)
      )
   UNION ALL
-  SELECT s.sig_cd AS code,
+  SELECT 2 AS level,
+         s.sig_cd AS code,
          concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm) AS title,
          c.ctp_kor_nm AS si_nm,
          s.sig_kor_nm AS sgg_nm,
          NULL::text AS emd_nm,
          NULL::text AS li_nm,
-         s.sig_cd AS region_code,
-         CASE WHEN ST_IsEmpty(s.geom) THEN NULL
-              ELSE ST_X(ST_Transform(ST_PointOnSurface(s.geom), 4326))
-          END AS lon,
-         CASE WHEN ST_IsEmpty(s.geom) THEN NULL
-              ELSE ST_Y(ST_Transform(ST_PointOnSurface(s.geom), 4326))
-          END AS lat
+         s.sig_cd AS region_code
     FROM tl_scco_sig s
     LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(s.sig_cd, 2)
    WHERE (CAST(:sig_cd_filter AS text) IS NULL OR s.sig_cd = CAST(:sig_cd_filter AS text))
@@ -202,19 +206,14 @@ districts AS (
        OR s.sig_cd LIKE left(CAST(:bjd_cd_prefix AS text), 5) || '%'
      )
   UNION ALL
-  SELECT e.emd_cd AS code,
+  SELECT 3 AS level,
+         e.emd_cd AS code,
          concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm, e.emd_kor_nm) AS title,
          c.ctp_kor_nm AS si_nm,
          s.sig_kor_nm AS sgg_nm,
          e.emd_kor_nm AS emd_nm,
          NULL::text AS li_nm,
-         e.emd_cd AS region_code,
-         CASE WHEN ST_IsEmpty(e.geom) THEN NULL
-              ELSE ST_X(ST_Transform(ST_PointOnSurface(e.geom), 4326))
-          END AS lon,
-         CASE WHEN ST_IsEmpty(e.geom) THEN NULL
-              ELSE ST_Y(ST_Transform(ST_PointOnSurface(e.geom), 4326))
-          END AS lat
+         e.emd_cd AS region_code
     FROM tl_scco_emd e
     LEFT JOIN tl_scco_sig s ON s.sig_cd = left(e.emd_cd, 5)
     LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(e.emd_cd, 2)
@@ -223,19 +222,14 @@ districts AS (
      AND (CAST(:bjd_cd_filter AS text) IS NULL OR e.emd_cd = left(CAST(:bjd_cd_filter AS text), 8))
      AND (CAST(:bjd_cd_prefix AS text) IS NULL OR e.emd_cd LIKE CAST(:bjd_cd_prefix AS text))
   UNION ALL
-  SELECT l.li_cd AS code,
+  SELECT 4 AS level,
+         l.li_cd AS code,
          concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm, e.emd_kor_nm, l.li_kor_nm) AS title,
          c.ctp_kor_nm AS si_nm,
          s.sig_kor_nm AS sgg_nm,
          e.emd_kor_nm AS emd_nm,
          l.li_kor_nm AS li_nm,
-         l.li_cd AS region_code,
-         CASE WHEN ST_IsEmpty(l.geom) THEN NULL
-              ELSE ST_X(ST_Transform(ST_PointOnSurface(l.geom), 4326))
-          END AS lon,
-         CASE WHEN ST_IsEmpty(l.geom) THEN NULL
-              ELSE ST_Y(ST_Transform(ST_PointOnSurface(l.geom), 4326))
-          END AS lat
+         l.li_cd AS region_code
     FROM tl_scco_li l
     LEFT JOIN tl_scco_emd e ON e.emd_cd = left(l.li_cd, 8)
     LEFT JOIN tl_scco_sig s ON s.sig_cd = left(l.li_cd, 5)
@@ -245,29 +239,57 @@ districts AS (
      AND (CAST(:bjd_cd_filter AS text) IS NULL OR l.li_cd = CAST(:bjd_cd_filter AS text))
      AND (CAST(:bjd_cd_prefix AS text) IS NULL OR l.li_cd LIKE CAST(:bjd_cd_prefix AS text))
 ),
-ranked AS (
+normalized AS MATERIALIZED (
   SELECT d.*,
-         CASE
-           WHEN regexp_replace(d.title, '\\s+', '', 'g') = q.query_nrm THEN 1.0
-           WHEN regexp_replace(
-             coalesce(d.li_nm, d.emd_nm, d.sgg_nm, d.si_nm),
-             '\\s+', '', 'g'
-           ) = q.query_nrm THEN 0.98
-           WHEN right(
-             regexp_replace(d.title, '\\s+', '', 'g'),
-             char_length(q.query_nrm)
-           ) = q.query_nrm THEN 0.95
-           WHEN regexp_replace(d.title, '\\s+', '', 'g') LIKE '%' || q.query_nrm || '%' THEN 0.85
-           ELSE 0.0
-         END AS score
+         regexp_replace(d.title, '\\s+', '', 'g') AS title_nrm
     FROM districts d
     CROSS JOIN query_input q
+   WHERE char_length(d.title) >= q.min_title_len
+),
+ranked AS (
+  SELECT n.*,
+         CASE
+           WHEN n.title_nrm = q.query_nrm THEN 1.0
+           WHEN regexp_replace(
+             coalesce(n.li_nm, n.emd_nm, n.sgg_nm, n.si_nm),
+             '\\s+', '', 'g'
+           ) = q.query_nrm THEN 0.98
+           WHEN right(n.title_nrm, char_length(q.query_nrm)) = q.query_nrm THEN 0.95
+           WHEN n.title_nrm LIKE '%' || q.query_nrm || '%' THEN 0.85
+           ELSE 0.0
+         END AS score
+    FROM normalized n
+    CROSS JOIN query_input q
+),
+page AS (
+  SELECT r.*, count(*) OVER () AS total
+    FROM ranked r
+   WHERE r.score > 0
+   ORDER BY r.score DESC, char_length(r.code), r.title
+   LIMIT :limit OFFSET :offset
 )
-SELECT *, count(*) OVER () AS total
-  FROM ranked
- WHERE score > 0
- ORDER BY score DESC, char_length(code), title
- LIMIT :limit OFFSET :offset
+SELECT p.code, p.title, p.si_nm, p.sgg_nm, p.emd_nm, p.li_nm, p.region_code,
+       pt.lon, pt.lat, p.score, p.total
+  FROM page p
+  LEFT JOIN LATERAL (
+    SELECT CASE WHEN ST_IsEmpty(g.geom) THEN NULL
+                ELSE ST_X(ST_Transform(ST_PointOnSurface(g.geom), 4326))
+            END AS lon,
+           CASE WHEN ST_IsEmpty(g.geom) THEN NULL
+                ELSE ST_Y(ST_Transform(ST_PointOnSurface(g.geom), 4326))
+            END AS lat
+      FROM (
+        SELECT c.geom FROM tl_scco_ctprvn c WHERE p.level = 1 AND c.ctprvn_cd = p.code
+        UNION ALL
+        SELECT s.geom FROM tl_scco_sig s WHERE p.level = 2 AND s.sig_cd = p.code
+        UNION ALL
+        SELECT e.geom FROM tl_scco_emd e WHERE p.level = 3 AND e.emd_cd = p.code
+        UNION ALL
+        SELECT l.geom FROM tl_scco_li l WHERE p.level = 4 AND l.li_cd = p.code
+      ) g
+     LIMIT 1
+  ) pt ON true
+ ORDER BY p.score DESC, char_length(p.code), p.title
 """
 )
 
