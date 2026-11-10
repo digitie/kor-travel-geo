@@ -2,6 +2,7 @@
 
 - Map MOIS 숙박 적재 run 1ce7feec·33d88d25가 geo `/v2/geocode` 504로 끝났다. 원인은 도로·지번 미발견 → 행정구역 후보 SQL이 시도~리 약 2만 행마다 대표점·공백 제거(regexp 최대 4회)를 계산해 성공 시에도 2.3~4.9초였고, odroid CPU 포화(load 11~21, 온도 정상) 때 statement_timeout 5초를 넘긴 것이다. 같은 주소는 재시도해도 같은 504였다(PG 취소 시각 = 504 시각).
 - 대표점은 LIMIT 뒤 LATERAL, title 공백 제거는 행마다 1회, regexp 전 길이 하한으로 바꿨다. 운영 DB에서 18개 입력×2페이지 결과가 행·순서·좌표·total까지 같았고 전체 주소 입력은 1.1~3.8초 → 0.4~1.2초다. 새 통합 suite `test_district_search_sql.py`를 CI 목록에 넣었다.
+- odroid 배포 완료(2026-11-10 08:23Z): e0a18fd 기반 API 단독 thin 이미지(`rel-e0a18fd72a14`, rel-5c4f84247056 + search_repo.py 한 파일)를 Manager 잠금 안에서 `up --no-deps kor-travel-geo-api` → adopt/verify healthy. 코드 서버·UI·공용 서비스 무변경, 롤백 태그 `kor-travel-geo-api:rollback-before-district-e0a18fd`. 배포 뒤 Map 컨테이너 실측: 미발견 주소 단건 p50 2.76 s/p95 4.59 s, 동시 4 p50 3.25 s/p95 4.28 s, 504 0건(배포 전 단건 40%·동시 4 80% 504).
 
 ## 2026-11-07 — 3회 성능 개선 배포·후속 검증 완료
 
