@@ -123,6 +123,24 @@ def test_search_repo_supports_district_candidates_from_admin_polygons() -> None:
     )
 
 
+def test_district_search_defers_points_and_normalizes_titles_once() -> None:
+    """2026-11-10 geocode 504: 행정구역 2만 행마다 대표점·공백 제거를 반복하지 않는다."""
+    sql = str(search_repo._DISTRICT_SEARCH_SQL)
+    limit_at = sql.index("LIMIT :limit OFFSET :offset")
+
+    # 대표점은 페이지(LIMIT) 뒤 LATERAL에서만 — 이름 후보 CTE에는 geometry가 없다.
+    assert sql.count("ST_PointOnSurface") == 2
+    assert sql.index("ST_PointOnSurface") > limit_at
+    districts = sql[sql.index("districts AS (") : sql.index("normalized AS MATERIALIZED")]
+    assert "geom" not in districts
+    # title 공백 제거는 행마다 한 번(MATERIALIZED), 점수식은 그 열을 다시 쓴다.
+    assert sql.count("regexp_replace(d.title") == 1
+    assert "regexp_replace(n.title" not in sql
+    # regexp보다 먼저 거르는 길이 하한 — LIKE 메타문자('%', '\')는 길이에서 뺀다.
+    assert "char_length(replace(replace(q.query_nrm, '%', ''), '\\', '')) AS min_title_len" in sql
+    assert "WHERE char_length(d.title) >= q.min_title_len" in sql
+
+
 def test_regions_within_radius_sql_keeps_region_geometry_indexable() -> None:
     sql = str(geometry_repo._REGIONS_WITHIN_RADIUS_SQL)
     refresh_sql = infra_sql.REGION_RADIUS_PARTS_REFRESH_SQL

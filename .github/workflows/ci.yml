@@ -112,6 +112,7 @@ jobs:
             tests/integration/test_maintenance_statement_timeout.py \
             tests/integration/test_polygon_address_links.py \
             tests/integration/test_full_road_address_search.py \
+            tests/integration/test_district_search_sql.py \
             tests/integration/test_reverse_radius_pushdown.py \
             tests/integration/test_official_road_address_http.py \
             tests/integration/test_serving_coordinate_quality.py \
@@ -148,6 +149,7 @@ jobs:
               "test_maintenance_statement_timeout": 4,
               "test_polygon_address_links": 1,
               "test_full_road_address_search": 11,
+              "test_district_search_sql": 6,
               "test_official_road_address_http": 1,
               "test_serving_coordinate_quality": 13,
               "test_consistency_c1_selection": 3,
