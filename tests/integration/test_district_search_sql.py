@@ -58,7 +58,7 @@ async def repository():
                     f"CREATE TABLE {table} ({code_col} text PRIMARY KEY, {name_col} text, "
                     "geom geometry(Geometry,5179))"
                 ))
-            for table, code_col, name_col, code, name, origin in _ROWS:
+            for table, _code_col, _name_col, code, name, origin in _ROWS:
                 geom = (
                     "ST_GeomFromText('POLYGON EMPTY', 5179)"
                     if origin is None
