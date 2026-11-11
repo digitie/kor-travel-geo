@@ -5,6 +5,7 @@ import { Check, ChevronDown, Clock, Download, Play, RotateCw, X } from "lucide-r
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -141,7 +142,9 @@ function useConsistencyPanelController(initialReportId: string | null) {
   });
   const [decisionForm, setDecisionForm] = useState<DecisionForm | null>(null);
   const decisionTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const [lastRun, setLastRun] = useState<LoadJobStatus | ConsistencySampleRecheckResponse | null>(null);
+  const [lastRun, setLastRun] = useState<LoadJobStatus | ConsistencySampleRecheckResponse | null>(
+    null
+  );
 
   const selectedCaseCode = useConsistencyAnalysisStore((state) => state.selectedCaseCode);
   const selectedSampleId = useConsistencyAnalysisStore((state) => state.selectedSampleId);
@@ -151,68 +154,24 @@ function useConsistencyPanelController(initialReportId: string | null) {
   const toggleSample = useConsistencyAnalysisStore((state) => state.toggleSample);
   const clearSelection = useConsistencyAnalysisStore((state) => state.clearSelection);
 
-  const { data: reports = EMPTY_REPORTS, refetch: refetchReports } = useQuery({
-    queryKey: ["consistency-reports"],
-    queryFn: () => requestJson<ConsistencyReportSummary[]>("/admin/consistency")
+  const {
+    reports,
+    refetchReports,
+    effectiveReportId,
+    report,
+    reportCases,
+    effectiveSelectedCaseCode,
+    summary,
+    selectedCase,
+    selectedDefinition,
+    samples,
+    samplePage
+  } = useConsistencyReportData({
+    initialReportId,
+    selectedReportId,
+    filters,
+    selectedCaseCode
   });
-  const { data: definitions = EMPTY_DEFINITIONS } = useQuery({
-    queryKey: ["consistency-case-definitions"],
-    queryFn: () => requestJson<ConsistencyCaseDefinition[]>("/admin/consistency/case-definitions")
-  });
-  const effectiveReportId =
-    selectedReportId ?? initialReportId ?? reports[0]?.report_id ?? null;
-
-  const { data: report } = useQuery({
-    queryKey: ["consistency-report", effectiveReportId],
-    queryFn: () => requestJson<ConsistencyReport>(`/admin/consistency/${effectiveReportId}`),
-    enabled: effectiveReportId !== null
-  });
-  const reportCases = useMemo(() => report?.cases ?? EMPTY_CASES, [report?.cases]);
-  const effectiveSelectedCaseCode = useMemo(() => {
-    if (reportCases.some((item) => item.code === selectedCaseCode)) {
-      return selectedCaseCode;
-    }
-    return reportCases[0]?.code ?? null;
-  }, [reportCases, selectedCaseCode]);
-  const samplesPath = useMemo(
-    () =>
-      effectiveReportId && effectiveSelectedCaseCode
-        ? consistencySamplesPath({
-            reportId: effectiveReportId,
-            caseCode: effectiveSelectedCaseCode,
-            severity: filters.severity || undefined,
-            decision: filters.decision || undefined,
-            sigCd: filters.sigCd || undefined,
-            orderBy: filters.orderBy,
-            desc: filters.desc,
-            page: filters.page,
-            pageSize: PAGE_SIZE
-          })
-        : null,
-    [effectiveReportId, effectiveSelectedCaseCode, filters]
-  );
-  const { data: samplePage } = useQuery({
-    queryKey: ["consistency-samples", samplesPath],
-    queryFn: () => requestJson<ConsistencySamplePage>(samplesPath ?? ""),
-    enabled: samplesPath !== null
-  });
-  const { data: summary } = useQuery({
-    queryKey: ["consistency-summary", effectiveReportId, effectiveSelectedCaseCode],
-    queryFn: () =>
-      requestJson<ConsistencyCaseSummary>(
-        `/admin/consistency/${effectiveReportId}/cases/${effectiveSelectedCaseCode}/summary`
-      ),
-    enabled: effectiveReportId !== null && effectiveSelectedCaseCode !== null
-  });
-
-  const definitionsByCode = useMemo(() => {
-    return new Map(definitions.map((item) => [item.code, item]));
-  }, [definitions]);
-
-  const selectedCase = reportCases.find((item) => item.code === effectiveSelectedCaseCode);
-  const selectedDefinition =
-    effectiveSelectedCaseCode !== null ? definitionsByCode.get(effectiveSelectedCaseCode) : undefined;
-  const samples = useMemo(() => samplePage?.items ?? EMPTY_SAMPLES, [samplePage?.items]);
   const sampleIds = useMemo(() => new Set(samples.map((sample) => sample.sample_id)), [samples]);
   const effectiveSelectedSampleId =
     selectedSampleId !== null && sampleIds.has(selectedSampleId) ? selectedSampleId : null;
@@ -222,7 +181,7 @@ function useConsistencyPanelController(initialReportId: string | null) {
   );
   const selectedSample =
     effectiveSelectedSampleId !== null
-      ? samples.find((sample) => sample.sample_id === effectiveSelectedSampleId) ?? null
+      ? (samples.find((sample) => sample.sample_id === effectiveSelectedSampleId) ?? null)
       : null;
 
   const runMutation = useMutation({
@@ -301,23 +260,13 @@ function useConsistencyPanelController(initialReportId: string | null) {
     onSelect: setSelectedSample
   });
 
-  const csvHref =
-    effectiveReportId !== null && effectiveSelectedCaseCode !== null
-      ? `${API_BASE}${backendPath(
-          consistencySamplesPath({
-            reportId: effectiveReportId,
-            caseCode: effectiveSelectedCaseCode,
-            severity: filters.severity || undefined,
-            decision: filters.decision || undefined,
-            sigCd: filters.sigCd || undefined,
-            orderBy: filters.orderBy,
-            desc: filters.desc,
-            page: filters.page,
-            pageSize: PAGE_SIZE,
-            format: "csv"
-          })
-        )}`
-      : null;
+  const csvPath = consistencyFilterPath(
+    effectiveReportId,
+    effectiveSelectedCaseCode,
+    filters,
+    "csv"
+  );
+  const csvHref = csvPath ? `${API_BASE}${backendPath(csvPath)}` : null;
 
   return {
     clearSelection,
@@ -358,8 +307,7 @@ function useConsistencyPanelController(initialReportId: string | null) {
       effectiveSelectedSampleId === null ||
       effectiveSelectedCaseCode === null ||
       recheckMutation.isPending,
-    sampleCountForDecision:
-      decisionForm?.target === "bulk" ? effectiveSelectedSampleIds.length : 1,
+    sampleCountForDecision: decisionForm?.target === "bulk" ? effectiveSelectedSampleIds.length : 1,
     sampleColumns,
     samples,
     selectedCase,
@@ -720,14 +668,12 @@ function FilterToolbar({
     setLastExternalSigCd(filters.sigCd);
     setSigCdDraft(filters.sigCd);
   }
+  const commitSigCd = useEffectEvent((sigCd: string) => onChange({ ...filters, sigCd, page: 1 }));
   useEffect(() => {
     if (sigCdDraft === filters.sigCd) return undefined;
-    const timer = setTimeout(
-      () => onChange({ ...filters, sigCd: sigCdDraft, page: 1 }),
-      SIG_CD_DEBOUNCE_MS
-    );
+    const timer = setTimeout(() => commitSigCd(sigCdDraft), SIG_CD_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [filters, onChange, sigCdDraft]);
+  }, [filters.sigCd, sigCdDraft]);
 
   const sigCdOptions = Object.keys(summary?.by_sig_cd ?? {});
   return (
@@ -794,9 +740,7 @@ function FilterToolbar({
         <Checkbox
           checked={filters.desc}
           id="consistency-desc"
-          onCheckedChange={(checked) =>
-            onChange({ ...filters, desc: checked === true, page: 1 })
-          }
+          onCheckedChange={(checked) => onChange({ ...filters, desc: checked === true, page: 1 })}
         />
         내림차순
       </label>
@@ -1159,4 +1103,101 @@ async function submitDecision(
   }
   if (!target.sampleId) throw new Error("sample is not selected");
   return patchJson(`${base}/${target.sampleId}/decision`, payload);
+}
+
+function consistencyFilterPath(
+  reportId: string | null,
+  caseCode: string | null,
+  filters: SampleFilters,
+  format?: "csv"
+) {
+  if (!reportId || !caseCode) return null;
+  return consistencySamplesPath({
+    reportId,
+    caseCode,
+    severity: filters.severity || undefined,
+    decision: filters.decision || undefined,
+    sigCd: filters.sigCd || undefined,
+    orderBy: filters.orderBy,
+    desc: filters.desc,
+    page: filters.page,
+    pageSize: PAGE_SIZE,
+    ...(format ? { format } : {})
+  });
+}
+
+function useConsistencyReportData({
+  initialReportId,
+  selectedReportId,
+  filters,
+  selectedCaseCode
+}: {
+  initialReportId: string | null;
+  selectedReportId: string | null;
+  filters: SampleFilters;
+  selectedCaseCode: string | null;
+}) {
+  const { data: reports = EMPTY_REPORTS, refetch: refetchReports } = useQuery({
+    queryKey: ["consistency-reports"],
+    queryFn: () => requestJson<ConsistencyReportSummary[]>("/admin/consistency")
+  });
+  const { data: definitions = EMPTY_DEFINITIONS } = useQuery({
+    queryKey: ["consistency-case-definitions"],
+    queryFn: () => requestJson<ConsistencyCaseDefinition[]>("/admin/consistency/case-definitions")
+  });
+  const effectiveReportId = selectedReportId ?? initialReportId ?? reports[0]?.report_id ?? null;
+
+  const { data: report } = useQuery({
+    queryKey: ["consistency-report", effectiveReportId],
+    queryFn: () => requestJson<ConsistencyReport>(`/admin/consistency/${effectiveReportId}`),
+    enabled: effectiveReportId !== null
+  });
+  const reportCases = useMemo(() => report?.cases ?? EMPTY_CASES, [report?.cases]);
+  const effectiveSelectedCaseCode = useMemo(() => {
+    if (reportCases.some((item) => item.code === selectedCaseCode)) {
+      return selectedCaseCode;
+    }
+    return reportCases[0]?.code ?? null;
+  }, [reportCases, selectedCaseCode]);
+  const samplesPath = useMemo(
+    () => consistencyFilterPath(effectiveReportId, effectiveSelectedCaseCode, filters),
+    [effectiveReportId, effectiveSelectedCaseCode, filters]
+  );
+  const { data: samplePage } = useQuery({
+    queryKey: ["consistency-samples", samplesPath],
+    queryFn: () => requestJson<ConsistencySamplePage>(samplesPath ?? ""),
+    enabled: samplesPath !== null
+  });
+  const { data: summary } = useQuery({
+    queryKey: ["consistency-summary", effectiveReportId, effectiveSelectedCaseCode],
+    queryFn: () =>
+      requestJson<ConsistencyCaseSummary>(
+        `/admin/consistency/${effectiveReportId}/cases/${effectiveSelectedCaseCode}/summary`
+      ),
+    enabled: effectiveReportId !== null && effectiveSelectedCaseCode !== null
+  });
+
+  const definitionsByCode = useMemo(() => {
+    return new Map(definitions.map((item) => [item.code, item]));
+  }, [definitions]);
+
+  const selectedCase = reportCases.find((item) => item.code === effectiveSelectedCaseCode);
+  const selectedDefinition =
+    effectiveSelectedCaseCode !== null
+      ? definitionsByCode.get(effectiveSelectedCaseCode)
+      : undefined;
+  const samples = useMemo(() => samplePage?.items ?? EMPTY_SAMPLES, [samplePage?.items]);
+  return {
+    reports,
+    refetchReports,
+    effectiveReportId,
+    report,
+    reportCases,
+    effectiveSelectedCaseCode,
+    summary,
+    selectedCase,
+    selectedDefinition,
+    samples,
+    samplePage
+  };
 }

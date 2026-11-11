@@ -2,10 +2,6 @@ FROM node:22.23.1-alpine AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-# postinstall (scripts/patch-vworld-map-web-esm-imports.mjs) needs its own file present
-# before `npx --yes npm@12.0.1 ci` runs its lifecycle scripts — the rest of the source only lands later,
-# in the builder stage's `COPY . .`.
-COPY scripts ./scripts
 COPY vendor ./vendor
 RUN npx --yes npm@12.0.1 ci
 

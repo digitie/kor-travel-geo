@@ -36,21 +36,11 @@ export function CachePanel() {
   }, [load]);
 
   const loading = metrics === null && error === null;
-  const exact = metrics?.exact === true;
 
   return (
     <Panel
       title="캐시 지표"
-      badges={
-        metrics ? (
-          <>
-            <Badge tone={metrics.enabled ? "ok" : "neutral"}>
-              {metrics.enabled ? "캐시 사용 중" : "캐시 비활성"}
-            </Badge>
-            <Badge tone={exact ? "info" : "neutral"}>{exact ? "정확 집계" : "추정치"}</Badge>
-          </>
-        ) : null
-      }
+      badges={<CacheMetricBadges metrics={metrics} />}
       actions={
         <>
           <Button
@@ -71,26 +61,52 @@ export function CachePanel() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid three">
-        <MetricTile
-          hint={exact ? "캐시에 저장된 항목 수" : "캐시 항목 수 (DB 통계 추정)"}
-          label="entries"
-          loading={loading}
-          value={(metrics?.entries ?? 0).toLocaleString()}
-        />
-        <MetricTile
-          hint={exact ? "현재 항목의 적중 합계" : "통계 초기화 이후 적중 누적 (추정)"}
-          label="hits"
-          loading={loading}
-          value={(metrics?.hits ?? 0).toLocaleString()}
-        />
-        <MetricTile
-          hint="만료됐지만 아직 남아 있는 항목 수"
-          label="expired"
-          loading={loading}
-          value={(metrics?.expired ?? 0).toLocaleString()}
-        />
-      </div>
+      <CacheMetricTiles metrics={metrics} loading={loading} />
     </Panel>
+  );
+}
+
+function CacheMetricBadges({ metrics }: { metrics: CacheMetrics | null }) {
+  if (!metrics) return null;
+  const exact = metrics.exact === true;
+  return (
+    <>
+      <Badge tone={metrics.enabled ? "ok" : "neutral"}>
+        {metrics.enabled ? "캐시 사용 중" : "캐시 비활성"}
+      </Badge>
+      <Badge tone={exact ? "info" : "neutral"}>{exact ? "정확 집계" : "추정치"}</Badge>
+    </>
+  );
+}
+
+function CacheMetricTiles({
+  metrics,
+  loading
+}: {
+  metrics: CacheMetrics | null;
+  loading: boolean;
+}) {
+  const exact = metrics?.exact === true;
+  return (
+    <div className="grid three">
+      <MetricTile
+        hint={exact ? "캐시에 저장된 항목 수" : "캐시 항목 수 (DB 통계 추정)"}
+        label="entries"
+        loading={loading}
+        value={(metrics?.entries ?? 0).toLocaleString()}
+      />
+      <MetricTile
+        hint={exact ? "현재 항목의 적중 합계" : "통계 초기화 이후 적중 누적 (추정)"}
+        label="hits"
+        loading={loading}
+        value={(metrics?.hits ?? 0).toLocaleString()}
+      />
+      <MetricTile
+        hint="만료됐지만 아직 남아 있는 항목 수"
+        label="expired"
+        loading={loading}
+        value={(metrics?.expired ?? 0).toLocaleString()}
+      />
+    </div>
   );
 }

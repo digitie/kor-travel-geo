@@ -100,10 +100,7 @@ export function RestoreWizard({
   lifecycle?: DbLifecycleCapabilities | null;
   onSubmitted?: (result: LoadJobStatus) => void;
 }) {
-  const [state, dispatchState] = useReducer(
-    restoreWizardReducer,
-    INITIAL_RESTORE_WIZARD_STATE
-  );
+  const [state, dispatchState] = useReducer(restoreWizardReducer, INITIAL_RESTORE_WIZARD_STATE);
   const {
     artifacts,
     step,
@@ -192,7 +189,7 @@ export function RestoreWizard({
   const targetDbCheck = pgIdentifierSchema.safeParse(targetDatabase);
   const targetDbError =
     targetDatabase.length > 0 && !targetDbCheck.success
-      ? targetDbCheck.error.issues[0]?.message ?? "형식이 올바르지 않습니다"
+      ? (targetDbCheck.error.issues[0]?.message ?? "형식이 올바르지 않습니다")
       : null;
   const step1Valid =
     Boolean(artifactId || archivePath) && Boolean(targetDatabase) && !targetDbError;
@@ -205,6 +202,27 @@ export function RestoreWizard({
   const canSubmit =
     confirmationValid && !busy && dryRun?.can_restore === true && !dbLifecycleBlocked(lifecycle);
 
+  const controller = {
+    artifacts,
+    step,
+    artifactId,
+    archivePath,
+    mode,
+    targetDatabase,
+    confirmation,
+    dryRun,
+    busy,
+    error,
+    submitted,
+    selected,
+    expectedConfirmation,
+    targetDbError,
+    step1Valid,
+    canSubmit,
+    dispatchState,
+    runDryRun,
+    submitRestore
+  };
   return (
     <Panel title="복원 위저드">
       <WizardSteps
@@ -225,163 +243,7 @@ export function RestoreWizard({
         </Alert>
       ) : null}
 
-      {submitted ? (
-        <div className="wizard-done">
-          <p>
-            <CheckCircle2 size={16} /> 복원 job이 제출됐습니다 — [작업] 탭에서 진행률을 확인하세요.
-          </p>
-          <JsonBlock value={submitted} />
-        </div>
-      ) : step === 1 ? (
-        <div className="form-grid">
-          <Field>
-            <span className="flex items-center gap-1">
-              <FieldLabel htmlFor="rw-artifact">복원할 백업본</FieldLabel>
-              <HelpTip label="복원할 백업본 도움말">
-                API 필드 <code>artifact_id</code> — 등록된 백업본(state=available)을 선택합니다.
-                선택하지 않으면 아래 직접 경로(<code>archive_path</code>)로 복원합니다.
-              </HelpTip>
-            </span>
-            <NativeSelect
-              id="rw-artifact"
-              onChange={(e) => dispatchState({ artifactId: e.target.value })}
-              value={artifactId}
-            >
-              <option value="">직접 경로 사용</option>
-              {artifacts.map((a) => (
-                <option key={a.artifact_id} value={a.artifact_id}>
-                  {artifactOptionLabel(a)}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-          {artifactId ? null : (
-            <Field>
-              <span className="flex items-center gap-1">
-                <FieldLabel htmlFor="rw-archive">백업본 직접 경로</FieldLabel>
-                <HelpTip label="백업본 직접 경로 도움말">
-                  API 필드 <code>archive_path</code> — 서버 파일시스템의 백업 파일(
-                  <code>.tar.zst</code>) 경로.
-                </HelpTip>
-              </span>
-              <Input
-                id="rw-archive"
-                onChange={(e) => dispatchState({ archivePath: e.target.value })}
-                placeholder="/data/backups/backup.tar.zst"
-                value={archivePath}
-              />
-            </Field>
-          )}
-          <FieldSet>
-            <FieldLegend className="flex items-center gap-1" variant="label">
-              복원 모드
-              <HelpTip label="복원 모드 도움말">
-                API 필드 <code>mode</code> — <code>new_database</code> 또는{" "}
-                <code>replace_current</code>로 전송됩니다.
-              </HelpTip>
-            </FieldLegend>
-            <div className="grid gap-2">
-              <ModeCard
-                badge={<Badge tone="ok">안전</Badge>}
-                checked={mode === "new_database"}
-                description="별도 이름의 새 DB를 만들어 복원합니다 — 운영 DB는 그대로 둡니다."
-                id="rw-mode-new"
-                onSelect={() => dispatchState({ mode: "new_database" })}
-                title="새 DB로 복원"
-                value="new_database"
-              />
-              <ModeCard
-                badge={<Badge tone="error">위험</Badge>}
-                checked={mode === "replace_current"}
-                description="현재 운영 DB를 이 백업으로 교체합니다 — typed confirmation이 필요합니다."
-                destructive
-                id="rw-mode-replace"
-                onSelect={() => dispatchState({ mode: "replace_current" })}
-                title="운영 DB 교체"
-                value="replace_current"
-              />
-            </div>
-          </FieldSet>
-          <Field data-invalid={targetDbError ? true : undefined}>
-            <span className="flex items-center gap-1">
-              <FieldLabel htmlFor="rw-target">복원 대상 DB 이름</FieldLabel>
-              <HelpTip label="복원 대상 DB 이름 도움말">
-                API 필드 <code>target_database</code> — PostgreSQL 식별자: 소문자/숫자/밑줄, 문자로
-                시작, 63자 이하.
-              </HelpTip>
-            </span>
-            <Input
-              aria-invalid={targetDbError ? true : undefined}
-              id="rw-target"
-              onChange={(e) => dispatchState({ targetDatabase: e.target.value })}
-              value={targetDatabase}
-            />
-            {targetDbError ? <FieldError>{targetDbError}</FieldError> : null}
-            {mode === "replace_current" ? (
-              <FieldDescription>
-                replace_current는 현재 운영 DB와 같은 이름이어야 하며 typed confirmation이
-                필요합니다.
-              </FieldDescription>
-            ) : null}
-          </Field>
-          <div className="button-row">
-            <Button disabled={!step1Valid} onClick={() => dispatchState({ step: 2 })} type="button">
-              다음 <ArrowRight aria-hidden="true" size={15} />
-            </Button>
-          </div>
-        </div>
-      ) : step === 2 ? (
-        <div className="wizard-preview">
-          <ManifestPreview archivePath={archivePath} artifact={selected} />
-          <div className="button-row">
-            <Button onClick={() => dispatchState({ step: 1 })} type="button" variant="outline">
-              <ArrowLeft aria-hidden="true" size={15} /> 이전
-            </Button>
-            <Button disabled={busy} onClick={runDryRun} type="button">
-              dry-run 실행 <ArrowRight aria-hidden="true" size={15} />
-            </Button>
-          </div>
-        </div>
-      ) : step === 3 ? (
-        <div className="wizard-dryrun">
-          <DryRunReport result={dryRun} />
-          <div className="button-row">
-            <Button onClick={() => dispatchState({ step: 2 })} type="button" variant="outline">
-              <ArrowLeft aria-hidden="true" size={15} /> 이전
-            </Button>
-            <Button onClick={() => dispatchState({ step: 4 })} type="button">
-              확인 단계로 <ArrowRight aria-hidden="true" size={15} />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="wizard-confirm">
-          <DryRunReport compact result={dryRun} />
-          {dryRun && !dryRun.can_restore ? (
-            <p className="wizard-blocker" role="alert">
-              <AlertTriangle size={15} /> dry-run이 복원 불가로 판정했습니다. 아래 blocker를 해소한
-              뒤 다시 dry-run 하세요.
-            </p>
-          ) : null}
-          {mode === "replace_current" && expectedConfirmation ? (
-            <TypedConfirmField
-              heading="운영 DB 교체 확인"
-              label="typed confirmation"
-              onChange={(value) => dispatchState({ confirmation: value })}
-              phrase={expectedConfirmation}
-              value={confirmation}
-            />
-          ) : null}
-          <div className="button-row">
-            <Button onClick={() => dispatchState({ step: 3 })} type="button" variant="outline">
-              <ArrowLeft aria-hidden="true" size={15} /> 이전
-            </Button>
-            <Button disabled={!canSubmit} onClick={submitRestore} type="button">
-              <RotateCcw aria-hidden="true" size={15} /> 복원 시작
-            </Button>
-          </div>
-        </div>
-      )}
+      <RestoreStepContent controller={controller} />
     </Panel>
   );
 }
@@ -528,6 +390,222 @@ function DryRunReport({
       {result.warnings && result.warnings.length > 0 ? (
         <IssueList items={result.warnings} title="warnings" tone="warn" />
       ) : null}
+    </div>
+  );
+}
+
+type RestoreStepController = RestoreWizardState & {
+  selected: BackupArtifact | null;
+  expectedConfirmation: string | null;
+  targetDbError: string | null;
+  step1Valid: boolean;
+  canSubmit: boolean;
+  dispatchState: (patch: Partial<RestoreWizardState>) => void;
+  runDryRun: () => Promise<void>;
+  submitRestore: () => Promise<void>;
+};
+
+function RestoreStepContent({ controller }: { controller: RestoreStepController }) {
+  if (controller.submitted) return <RestoreSubmittedStep controller={controller} />;
+  if (controller.step === 1) return <RestoreChooseStep controller={controller} />;
+  if (controller.step === 2) return <RestorePreviewStep controller={controller} />;
+  if (controller.step === 3) return <RestoreDryRunStep controller={controller} />;
+  return <RestoreConfirmStep controller={controller} />;
+}
+
+function RestoreSubmittedStep({ controller }: { controller: RestoreStepController }) {
+  const { submitted } = controller;
+  return (
+    <div className="wizard-done">
+      <p>
+        <CheckCircle2 size={16} /> 복원 job이 제출됐습니다 — [작업] 탭에서 진행률을 확인하세요.
+      </p>
+      <JsonBlock value={submitted} />
+    </div>
+  );
+}
+
+function RestoreChooseStep({ controller }: { controller: RestoreStepController }) {
+  const {
+    artifacts,
+    artifactId,
+    archivePath,
+    mode,
+    targetDatabase,
+    targetDbError,
+    step1Valid,
+    dispatchState
+  } = controller;
+  return (
+    <div className="form-grid">
+      <Field>
+        <span className="flex items-center gap-1">
+          <FieldLabel htmlFor="rw-artifact">복원할 백업본</FieldLabel>
+          <HelpTip label="복원할 백업본 도움말">
+            API 필드 <code>artifact_id</code> — 등록된 백업본(state=available)을 선택합니다.
+            선택하지 않으면 아래 직접 경로(<code>archive_path</code>)로 복원합니다.
+          </HelpTip>
+        </span>
+        <NativeSelect
+          id="rw-artifact"
+          onChange={(e) => dispatchState({ artifactId: e.target.value })}
+          value={artifactId}
+        >
+          <option value="">직접 경로 사용</option>
+          {artifacts.map((a) => (
+            <option key={a.artifact_id} value={a.artifact_id}>
+              {artifactOptionLabel(a)}
+            </option>
+          ))}
+        </NativeSelect>
+      </Field>
+      {artifactId ? null : (
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="rw-archive">백업본 직접 경로</FieldLabel>
+            <HelpTip label="백업본 직접 경로 도움말">
+              API 필드 <code>archive_path</code> — 서버 파일시스템의 백업 파일(
+              <code>.tar.zst</code>) 경로.
+            </HelpTip>
+          </span>
+          <Input
+            id="rw-archive"
+            onChange={(e) => dispatchState({ archivePath: e.target.value })}
+            placeholder="/data/backups/backup.tar.zst"
+            value={archivePath}
+          />
+        </Field>
+      )}
+      <FieldSet>
+        <FieldLegend className="flex items-center gap-1" variant="label">
+          복원 모드
+          <HelpTip label="복원 모드 도움말">
+            API 필드 <code>mode</code> — <code>new_database</code> 또는 <code>replace_current</code>
+            로 전송됩니다.
+          </HelpTip>
+        </FieldLegend>
+        <div className="grid gap-2">
+          <ModeCard
+            badge={<Badge tone="ok">안전</Badge>}
+            checked={mode === "new_database"}
+            description="별도 이름의 새 DB를 만들어 복원합니다 — 운영 DB는 그대로 둡니다."
+            id="rw-mode-new"
+            onSelect={() => dispatchState({ mode: "new_database" })}
+            title="새 DB로 복원"
+            value="new_database"
+          />
+          <ModeCard
+            badge={<Badge tone="error">위험</Badge>}
+            checked={mode === "replace_current"}
+            description="현재 운영 DB를 이 백업으로 교체합니다 — typed confirmation이 필요합니다."
+            destructive
+            id="rw-mode-replace"
+            onSelect={() => dispatchState({ mode: "replace_current" })}
+            title="운영 DB 교체"
+            value="replace_current"
+          />
+        </div>
+      </FieldSet>
+      <Field data-invalid={targetDbError ? true : undefined}>
+        <span className="flex items-center gap-1">
+          <FieldLabel htmlFor="rw-target">복원 대상 DB 이름</FieldLabel>
+          <HelpTip label="복원 대상 DB 이름 도움말">
+            API 필드 <code>target_database</code> — PostgreSQL 식별자: 소문자/숫자/밑줄, 문자로
+            시작, 63자 이하.
+          </HelpTip>
+        </span>
+        <Input
+          aria-invalid={targetDbError ? true : undefined}
+          id="rw-target"
+          onChange={(e) => dispatchState({ targetDatabase: e.target.value })}
+          value={targetDatabase}
+        />
+        {targetDbError ? <FieldError>{targetDbError}</FieldError> : null}
+        {mode === "replace_current" ? (
+          <FieldDescription>
+            replace_current는 현재 운영 DB와 같은 이름이어야 하며 typed confirmation이 필요합니다.
+          </FieldDescription>
+        ) : null}
+      </Field>
+      <div className="button-row">
+        <Button disabled={!step1Valid} onClick={() => dispatchState({ step: 2 })} type="button">
+          다음 <ArrowRight aria-hidden="true" size={15} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RestorePreviewStep({ controller }: { controller: RestoreStepController }) {
+  const { archivePath, busy, selected, dispatchState, runDryRun } = controller;
+  return (
+    <div className="wizard-preview">
+      <ManifestPreview archivePath={archivePath} artifact={selected} />
+      <div className="button-row">
+        <Button onClick={() => dispatchState({ step: 1 })} type="button" variant="outline">
+          <ArrowLeft aria-hidden="true" size={15} /> 이전
+        </Button>
+        <Button disabled={busy} onClick={runDryRun} type="button">
+          dry-run 실행 <ArrowRight aria-hidden="true" size={15} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RestoreDryRunStep({ controller }: { controller: RestoreStepController }) {
+  const { dryRun, dispatchState } = controller;
+  return (
+    <div className="wizard-dryrun">
+      <DryRunReport result={dryRun} />
+      <div className="button-row">
+        <Button onClick={() => dispatchState({ step: 2 })} type="button" variant="outline">
+          <ArrowLeft aria-hidden="true" size={15} /> 이전
+        </Button>
+        <Button onClick={() => dispatchState({ step: 4 })} type="button">
+          확인 단계로 <ArrowRight aria-hidden="true" size={15} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RestoreConfirmStep({ controller }: { controller: RestoreStepController }) {
+  const {
+    mode,
+    confirmation,
+    dryRun,
+    expectedConfirmation,
+    canSubmit,
+    dispatchState,
+    submitRestore
+  } = controller;
+  return (
+    <div className="wizard-confirm">
+      <DryRunReport compact result={dryRun} />
+      {dryRun && !dryRun.can_restore ? (
+        <p className="wizard-blocker" role="alert">
+          <AlertTriangle size={15} /> dry-run이 복원 불가로 판정했습니다. 아래 blocker를 해소한 뒤
+          다시 dry-run 하세요.
+        </p>
+      ) : null}
+      {mode === "replace_current" && expectedConfirmation ? (
+        <TypedConfirmField
+          heading="운영 DB 교체 확인"
+          label="typed confirmation"
+          onChange={(value) => dispatchState({ confirmation: value })}
+          phrase={expectedConfirmation}
+          value={confirmation}
+        />
+      ) : null}
+      <div className="button-row">
+        <Button onClick={() => dispatchState({ step: 3 })} type="button" variant="outline">
+          <ArrowLeft aria-hidden="true" size={15} /> 이전
+        </Button>
+        <Button disabled={!canSubmit} onClick={submitRestore} type="button">
+          <RotateCcw aria-hidden="true" size={15} /> 복원 시작
+        </Button>
+      </div>
     </div>
   );
 }

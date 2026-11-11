@@ -1,3 +1,15 @@
+## 2026-11-12 — C11 정본 채택·공통 머지와 최종 UI 검증
+
+공통 PR49는 원 A/B COMMON7 PASS·정확 CI 성공 후 e8ed3ae로 머지했다. Geo는 단일 C11 UI/tokens 및 원본에서 수정·머지한 FocusScope fix.2를 채택했다. actual263파일·설치/외부 정본 guard·단위294·type/lint·Doctor273파일0진단을 확인했다. 공통 Button source43c4a7f의 기존 회귀5개도 통과한다. 단일 통합 보고서에 모든10개 표면의 실행/개발/peer/선택 의존성 비교를 갱신했다. 다음은 C11 production build·Chromium27/Firefox27, 정확 PR631 CI·최종 두 독립 리뷰·merged SHA 새 UI 이미지와 실제 화면 수용이다. 현재 운영 신규 배포는 없다.
+
+## 2026-11-12 — 공통 Button 후속 수정과 최종 엔진 대기
+
+독립 A의 Button 위임 누락을 수정했다. 같은5개 회귀의3 FAIL→5 PASS, 전체294·타입/lint/Doctor0을 확인했다. 후보10의 실제263파일·로컬/외부 정본 guard도 일치한다. 현재 Scope1의 disabled-fieldset 원본 잔여 P2를 수정2차로 처리 중이며 최종 후보·원 A/B 재확인·브라우저·CI·merge·새 UI 이미지 배포를 진행한다. 상세 단일 보고서는 [통합 보고서](kor-travel-common-library-review.md)를 따른다.
+
+## 2026-11-11 — 공통 Radix·표·지도 라이브러리 이관 후보
+
+공통 적용 범위·장단점·전체 직접 의존성 비교와 최신 검증/미완 gate는 [통합 보고서](kor-travel-common-library-review.md)에 기록한다. 공개 지도 패키지 소비로 전환하고 설치 후 source 수정과 private root alias를 제거했다. 최종 후보9 실제 파일·lock·SHA512·외부 정본 guard, strict npm ci/peer tree, 두 빌드와 Chromium27/Firefox27을 통과했다. 다음은 독립2리뷰·CI·PR머지·운영 UI 배포다. 현재 후보는 운영에 배포하지 않았다.
+
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 
 - Map MOIS 숙박 적재 run 1ce7feec·33d88d25가 geo `/v2/geocode` 504로 끝났다. 원인은 도로·지번 미발견 → 행정구역 후보 SQL이 시도~리 약 2만 행마다 대표점·공백 제거(regexp 최대 4회)를 계산해 성공 시에도 2.3~4.9초였고, odroid CPU 포화(load 11~21, 온도 정상) 때 statement_timeout 5초를 넘긴 것이다. 같은 주소는 재시도해도 같은 504였다(PG 취소 시각 = 504 시각).

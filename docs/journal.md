@@ -1,3 +1,22 @@
+## 2026-11-12 — C11 정본 채택·공통 머지와 최종 UI 검증
+
+공통 PR49는 원 A/B COMMON7 PASS·정확 CI 성공 후 e8ed3ae로 머지했다. Geo는 단일 C11 UI/tokens 및 원본에서 수정·머지한 FocusScope fix.2를 채택했다. actual263파일·설치/외부 정본 guard·단위294·type/lint·Doctor273파일0진단을 확인했다. 공통 Button source43c4a7f의 기존 회귀5개도 통과한다. 단일 통합 보고서에 모든10개 표면의 실행/개발/peer/선택 의존성 비교를 갱신했다. 다음은 C11 production build·Chromium27/Firefox27, 정확 PR631 CI·최종 두 독립 리뷰·merged SHA 새 UI 이미지와 실제 화면 수용이다. 현재 운영 신규 배포는 없다.
+
+## 2026-11-12 — 독립 리뷰의 Button 공통 위임 누락 수정
+
+- A-CONS-P2-03의 지역 Button/전체 CVA 소유를 제거하고 공통 Button·서버 호출 가능한 순수 button-variants를 직접 소비한다. CodeGraph MCP 미노출로 Linux CLI sync→status→impact를 실행했고, graph가 두 자기 노드만 반환하여23개 import 경로와7개 명시적 submit 호출을 검색으로 추가 확인했다.
+- 같은 회귀5개에서 수정 전3 FAIL/2 PASS, 수정 후5 PASS를 확인했다. 진행 중 활성화 차단·비활성화 이유·기본 폼 동작·asChild 링크·React19 ref와 Radix trigger의 Escape/포커스 복귀를 검사했다. 전체294·타입·lint·Doctor0을 통과했다.
+- 작업 트리의 후보10 설치 bytes/guard와 source 수정 검증을 구분한다. Scope의 후속 disabled-fieldset 원본 수정2차와 최종 공통 후보·두 리뷰·새 브라우저/CI/merge/deploy는 후속이다. 원 리뷰어 재확인 전 finding을 임의 닫지 않는다.
+
+## 2026-11-11 — 공통 UI 소비와 Geo 호환 계약 검증
+
+- 공통 부품은 재export, 표는 공통 VirtualTable의 도메인 열 변환으로 연결했다. 세부 범위와 전체 라이브러리 비교는 [통합 보고서](kor-travel-common-library-review.md)를 따른다.
+- CodeGraph MCP가 노출되지 않아 Linux CLI sync/status/impact를 사용했다. VirtualTable 영향 그래프가 자기 심벌/파일만 반환해 호출자 검색으로 BackupsPanel·ConsistencyPanel·ReconcileTab을 추가 확인했다.
+- 기존 fr 열 너비 무시와 헤더 입력 remount/포커스 손실을 실제 회귀2개로 먼저 실패시켰다. 열 비율을 공통 크기 모델에 연결하고 고정 헤더 컴포넌트가 현재 meta를 읽게 변경한 뒤 해당13개·전체289개가 통과했다. lint·타입·Doctor 전체 진단0도 확인했다.
+- 옛 private root-source alias에서 webpack 빌드가 실제 모듈 해석 오류로 실패했다. 공개 core/web 배포물 진입점으로 정리한 뒤 webpack·Turbopack 빌드가 모두 통과했다. 사용하지 않는 설치 후 source 변경 스크립트와 이전 vendor 파일을 제거했다.
+- 최종 소비는 단일 후보9 UI0.2.0/tokens0.1.1·VWorld core1.0.1/web1.0.3·Lightning CSS fix.4다. 실제 vendor/설치/lock/원장/SRI와 외부 정본 guard가 일치한다. 후보8→9는 checker 두 파일만 달라 runtime117파일의 실제 byte 동등성을 확인했다.
+- n150 clean npm ci/peer tree와 두 production builder, Chromium27·Firefox27을 통과했다. 병렬 Firefox 최초 지도 준비 시간 초과는 보존하고 동일 assertion 순차 전체27 PASS와 구분한다. 최종 검증 source는 eee413d이며 이후 통합 보고서·중앙 CI pin·진척 문서만 갱신한다. 독립2리뷰·정확 CI·PR·운영 배포는 후속 gate다.
+
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 
 - Map MOIS 숙박 적재 run 1ce7feec·33d88d25가 geo `/v2/geocode` 504로 끝났다. 원인은 도로·지번 미발견 → 행정구역 후보 SQL이 시도~리 약 2만 행마다 대표점·공백 제거(regexp 최대 4회)를 계산해 성공 시에도 2.3~4.9초였고, odroid CPU 포화(load 11~21, 온도 정상) 때 statement_timeout 5초를 넘긴 것이다. 같은 주소는 재시도해도 같은 504였다(PG 취소 시각 = 504 시각).

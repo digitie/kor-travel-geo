@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
@@ -43,6 +44,34 @@ describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
     { key: "size", header: "size", sortValue: (r) => r.size, cell: (r) => String(r.size) }
   ];
 
+  it("열 너비 비율을 공통 가상화 표에서도 보존한다", () => {
+    const sizedColumns = columns.map((column, index) => ({
+      ...column, width: index === 0 ? "1.7fr" : "0.7fr"
+    }));
+    render(<VirtualTable columns={sizedColumns} rowKey={(row) => row.id} rows={data} />);
+    const widths = screen.getAllByRole("columnheader").map((header) => Number.parseFloat(header.style.width));
+    expect(widths[0] / widths[1]).toBeCloseTo(1.7 / 0.7);
+  });
+
+  it("헤더 상태 변경 후에도 입력 DOM과 키보드 포커스를 보존한다", () => {
+    function StatefulHeaderTable() {
+      const [checked, setChecked] = useState(false);
+      const headerColumns = useMemo<VirtualColumn<(typeof data)[number]>[]>(() => [{
+        key: "name", header: "선택",
+        headerCell: <input aria-label="헤더 선택" type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />,
+        cell: (row) => row.name
+      }], [checked]);
+      return <VirtualTable as="table" columns={headerColumns} rowKey={(row) => row.id} rows={data} />;
+    }
+    render(<StatefulHeaderTable />);
+    const input = screen.getByRole("checkbox", { name: "헤더 선택" });
+    input.focus();
+    fireEvent.click(input);
+    expect(screen.getByRole("checkbox", { name: "헤더 선택" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "헤더 선택" })).toBe(input);
+    expect(input).toHaveFocus();
+  });
+
   it("renders rows and reports the visible/total count", () => {
     render(
       <VirtualTable
@@ -74,24 +103,17 @@ describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
   it("sorts ascending on the first header click (TanStack sorting)", () => {
     render(<VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />);
     fireEvent.click(screen.getByRole("button", { name: /^size/ }));
-    expect(screen.getByRole("button", { name: /size ▲/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /size/ })).toHaveAttribute("aria-sort", "ascending");
   });
 
-  it("renders virtualized grid markup with ARIA table roles (no <table> element)", () => {
-    const { container } = render(
-      <VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />
-    );
-    // 실제 <table> 요소는 없고, 키보드 이동이 가능한 가상화 ARIA grid로 노출된다.
-    expect(container.querySelector("table")).toBeNull();
-    expect(screen.getByRole("grid")).toBeTruthy();
-    expect(screen.getAllByRole("columnheader").length).toBe(2);
-    expect(screen.getAllByRole("row").length).toBe(3); // 헤더 행 + 데이터 2행
-    expect(screen.getAllByRole("gridcell").length).toBe(4);
-    expect(container.querySelector(".vtable-grid")).toBeTruthy();
-    expect(container.querySelectorAll(".vtable-th").length).toBe(2);
-    expect(container.querySelectorAll(".vtable-row").length).toBe(2);
-  });
-});
+  it("가상화 모드에서도 공통 table 의미 구조를 유지한다", () => {
+    const { container } = render(<VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />);
+    expect(container.querySelector("table")).not.toBeNull();
+    expect(screen.getByRole("table")).toHaveAttribute("aria-rowcount", "3");
+    expect(screen.getAllByRole("columnheader")).toHaveLength(2);
+    expect(screen.getAllByRole("row")).toHaveLength(3);
+    expect(screen.getAllByRole("cell")).toHaveLength(4);
+  });});
 
 describe("VirtualTable as='table' semantic mode (T-270)", () => {
   const data = [
@@ -130,7 +152,7 @@ describe("VirtualTable as='table' semantic mode (T-270)", () => {
       <VirtualTable as="table" columns={columns} emptyHint="없음" rowKey={(r) => r.id} rows={[]} />
     );
     const empty = screen.getByText("없음");
-    expect(empty.getAttribute("colspan")).toBe("2");
+    expect(empty.closest("td")?.getAttribute("colspan")).toBe("2");
   });
 
   it("supports custom header cells (e.g. select-all) and per-row className + row click", () => {

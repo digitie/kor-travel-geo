@@ -559,7 +559,7 @@ function MaintenanceWindowPanel({
 }
 
 /** Panel + semantic VirtualTable 반복(7회)의 공용 셸. 로딩 중엔 Skeleton을 보여준다. */
-function OpsTablePanel<T>({
+function OpsTablePanel<T extends object>({
   title,
   description,
   actions,
@@ -585,7 +585,7 @@ type TableSectionProps<T> = {
   rows: T[];
 };
 
-function TableSection<T>({ caption, columns, emptyHint, loading, rowKey, rows }: TableSectionProps<T>) {
+function TableSection<T extends object>({ caption, columns, emptyHint, loading, rowKey, rows }: TableSectionProps<T>) {
   if (loading) {
     return (
       <div className="grid gap-2" aria-busy="true">

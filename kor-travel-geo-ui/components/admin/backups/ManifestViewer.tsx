@@ -35,7 +35,6 @@ export function ManifestViewer({
   const inventory = nestedRecord(manifest, "source_inventory_verification");
   const activeServing = nestedRecord(manifest, "active_serving");
   const sourceMatchSet = nestedRecord(manifest, "source_match_set");
-  const inv = inventoryTone(artifact.source_inventory_ok);
   const yyyymm = artifact.source_set_yyyymm ?? null;
 
   return (
@@ -51,36 +50,7 @@ export function ManifestViewer({
           <DialogDescription>{artifact.display_name ?? artifact.artifact_id}</DialogDescription>
         </DialogHeader>
 
-        <KeyValueGrid
-          items={[
-            {
-              label: "retention",
-              value: artifact.retention_class ?? "default",
-              help: (
-                <>
-                  API 필드 <code>retention_class</code> — 백업본 보존 정책 분류.
-                </>
-              ),
-              helpLabel: "retention 도움말"
-            },
-            { label: "expires", value: formatDate(artifact.expires_at) },
-            {
-              label: "source 인벤토리",
-              value: <StatusBadge tone={inv.tone} value={inv.label} />,
-              help: "백업 시점의 활성 match set 대비 원천 파일 인벤토리 검증 결과.",
-              helpLabel: "source 인벤토리 도움말"
-            },
-            {
-              label: "기준월 혼합",
-              value:
-                artifact.source_set_mixed === true
-                  ? "혼합"
-                  : artifact.source_set_mixed === false
-                    ? "단일"
-                    : "—"
-            }
-          ]}
-        />
+        <ManifestMetadata artifact={artifact} />
 
         {yyyymm ? (
           <section className="manifest-section">
@@ -95,24 +65,10 @@ export function ManifestViewer({
           </section>
         ) : null}
 
-        {activeServing ? (
-          <section className="manifest-section">
-            <strong>active serving (백업 시점)</strong>
-            <ul className="manifest-kv">
-              <li>release · {textValue(activeServing.serving_release_id) ?? "—"}</li>
-              <li>snapshot · {textValue(activeServing.dataset_snapshot_id) ?? "—"}</li>
-              <li>match set · {textValue(activeServing.source_match_set_id) ?? "—"}</li>
-              <li>
-                token ·{" "}
-                {artifact.version_token ? (
-                  <code>{shortHash(artifact.version_token, 16)}</code>
-                ) : (
-                  "—"
-                )}
-              </li>
-            </ul>
-          </section>
-        ) : null}
+        <ActiveServingManifest
+          activeServing={activeServing}
+          versionToken={artifact.version_token}
+        />
 
         {inventory ? (
           <section className="manifest-section">
@@ -142,4 +98,61 @@ function formatDate(value: string | null | undefined): string {
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) return value;
   return value.slice(0, 10);
+}
+
+function ManifestMetadata({ artifact }: { artifact: BackupArtifact }) {
+  const inv = inventoryTone(artifact.source_inventory_ok);
+  return (
+    <KeyValueGrid
+      items={[
+        {
+          label: "retention",
+          value: artifact.retention_class ?? "default",
+          help: (
+            <>
+              API 필드 <code>retention_class</code> — 백업본 보존 정책 분류.
+            </>
+          ),
+          helpLabel: "retention 도움말"
+        },
+        { label: "expires", value: formatDate(artifact.expires_at) },
+        {
+          label: "source 인벤토리",
+          value: <StatusBadge tone={inv.tone} value={inv.label} />,
+          help: "백업 시점의 활성 match set 대비 원천 파일 인벤토리 검증 결과.",
+          helpLabel: "source 인벤토리 도움말"
+        },
+        {
+          label: "기준월 혼합",
+          value:
+            artifact.source_set_mixed === true
+              ? "혼합"
+              : artifact.source_set_mixed === false
+                ? "단일"
+                : "—"
+        }
+      ]}
+    />
+  );
+}
+
+function ActiveServingManifest({
+  activeServing,
+  versionToken
+}: {
+  activeServing: Record<string, unknown> | undefined;
+  versionToken: BackupArtifact["version_token"];
+}) {
+  if (!activeServing) return null;
+  return (
+    <section className="manifest-section">
+      <strong>active serving (백업 시점)</strong>
+      <ul className="manifest-kv">
+        <li>release · {textValue(activeServing.serving_release_id) ?? "—"}</li>
+        <li>snapshot · {textValue(activeServing.dataset_snapshot_id) ?? "—"}</li>
+        <li>match set · {textValue(activeServing.source_match_set_id) ?? "—"}</li>
+        <li>token · {versionToken ? <code>{shortHash(versionToken, 16)}</code> : "—"}</li>
+      </ul>
+    </section>
+  );
 }

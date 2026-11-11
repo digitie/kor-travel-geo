@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldTitle } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError, getErrorMessage, postJson } from "@/lib/api";
@@ -95,8 +95,18 @@ export function UploadWizardDialog({
 }) {
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(wizardReducer, undefined, createInitialState);
-  const { step, categoryKey, userYyyymm, file, progress, preview, session, busy, error, registered } =
-    state;
+  const {
+    step,
+    categoryKey,
+    userYyyymm,
+    file,
+    progress,
+    preview,
+    session,
+    busy,
+    error,
+    registered
+  } = state;
 
   const category = categories.find((item) => item.category === categoryKey) ?? null;
   const yyyymmValid = isValidYyyymm(userYyyymm);
@@ -151,17 +161,26 @@ export function UploadWizardDialog({
   }
 
   async function openSession(displayName: string): Promise<UploadSessionStatus> {
-    if (session && session.category === categoryKey && session.user_yyyymm === userYyyymm) return session;
+    if (session && session.category === categoryKey && session.user_yyyymm === userYyyymm)
+      return session;
     try {
       return await createSession.mutateAsync({ category: categoryKey!, userYyyymm, displayName });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         const detail = err.detail ?? err.body;
-        const existing = detail && typeof detail === "object" && "existing_session" in detail
-          ? detail.existing_session : null;
+        const existing =
+          detail && typeof detail === "object" && "existing_session" in detail
+            ? detail.existing_session
+            : null;
         if (existing && typeof existing === "object" && "upload_session_id" in existing) {
           const resumed = existing as UploadSessionStatus;
-          if (Array.isArray(resumed.file_slots) && resumed.category === categoryKey && resumed.user_yyyymm === userYyyymm && isResumableSession(resumed)) return resumed;
+          if (
+            Array.isArray(resumed.file_slots) &&
+            resumed.category === categoryKey &&
+            resumed.user_yyyymm === userYyyymm &&
+            isResumableSession(resumed)
+          )
+            return resumed;
         }
       }
       throw err;
@@ -190,13 +209,18 @@ export function UploadWizardDialog({
     try {
       const newSession = await openSession(selectedFile.name);
       dispatch({ session: newSession });
-      const slot = slotId ? newSession.file_slots.find((item) => item.slot === slotId) : newSession.file_slots[0];
+      const slot = slotId
+        ? newSession.file_slots.find((item) => item.slot === slotId)
+        : newSession.file_slots[0];
       if (!slot) {
         dispatch({ busy: false, error: "세션에 업로드 슬롯이 없습니다" });
         return;
       }
       // Clear this slot even when the last attempt failed before local state refreshed.
-      await postJson(`/admin/source-files/upload-sessions/${newSession.upload_session_id}/files/${slot.slot}/replace`, {});
+      await postJson(
+        `/admin/source-files/upload-sessions/${newSession.upload_session_id}/files/${slot.slot}/replace`,
+        {}
+      );
       const finished = await uploadSlotFile({
         sessionId: newSession.upload_session_id,
         slotId: slot.slot,
@@ -205,7 +229,10 @@ export function UploadWizardDialog({
         onProgress: (next) => dispatch({ progress: next })
       });
       dispatch({ session: finished });
-      if (category.group_kind === "multi_part" && !finished.file_slots.every((item) => item.uploaded)) {
+      if (
+        category.group_kind === "multi_part" &&
+        !finished.file_slots.every((item) => item.uploaded)
+      ) {
         dispatch({ busy: false });
         return;
       }
@@ -246,6 +273,29 @@ export function UploadWizardDialog({
     }
   }
 
+  const controller = {
+    categories,
+    step,
+    categoryKey,
+    userYyyymm,
+    file,
+    progress,
+    preview,
+    session,
+    busy,
+    error,
+    registered,
+    category,
+    yyyymmValid,
+    maxBytes,
+    dispatch,
+    previewValidate,
+    handleOpenSession,
+    handleFileSelected,
+    handleRetryPreview,
+    handleRegister,
+    handleOpenChange
+  };
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent aria-label="업로드 마법사" size="lg">
@@ -270,103 +320,7 @@ export function UploadWizardDialog({
 
         {category && step > 1 ? <CategoryImpactSummaryCard category={category} /> : null}
 
-        {step === 1 ? (
-          <CategoryPickerStep
-            categories={categories}
-            onSelect={(key) => dispatch({ categoryKey: key, step: 2, session: null, preview: null, file: null, error: null })}
-            selected={categoryKey}
-          />
-        ) : step === 2 && category ? (
-          <div className="wizard-preview">
-            <Field>
-              <YyyymmField
-                id="upload-wizard-yyyymm"
-                onChange={(value) => dispatch({ userYyyymm: value, session: null, preview: null, file: null, error: null })}
-                value={userYyyymm}
-                help={
-                  <>
-                    API 필드 <code>user_yyyymm</code> — {category.label}의 기준 년월입니다.
-                  </>
-                }
-              />
-            </Field>
-            <div className="button-row">
-              <Button onClick={() => dispatch({ step: 1 })} type="button" variant="outline">
-                이전
-              </Button>
-              <Button disabled={!yyyymmValid} onClick={() => dispatch({ step: 3 })} type="button">
-                다음
-              </Button>
-            </div>
-          </div>
-        ) : step === 3 && category ? (
-          <div className="wizard-preview">
-            <SlotFileInputs category={category} session={session} busy={busy} file={file}
-              maxBytes={maxBytes} onOpenSession={() => void handleOpenSession()}
-              onFileSelected={(selected, slot) => void handleFileSelected(selected, slot)} />
-            {progress ? <UploadProgressBar progress={progress} /> : null}
-            {previewValidate.isPending ? (
-              <p className="form-note">구조/멤버/기준월 사전 점검 중…</p>
-            ) : null}
-            {preview ? <ValidationPreviewResult preview={preview} /> : null}
-            {session && !preview && !busy && (error || session.file_slots.every((slot) => slot.uploaded)) ? (
-              <div className="button-row">
-                <Button onClick={() => void handleRetryPreview()} type="button" variant="outline">
-                  사전 점검 다시 시도
-                </Button>
-              </div>
-            ) : null}
-            <div className="button-row">
-              <Button onClick={() => dispatch({ step: 2 })} type="button" variant="outline">
-                이전
-              </Button>
-              <Button
-                disabled={!preview || preview.outcome === "failed" || busy}
-                onClick={() => dispatch({ step: 4 })}
-                type="button"
-              >
-                다음
-              </Button>
-            </div>
-          </div>
-        ) : step === 4 && category && session ? (
-          <div className="wizard-confirm">
-            {registered ? (
-              <div className="wizard-done">
-                <p>
-                  <CheckCircle2 size={16} /> 업로드가 등록됐습니다 — {registered.state}
-                </p>
-                <Button onClick={() => handleOpenChange(false)} type="button">
-                  닫기
-                </Button>
-              </div>
-            ) : (
-              <>
-                <p className="wizard-hint">
-                  {category.label} · {userYyyymm} · {session.expected_file_count}개 파일을 등록합니다. 등록 후에도
-                  활성 매칭 세트에 포함되기 전까지는 서빙에 반영되지 않습니다.
-                </p>
-                {preview && preview.outcome !== "passed" ? (
-                  <Alert role="alert" variant="warning">
-                    <AlertTriangle aria-hidden="true" />
-                    <AlertDescription>
-                      사전 점검 결과가 {validationOutcomeLabel(preview.outcome)}입니다 — 그래도
-                      등록을 진행할 수 있으나, 위 사전 점검 사유를 먼저 확인하세요.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <div className="button-row">
-                  <Button onClick={() => dispatch({ step: 3 })} type="button" variant="outline">
-                    이전
-                  </Button>
-                  <Button disabled={busy} onClick={() => void handleRegister()} type="button">
-                    등록
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
+        <UploadWizardStep controller={controller} />
       </DialogContent>
     </Dialog>
   );
@@ -477,20 +431,20 @@ function FileDropZone({
   disabled: boolean;
   onFileSelected: (file: File) => void;
 }) {
-  const [dragOver, setDragOverState] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const oversize = Boolean(file && maxBytes && file.size > maxBytes);
 
   return (
     <div
       className={cn("upload-dropzone", dragOver && "drag-over", disabled && "disabled")}
-      onDragLeave={() => setDragOverState(false)}
+      onDragLeave={() => setDragOver(false)}
       onDragOver={(event) => {
         event.preventDefault();
-        if (!disabled) setDragOverState(true);
+        if (!disabled) setDragOver(true);
       }}
       onDrop={(event) => {
         event.preventDefault();
-        setDragOverState(false);
+        setDragOver(false);
         if (disabled) return;
         const dropped = event.dataTransfer.files?.[0];
         if (dropped) onFileSelected(dropped);
@@ -578,6 +532,193 @@ function ValidationPreviewResult({ preview }: { preview: UploadSessionPreviewVal
           ) : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+type UploadWizardController = WizardState & {
+  categories: SourceFileCategoryInfo[];
+  category: SourceFileCategoryInfo | null;
+  yyyymmValid: boolean;
+  maxBytes: number | undefined;
+  dispatch: (patch: Partial<WizardState>) => void;
+  previewValidate: { isPending: boolean };
+  handleOpenSession: () => Promise<void>;
+  handleFileSelected: (file: File, slotId?: string) => Promise<void>;
+  handleRetryPreview: () => Promise<void>;
+  handleRegister: () => Promise<void>;
+  handleOpenChange: (open: boolean) => void;
+};
+
+function UploadWizardStep({ controller }: { controller: UploadWizardController }) {
+  if (controller.step === 1) return <UploadCategoryStep controller={controller} />;
+  if (!controller.category) return null;
+  if (controller.step === 2) return <UploadMonthStep controller={controller} />;
+  if (controller.step === 3) return <UploadPreviewStep controller={controller} />;
+  if (controller.step === 4 && controller.session)
+    return <UploadRegisterStep controller={controller} />;
+  return null;
+}
+
+function UploadCategoryStep({ controller }: { controller: UploadWizardController }) {
+  const { categories, categoryKey, dispatch } = controller;
+  return (
+    <CategoryPickerStep
+      categories={categories}
+      onSelect={(key) =>
+        dispatch({
+          categoryKey: key,
+          step: 2,
+          session: null,
+          preview: null,
+          file: null,
+          error: null
+        })
+      }
+      selected={categoryKey}
+    />
+  );
+}
+
+function UploadMonthStep({ controller }: { controller: UploadWizardController }) {
+  const { userYyyymm, category, yyyymmValid, dispatch } = controller;
+  if (!category) return null;
+  return (
+    <div className="wizard-preview">
+      <Field>
+        <YyyymmField
+          id="upload-wizard-yyyymm"
+          onChange={(value) =>
+            dispatch({ userYyyymm: value, session: null, preview: null, file: null, error: null })
+          }
+          value={userYyyymm}
+          help={
+            <>
+              API 필드 <code>user_yyyymm</code> — {category.label}의 기준 년월입니다.
+            </>
+          }
+        />
+      </Field>
+      <div className="button-row">
+        <Button onClick={() => dispatch({ step: 1 })} type="button" variant="outline">
+          이전
+        </Button>
+        <Button disabled={!yyyymmValid} onClick={() => dispatch({ step: 3 })} type="button">
+          다음
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UploadPreviewStep({ controller }: { controller: UploadWizardController }) {
+  const {
+    file,
+    progress,
+    preview,
+    session,
+    busy,
+    error,
+    category,
+    maxBytes,
+    dispatch,
+    previewValidate,
+    handleOpenSession,
+    handleFileSelected,
+    handleRetryPreview
+  } = controller;
+  if (!category) return null;
+  return (
+    <div className="wizard-preview">
+      <SlotFileInputs
+        category={category}
+        session={session}
+        busy={busy}
+        file={file}
+        maxBytes={maxBytes}
+        onOpenSession={() => void handleOpenSession()}
+        onFileSelected={(selected, slot) => void handleFileSelected(selected, slot)}
+      />
+      {progress ? <UploadProgressBar progress={progress} /> : null}
+      {previewValidate.isPending ? (
+        <p className="form-note">구조/멤버/기준월 사전 점검 중…</p>
+      ) : null}
+      {preview ? <ValidationPreviewResult preview={preview} /> : null}
+      {session &&
+      !preview &&
+      !busy &&
+      (error || session.file_slots.every((slot) => slot.uploaded)) ? (
+        <div className="button-row">
+          <Button onClick={() => void handleRetryPreview()} type="button" variant="outline">
+            사전 점검 다시 시도
+          </Button>
+        </div>
+      ) : null}
+      <div className="button-row">
+        <Button onClick={() => dispatch({ step: 2 })} type="button" variant="outline">
+          이전
+        </Button>
+        <Button
+          disabled={!preview || preview.outcome === "failed" || busy}
+          onClick={() => dispatch({ step: 4 })}
+          type="button"
+        >
+          다음
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UploadRegisterStep({ controller }: { controller: UploadWizardController }) {
+  const {
+    busy,
+    userYyyymm,
+    preview,
+    session,
+    registered,
+    category,
+    dispatch,
+    handleRegister,
+    handleOpenChange
+  } = controller;
+  if (!category || !session) return null;
+  return (
+    <div className="wizard-confirm">
+      {registered ? (
+        <div className="wizard-done">
+          <p>
+            <CheckCircle2 size={16} /> 업로드가 등록됐습니다 — {registered.state}
+          </p>
+          <Button onClick={() => handleOpenChange(false)} type="button">
+            닫기
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p className="wizard-hint">
+            {category.label} · {userYyyymm} · {session.expected_file_count}개 파일을 등록합니다.
+            등록 후에도 활성 매칭 세트에 포함되기 전까지는 서빙에 반영되지 않습니다.
+          </p>
+          {preview && preview.outcome !== "passed" ? (
+            <Alert role="alert" variant="warning">
+              <AlertTriangle aria-hidden="true" />
+              <AlertDescription>
+                사전 점검 결과가 {validationOutcomeLabel(preview.outcome)}입니다 — 그래도 등록을
+                진행할 수 있으나, 위 사전 점검 사유를 먼저 확인하세요.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="button-row">
+            <Button onClick={() => dispatch({ step: 3 })} type="button" variant="outline">
+              이전
+            </Button>
+            <Button disabled={busy} onClick={() => void handleRegister()} type="button">
+              등록
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

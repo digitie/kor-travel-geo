@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, use, useEffect, useRef, useState } from "react";
 import { AppMenu, type AppMenuLinkProps } from "@kor-travel/ui/app-menu";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
@@ -299,12 +299,13 @@ async function logout() {
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } finally {
+    // 인증 컨텍스트와 클라이언트 캐시를 폐기하려 전체 문서를 새로 연다.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
   }
 }
 
 function NavGroup({
-  collapsed,
   title,
   links,
   onNavigate
@@ -315,17 +316,17 @@ function NavGroup({
   onNavigate: () => void;
 }) {
   const pathname = usePathname() ?? "/";
-  return <MenuNavigationContext.Provider value={onNavigate}>
+  return <MenuNavigationContext value={onNavigate}>
     <AppMenu pathname={pathname} label={title} groups={[{ id: title, label: title,
       items: links.map(link => ({ id: link.href, href: link.href, label: link.label,
         exact: link.href === "/admin", icon: <link.icon size={17} /> })) }]} linkComponent={MenuDocumentLink} />
-  </MenuNavigationContext.Provider>;
+  </MenuNavigationContext>;
 }
 
 const MenuNavigationContext = createContext<() => void>(() => {});
 
 function MenuDocumentLink({ children, className, ...props }: AppMenuLinkProps) {
-  const onNavigate = useContext(MenuNavigationContext);
+  const onNavigate = use(MenuNavigationContext);
   return <DocumentNavLink {...props} ariaLabel={props["aria-label"]} title={props["aria-label"]}
     className={`${className ?? ""} nav-link`} onNavigate={onNavigate}>{children}</DocumentNavLink>;
 }

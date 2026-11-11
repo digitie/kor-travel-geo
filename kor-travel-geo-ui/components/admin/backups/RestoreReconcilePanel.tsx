@@ -108,13 +108,15 @@ function RestoreReconcileCard({
 }) {
   const target =
     reconcile?.target_database ?? textValue(artifact.manifest?.["target_database"]) ?? "—";
-  const mv = triState(reconcile?.mv_nonempty_ok);
   return (
     <div className="reconcile-card">
       <div className="reconcile-head">
         <strong>{artifact.display_name ?? artifact.artifact_id}</strong>
         {reconcile ? (
-          <StatusBadge tone={reconcile.ok ? "ok" : "error"} value={reconcile.ok ? "PASS" : "FAIL"} />
+          <StatusBadge
+            tone={reconcile.ok ? "ok" : "error"}
+            value={reconcile.ok ? "PASS" : "FAIL"}
+          />
         ) : (
           <StatusBadge tone="warn" value="reconcile 없음" />
         )}
@@ -122,34 +124,39 @@ function RestoreReconcileCard({
       <p className="wizard-hint">
         대상 DB: {String(target)} · {formatTimestamp(artifact.created_at)}
       </p>
-      {reconcile ? (
-        <>
-          {reconcile.row_count_diffs && reconcile.row_count_diffs.length > 0 ? (
-            <VirtualTable
-              as="table"
-              caption="행 수 검증"
-              columns={reconcileColumns}
-              compact
-              rowKey={(d) => d.object}
-              rows={reconcile.row_count_diffs}
-            />
-          ) : null}
-          <ul className="manifest-kv">
-            <li className="flex flex-wrap items-center gap-1">
-              MV non-empty: <StatusBadge tone={mv.tone} value={mv.label} /> · mv_target{" "}
-              {reconcile.mv_geocode_target_rows ?? "—"} / mv_text{" "}
-              {reconcile.mv_geocode_text_search_rows ?? "—"}
-            </li>
-            <li>sppn: {reconcile.sppn_rows ?? "—"}</li>
-          </ul>
-          {reconcile.pt_source_distribution ? (
-            <JsonDetails summary="pt_source 분포" value={reconcile.pt_source_distribution} />
-          ) : null}
-          {reconcile.warnings && reconcile.warnings.length > 0 ? (
-            <IssueList items={reconcile.warnings} title="warnings" tone="warn" />
-          ) : null}
-        </>
-      ) : null}
+      {reconcile ? <ReconcileVerification reconcile={reconcile} /> : null}
     </div>
+  );
+}
+
+function ReconcileVerification({ reconcile }: { reconcile: RestoreReconcileResult }) {
+  const mv = triState(reconcile.mv_nonempty_ok);
+  return (
+    <>
+      {reconcile.row_count_diffs && reconcile.row_count_diffs.length > 0 ? (
+        <VirtualTable
+          as="table"
+          caption="행 수 검증"
+          columns={reconcileColumns}
+          compact
+          rowKey={(d) => d.object}
+          rows={reconcile.row_count_diffs}
+        />
+      ) : null}
+      <ul className="manifest-kv">
+        <li className="flex flex-wrap items-center gap-1">
+          MV non-empty: <StatusBadge tone={mv.tone} value={mv.label} /> · mv_target{" "}
+          {reconcile.mv_geocode_target_rows ?? "—"} / mv_text{" "}
+          {reconcile.mv_geocode_text_search_rows ?? "—"}
+        </li>
+        <li>sppn: {reconcile.sppn_rows ?? "—"}</li>
+      </ul>
+      {reconcile.pt_source_distribution ? (
+        <JsonDetails summary="pt_source 분포" value={reconcile.pt_source_distribution} />
+      ) : null}
+      {reconcile.warnings && reconcile.warnings.length > 0 ? (
+        <IssueList items={reconcile.warnings} title="warnings" tone="warn" />
+      ) : null}
+    </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { createContext, useCallback, use, useMemo } from "react";
 import { usePathname } from "next/navigation";
 
 const RUNTIME_KEY_QUERY_KEY = ["runtime-config", "vworld-api-key"] as const;
@@ -107,9 +107,9 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
     [apiKey, envApiKey, loading, resetApiKey, saveApiKey, source]
   );
 
-  return <VWorldKeyContext.Provider value={value}>{children}</VWorldKeyContext.Provider>;
+  return <VWorldKeyContext value={value}>{children}</VWorldKeyContext>;
 }
 
 export function useVWorldApiKey() {
-  return useContext(VWorldKeyContext);
+  return use(VWorldKeyContext);
 }

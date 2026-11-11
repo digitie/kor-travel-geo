@@ -1,40 +1,16 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const vworldPackagesDir = path.join(__dirname, "node_modules", "maplibre-vworld-react", "packages");
-const vworldPackagesImportPath = "./node_modules/maplibre-vworld-react/packages";
-
-/** @type {import("next").NextConfig} */
 const allowedDevOrigins = (process.env.KTG_UI_ALLOWED_DEV_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+/** @type {import("next").NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   allowedDevOrigins,
-  // CPU2·2GiB 빌드에서 host CPU 수로 15개 worker가 생기는 메모리 포화를 방지한다.
+  // CPU2·2GiB 빌드에서 host CPU 수로 worker가 과다 생성되는 것을 막는다.
   experimental: { cpus: 2 },
-  turbopack: {
-    resolveAlias: {
-      "vworld-map-core": `${vworldPackagesImportPath}/vworld-map-core/src/index.ts`,
-      "vworld-map-web": `${vworldPackagesImportPath}/vworld-map-web/src/index.ts`
-    }
-  },
-  transpilePackages: ["maplibre-vworld-react"],
-  // Next 16은 dev/build 모두 Turbopack을 기본으로 쓰므로 실제 alias 해석은 위
-  // `turbopack.resolveAlias`가 담당한다. 아래 webpack alias는 `--webpack` opt-out
-  // 경로 전용 fallback이며 turbopack 블록과 같은 대상으로 동기 유지해야 한다.
-  // (이 webpack 블록만 남고 turbopack 키가 없으면 Next 16 build가 hard-fail한다.)
-  webpack(config) {
-    config.resolve.alias = {
-      ...(config.resolve.alias ?? {}),
-      "vworld-map-core": path.join(vworldPackagesDir, "vworld-map-core", "src"),
-      "vworld-map-web": path.join(vworldPackagesDir, "vworld-map-web", "src")
-    };
-    return config;
-  }
+  // GitHub 소스에서 빌드한 공개 배포물의 진입점을 그대로 사용한다.
+  transpilePackages: ["vworld-map-core", "vworld-map-web"]
 };
 
 export default nextConfig;
