@@ -1,3 +1,7 @@
+## 2026-11-12 — C11 정본 채택·공통 머지와 최종 UI 검증
+
+공통 PR49는 원 A/B COMMON7 PASS·정확 CI 성공 후 e8ed3ae로 머지했다. Geo는 단일 C11 UI/tokens 및 원본에서 수정·머지한 FocusScope fix.2를 채택했다. actual263파일·설치/외부 정본 guard·단위294·type/lint·Doctor273파일0진단을 확인했다. 공통 Button source43c4a7f의 기존 회귀5개도 통과한다. 단일 통합 보고서에 모든10개 표면의 실행/개발/peer/선택 의존성 비교를 갱신했다. 다음은 C11 production build·Chromium27/Firefox27, 정확 PR631 CI·최종 두 독립 리뷰·merged SHA 새 UI 이미지와 실제 화면 수용이다. 현재 운영 신규 배포는 없다.
+
 ## 2026-11-12 — 독립 리뷰의 Button 공통 위임 누락 수정
 
 - A-CONS-P2-03의 지역 Button/전체 CVA 소유를 제거하고 공통 Button·서버 호출 가능한 순수 button-variants를 직접 소비한다. CodeGraph MCP 미노출로 Linux CLI sync→status→impact를 실행했고, graph가 두 자기 노드만 반환하여23개 import 경로와7개 명시적 submit 호출을 검색으로 추가 확인했다.

@@ -1,6 +1,6 @@
 # 공통 라이브러리 비교·구현·검증 통합 보고서
 
-작성 기준: 2026-11-11, 갱신 2026-11-11 UTC 17:22. 아래 후보 상태는 현재 작업 트리의 스냅샷이며 PR 머지·운영 배포 수용을 의미하지 않는다. 기존 9월 조사와 이후 사용자 지시를 구분한다.
+작성 기준: 2026-11-11, 갱신 2026-11-11 UTC 19:04 (한국시간 2026-11-12). 현재 작업·원격 CI 관찰 기준이며 최종 앱 머지·운영 배포 완료를 뜻하지 않는다. 기존 9월 조사와 이후 사용자 지시를 구분한다.
 
 ## 현재 결정과 범위
 
@@ -24,7 +24,7 @@
 
 조사 당시 원본 main은 9c46c57181d433c91f7e8837c4e4396204e9b583이며 수정 source는 9a7a348b02d61969b394c681b024d5851eef836b다. 최신 GitHub 수정본은 PR32로 main ae1e209967b3be7a3918f44e4df278add9f1376c에 머지했으며 두 commit의 전체 tree가 같다. ES6 target의 Object.entries 오류를 ES2022로 수정했고, 키 없는 로컬 geometry 지도에 명시 mapStyle을 제공하며 style 교체 시 map instance를 보존한다. core/RN은 고지·대응 소스를 동봉한1.0.1, web은1.0.3 고정 배포물을 사용한다. 기존 core1.0.0 bytes를 같은 버전으로 재발행하지 않는다.
 
-Geo·Map·Weather·Concierge·Transport 관리자는 실제 vworld-map-web import와 core1.0.1/web1.0.3 배포물을 확인했다. Pinvi 웹·모바일도 갱신하여 실제 설치본과 lock에서 core/RN1.0.1·web1.0.3을 확인했고 세 tgz의 SHA512가 공통 정본과 같음을 검산했다. 모바일은 .native에서 RN, .web에서 웹 패키지를 지연 import하는 플랫폼 어댑터를 사용한다. fix.3 설치본에서 Android/iOS Hermes export와 웹 SSR35개 경로·375/1280폭 로그인 화면 검증을 통과했다. 최종 fix.4 채택 후에는 다시 검증한다. Docker Manager와 Transport 공개 웹은 현재 지도 기능이 없어 지도 의존성을 추가하지 않았다. 플랫폼별 core/web/RN은 같은 저장소의 서로 다른 배포 단위이며, 해당 패키지를 쓰는 앱끼리 같은 bytes를 맞춘다.
+Geo·Map·Weather·Concierge·Transport 관리자는 실제 vworld-map-web import와 core1.0.1/web1.0.3 배포물을 확인했다. Pinvi 웹·모바일도 갱신하여 실제 설치본과 lock에서 core/RN1.0.1·web1.0.3을 확인했고 세 tgz의 SHA512가 공통 정본과 같음을 검산했다. 모바일은 .native에서 RN, .web에서 웹 패키지를 지연 import하는 플랫폼 어댑터를 사용한다. 최종 fix.4에서 Android/iOS Hermes export·웹 SSR35개 경로·강제 WASM iOS export를 통과했다. 375/1280폭 모바일 웹 스모크도 통과했으며, 실제 기기·EAS·앱스토어 출시는 실행하지 않았다. Docker Manager와 Transport 공개 웹은 현재 지도 기능이 없어 지도 의존성을 추가하지 않았다. 플랫폼별 core/web/RN은 같은 저장소의 서로 다른 배포 단위이며, 해당 패키지를 쓰는 앱끼리 같은 bytes를 맞춘다.
 
 브라우저용 ESM의 CSS를 일반 Node import로 읽는 확장자 오류는 곧바로 라이브러리 결함으로 분류하지 않는다. Geo Vitest는 지도 패키지와 MapLibre를 Vite에서 inline 처리한다. 지도 source19·packed19·RN21과 정확 source의 원격 CI는 통과했다.
 
@@ -32,65 +32,94 @@ Geo·Map·Weather·Concierge·Transport 관리자는 실제 vworld-map-web impor
 
 Expo58·RN0.88.1·NativeWind5 RC1의 실제 Android export에서 Lightning CSS1.33.0 visitor 역직렬화 오류를 재현했다. 원본 Lightning CSS와 serde-content에서 null option·Infinity·큰 정수 변환을 수정했다. fix.3을 거쳐 최종1.33.0+nativecss.fix.4에 경로 로더·고지·source/binary 검증 보완을 반영했다. GNU native와 같은 소스의 WASM을 단일 pack에 동봉하고 대응 소스·라이선스·해시를 보존한다.
 
-원본 Rust126·배포물 Node native90/WASM90·실제 앱113개 클래스의 compiler IR8개 입력이 정상 비교본1.30.1과 같음을 확인했다. 이후 두 독립 리뷰에서 특수문자 경로의 WASM 로딩·MIT 고지·현재 소스와 binary 계보 검증·Windows fixture 문제가 확인되어 신규1.33.0+nativecss.fix.4 후보를 만들었다. 원본 Node 어댑터를 수정하여 실제 공백/#/% 경로에서 재검증했고, Rust 입력 digest가 같은 native/WASM의 재사용과 새 JS 어댑터 빌드를 구분하여 기록했다. 정확한 Lightning35fc16b의 source-gate·Ubuntu·Windows·macOS15 Intel CI가 모두 성공했다. 이전 macOS15 ARM runner 두 취소는 host 미배정이며 성공으로 바꾸지 않는다. 같은 pack의 새 Intel CI는 실제 실행했다. CI checkout 합성 merge0e92f62와 reviewed35의 tree는 같다. 두 원 리뷰어의 NativeCSS3 판정은 모두 PASS·신규0이며 Lightning PR1은 f24bb66, serde PR1은21d1c7로 머지했다. 각 merged tree와 reviewed source의 동일성을 fetch 후 확인했다. 실제 Pinvi fix.4의 최종 앱 export 결과는 별도 소비자 gate다. Babel7은 Expo58 플러그인의 peer 범위 때문에7.29.7을 사용하는 명시적 호환성 예외이며 Babel8을 통과한 것으로 표시하지 않는다.
+원본 Rust126·배포물 Node native90/WASM90·실제 앱113개 클래스의 compiler IR8개 입력이 정상 비교본1.30.1과 같음을 확인했다. 이후 두 독립 리뷰에서 특수문자 경로의 WASM 로딩·MIT 고지·현재 소스와 binary 계보 검증·Windows fixture 문제가 확인되어 신규1.33.0+nativecss.fix.4 후보를 만들었다. 원본 Node 어댑터를 수정하여 실제 공백/#/% 경로에서 재검증했고, Rust 입력 digest가 같은 native/WASM의 재사용과 새 JS 어댑터 빌드를 구분하여 기록했다. 정확한 Lightning35fc16b의 source-gate·Ubuntu·Windows·macOS15 Intel CI가 모두 성공했다. 이전 macOS15 ARM runner 두 취소는 host 미배정이며 성공으로 바꾸지 않는다. 같은 pack의 새 Intel CI는 실제 실행했다. CI checkout 합성 merge0e92f62와 reviewed35의 tree는 같다. 두 원 리뷰어의 NativeCSS3 판정은 모두 PASS·신규0이며 Lightning PR1은 f24bb66, serde PR1은21d1c7로 머지했다. 각 merged tree와 reviewed source의 동일성을 fetch 후 확인했다. 실제 Pinvi fix.4 Android/iOS/WebSSR35경로·강제 WASM iOS export는 통과했다. 이후 C11의 토큰 정책과 DOM FocusScope 변경이 native 코드·토큰 runtime을 바꾸지 않는지 별도로 대조한다. Babel7은 Expo58 플러그인의 peer 범위 때문에7.29.7을 사용하는 명시적 호환성 예외이며 Babel8을 통과한 것으로 표시하지 않는다.
 
 ### 차이 재발 방지
 
 정확 버전의 정본은 common versions.json의 axes·frontendPolicy다. frontend-dependencies.json과 UI/tokens의 정책은 생성물이며 CI에서 정본과 대조한다. 직접 의존성·workspace lock 해석·중복 React 물리 설치·vendor/원장/lock의 SHA512를 검사한다. 공통 CI 코드는40자리 커밋으로 고정하고 버전·산출물 비교 데이터는 현재 common main에서 읽어 실제 관찰 SHA를 기록한다. 앱이 vendor·원장·lock을 함께 바꿔 자체 검사만 통과하는 차이도 거부한다.
 
-Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹/관리자9개 표면에 중앙 reusable CI 호출을 추가했다. foundation main에 정책 데이터가 병합된 뒤 실제 앱 CI의 성공을 확인해야 한다. native HTML Table, Base UI/Floating UI, 개별 Radix 직접 구현도 소스 검사 대상으로 한다. 최종 Lightning CSS fix.4의 exact build metadata와 bytes도 정본 축에 포함한다. 연결 workspace의 devDependencies까지 실제 CSS 빌드 그래프를 검사하고 재export·literal import()/require()·TS 외부/type 참조의 금지 private 경로 우회를 차단한다. 기준 문서의 버전 표도 versions.json에서 생성·대조한다.
+Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹/관리자9개 표면에 중앙 reusable CI 호출을 추가했다. foundation main에 정책 데이터가 병합된 뒤 실제 앱 CI의 성공을 확인해야 한다. native HTML Table, Base UI/Floating UI, 개별 Radix 직접 구현도 소스 검사 대상으로 한다. 최종 Lightning CSS fix.4의 exact build metadata와 bytes도 정본 축에 포함한다. 연결 workspace의 devDependencies까지 실제 고정 산출물 빌드 그래프를 검사하고 재export·literal import()/require()·TS 외부/type 참조의 금지 private 경로 우회를 차단한다. 기준 문서의 버전 표도 versions.json에서 생성·대조한다.
+
+### Radix FocusScope 원본 버그 수정과 배포물 고정
+
+초기 패널에 포커스가 있을 때 Shift+Tab이 마지막 입력으로 이동하지 않는 원본 결함을 확인했다. 첫 수정 후 독립 리뷰에서 disabled fieldset의 비활성 입력이 마지막 후보로 선택되는 상속 버그도 재현해 원본 helper를 수정했다. 모든 disabled fieldset 조상의 첫 직접 legend 예외·동적 enable/disable·중첩 scope·IME 처리를 보존한다. 앱 자체 Tab trap이나 node_modules 임시 수정으로 우회하지 않는다.
+
+최종 source는 1752a539c8d5ae57961a0fa2702d2573d48fefe7, frozen delivery는 01e8181f6fc73fac6aeb140cac96dcdb30f8aaa6이다. 공식 scoped name의 고유 버전 @radix-ui/react-focus-scope@1.3.1+kortravel.fix.2를 단일 33,511-byte tgz로 사용한다. SHA256은 1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a다. source·MIT·빌드 설명·provenance와 dist를 동봉하며 Node24/pnpm11 producer와 Node22 소비자를 구분한다.
+
+동일 source38개는 fix.1에서32 PASS/6 FAIL, fix.2에서38 PASS다. 실제 packed Chromium17개는 fix.1에서10 PASS/7 FAIL, fix.2에서17 PASS다. 원 reviewer A는 독립 actual packed browser20개, B는 실제 CJS/ESM 각각38개를 직접 통과했다. 두 원 리뷰어 모두 새 source·packet·producer/delivery PASS, 신규 finding0이다. 정확 delivery의 Build·집중 regression·SSR·Chromatic 4개 CI가 모두 성공했다. [Radix fork PR1](https://github.com/digitie/radix-primitives/pull/1)을 408bb40dcc90d806d2fd55a9360a5a11e599e157에 머지했고, fetch한 main tree와 reviewed delivery tree의 동일성을 검증했다. 최종 소비 앱의 실제 modal/keyboard 검증은 별도다.
 
 ## 현재 검증 상태
 
 | 대상 | 확인한 최신 결과 | 남은 gate |
 |---|---|---|
-| Common |2ec5192: UI101·정책68·tokens9·실제 packed browser65·webpack/Turbopack. 정확 source의 4개 workflow·docs6개 job 모두 SUCCESS, c9 전체 SRI 일치. 원 리뷰어 B PASS/A CONDITIONAL | A-P2-10 연결 gzip 후속 header 검사 누락 수정·원 A 재확인·새 CI·PR49 머지 |
-| Geo |eee413d: 단위289·lint/type·Doctor0, strict npm ci/invalid peer0, webpack/Turbopack, Chromium27+Firefox27 PASS. c9 실제 파일·lock·정본 guard 일치 | 최종 독립2리뷰·CI·PR·머지·배포 |
-| Weather |d03c1dc: 단위308·lint/type/build·Doctor0·c9 정본 guard PASS. n150와 정확 HEAD frontend CI에서 browser20+tile5 PASS | PR226·독립2리뷰·중앙 main 정책 병합 후 CI·머지·배포 |
-| Concierge |bcfc1b8: 단위394·lint/type/build·Doctor0, c9 strict install·정본 guard·n150 browser10/10 PASS | PR265·독립2리뷰·중앙 main 정책 병합 후 CI·머지·배포 |
-| Docker Manager |4f1876b: 단위54·lint/type/build·Doctor0·c9 guard. n150 clean npm ci·production build와 desktop/mobile browser2 PASS | PR588·독립2리뷰·CI·머지·기존 systemd frontend 배포 |
-| Map |aa1bd4d 문서/e3ea216 검증소스: 단위432·reporter/cleanup37·lint/type/build·Doctor0·c9 guard. D286/286·flake0·strict manifest 일치·전체 runner exit0·소유 container/network/image 잔존0 | 독립2리뷰·CI·PR·머지·Manager 정식 경로 새 frontend 이미지 배포 |
-| Pinvi |f631334: Expo58/RN0.88.1·NativeWind5 RC·Tailwind4. 지도 core/web/RN 실제 파일·lock·공통 SHA512 일치. 공개 모달·AppShell Radix 이관, admin redirect/focus·RN raw text 후속 수정 | 최종 fix.4 Android/iOS/웹·강제 WASM export 및 전체 browser/unit 결과 정산·독립2리뷰·PR·CI·머지·웹 이미지 배포 |
-| Transport |3c1735f: c9 실제 파일·정본 guard·금지소스10/10. 공개164/admin356 단위와 lint/type/build·Doctor0/0. native·Alpine browser 공개4/admin18 각각 PASS. backend WSL1511 PASS/39 SKIP·Docker1508 PASS/42 SKIP, 모두 exit0 | 독립2리뷰·PR·CI·머지·공개/admin 새 이미지 배포 |
-| 지도 원본 |9a7a348: type/build/lint·RN21·source19/packed19·고지 pack CI·원 리뷰어2인 FIXED/신규0. PR32 mergeae1e209, main tree 동일 | 각 소비자의 최종 수용·새 배포는 별도 |
-| CSS 원본 수정 |Lightning35: source/Ubuntu/Windows/macOS15 Intel CI 모두 성공. NativeCSS3 원 A/B 모두 PASS·신규0. Lightning1 mergef24bb66·serde1 merge21d1c7, reviewed tree 동일 | 소비 앱 최종 fix.4 export·독립2리뷰·배포는 별도 |
+| Common | 최종 C11 2d4579b / producer a354813. UI101·tokens9·정책175·도구399 PASS/1 SKIP. Doctor80파일0진단. 정확 HEAD의 4개 workflow와 docs6개 job 모두 SUCCESS. C11 전체 SRI가 재빌드와 같고 actual packed browser65·webpack/Turbopack PASS. 원 A/B COMMON7 PASS·신규0·PR49 mergee8ed3ae, main tree 동일 | 소비 앱 최종 수용·배포 별도 |
+| Geo | 공통 Button 실제 재사용43c4a7f. 동일회귀5개 이전3 FAIL/2 PASS→최종5 PASS. C11 actual263파일·정본/설치 guard·단위294·type/lint/Doctor0 PASS | 최종 C11 production build·Chromium27/Firefox27, 원 A finding closure·최종2리뷰·CI·PR631 머지·새 이미지 |
+| Map | 원 A Button variant/size 전달 수정 f55c4c009, 원 B CI계약 및 문서상한 수정 b102c659b. C11 채택 f56976e | 최종 C11 D286/cleanup·정확 CI·원 finding closure·최종2리뷰·PR1496 머지·Manager 정식 경로 새 이미지 |
+| Weather | 이전 d03c1dc 단위308·lint/type/build/Doctor0·browser20+tile5 PASS. 원 A/B 소비자 source 신규 finding0. C11 채택2b34884 | 최종 C11 browser20+tile5·CI·최종2리뷰·PR226 머지·새 이미지 |
+| Concierge | 선택 시 checkbox/header remount·focus 소실을 module-stable cells/meta로 수정50e707b. 동일회귀2 FAIL→2 PASS·단위396·type/lint/Doctor0·실제 선택/해제 focus4 PASS | 원 A finding closure·C11 build/browser10·CI·최종2리뷰·PR265 머지·새 이미지 |
+| Docker Manager | C11 158db1a actual153파일·설치/정본 guard PASS. 새 정식 Map UI candidate CLI/SDK source e3a1045, 집중169·Ruff PASS. 이전 고정1e CI backend3717 PASS/40 SKIP·frontend PASS | 새 backend 최종 원 A/B 리뷰·정확 CI, C11 build/browser2·PR588 머지·기존 systemd frontend 및 필요한 공식 SDK 설치 |
+| Pinvi | C10 f3d4ddd checkpoint. fix.4 Android/iOS/WebSSR35/강제WASM export PASS. 이전 C9 unit520 PASS/1 FAIL·browser207 PASS/2 FAIL/4 SKIP, 별도canvas3/restore2 PASS는 역사로 보존. 원인 FocusScope는 원본 fix.2에서 수정·머지 | 최종 C11 actual bytes·동일 전체 unit/browser 재실행·원 finding closure·최종2리뷰·PR·CI·머지·웹 새 이미지 |
+| Transport | 최종 C11 실제 공개153/admin263파일·정본/설치 guard·단위164/356·type/lint/Doctor0 PASS. backend WSL1511 PASS/39 SKIP·Docker1508 PASS/42 SKIP 전체 exit0 | 최종 C11 native/Alpine 공개4/admin18·CI·최종2리뷰·PR181 머지·공개/admin 새 이미지 |
+| VWorld 원본 | source9a7a348, RN21·source19/packed19·고지 pack CI·원 리뷰어2인 FIXED/신규0. PR32 mergeae1e209, main tree 동일 | 소비 앱 최종 수용·배포 별도 |
+| CSS 원본 | Lightning35 source/Ubuntu/Windows/macOS15 Intel CI 성공·원 A/B PASS. Lightning1 mergef24bb66·serde1 merge21d1c7, reviewed tree 동일. 같은 fix.4 소비 | 실제 기기·스토어 출시는 별도 미실행 |
+| Radix 원본 | source175/delivery01e·고유 fix.2. source38·source browser17·actual packed17 및 두 독립 추가검증 PASS. 모든4 CI 성공·원 A/B PASS·PR1 merge408bb40, tree 동일 | 최종 공통·소비자 수용·배포 별도 |
 
-과거 실패를 보존한다. Geo의 병렬 Firefox 최초 지도 준비 시간 초과는 같은 assertion의 순차 전체27 PASS와 구분한다. Map의 이전 c6 전체 runner exit2는 Docker 제거 지연이었고 최종 c9 전체 runner exit0과 별개다. Weather 이전 server 준비 시간 초과의 최초 원인은 미확정이며 준비 확인 회귀4개와 최종20+5 PASS를 기록한다. Transport의 이전 backend 1 FAIL은 오래된 web 버전 기대값이었고 수정 후 양 환경 전체를 다시 실행했다. 환경별 SKIP 수는 PASS에 더하지 않는다. Pinvi의 이전 checkpoint unit1 FAIL·E2E6 FAIL/4 SKIP은 최신 최종 결과로 덮어 쓰지 않고 원 로그를 보존한다.
+원본 실패 로그와 후속 성공을 구분한다. Geo의 과거 병렬 Firefox 지도 준비 시간 초과는 동일 assertion의 순차27 PASS와 별개다. Map의 이전 c6 전체 runner exit2는 Docker 제거 지연이고 c9 D286/flake0·전체 runner exit0·소유 container/network/image잔존0과 구분한다. Weather 초기 준비 시간 초과 원인은 미확정이다. Transport의 오래된 web 버전 테스트 기대값은 수정 후 양 환경 전체 backend를 재실행했다. Pinvi의 이전 실패·SKIP과 최종 예정 결과를 합산하지 않는다. disabled fieldset의 Playwright matcher 오류는 native :disabled와 실제 focus 거부를 확인하는 assertion으로 강화했으며 테스트를 건너뛰지 않았다.
 
-공통 source3의7e 판정은 BLOCK으로 보존한다. 이후68개 정책과 archive scanner·정확 member/rule/hash 예외를 추가했고 source4의2ec에서 A-P2-09·B-P1-08/09/10은 각 원 리뷰어가 FIXED를 확인했다. source4의 신규 A-P2-10(P2)은 두 번째 연결 gzip header의 금지 metadata를 놓치는 반례이며 현재 수정 중이다. 기존 vendor pack에 실제 비밀이 있다는 주장은 아니다. 원 A 판정은 CONDITIONAL로 유지하고 새 수정본 재확인 전 무조건 PASS로 표시하지 않는다.
+Common의 이전 adversarial BLOCK/CONDITIONAL 원문은 유지한다. archive scanner·정확 member/rule/hash 예외·단일 완결 gzip stream 검사를 수정했고 원 finding들은 각 원 리뷰어의 후속 확인으로 닫았다. C10의 필수 Doctor3진단 실패는 helper의 반복 includes 탐색을 Set/Map으로 바꿔 실제0진단으로 수정했다. 정책 schema·잠금 그래프와 모든 고정 산출물의 중복 설치·alias·연결 workspace dev 경로까지 검사한다. 조작 회귀는 fail-closed이며 gate/rule을 낮추지 않았다. 최종 C11의 비밀·운영정보 scanner1380파일0 finding, 문서831개/3152 local target0오류를 확인했다.
 
-[Common PR49](https://github.com/digitie/kor-travel-common/pull/49)은 초안이다. [지도 PR32](https://github.com/digitie/maplibre-vworld-react/pull/32)·[Lightning CSS fork PR1](https://github.com/digitie/lightningcss/pull/1)·[serde-content fork PR1](https://github.com/digitie/serde-content/pull/1)은 검증·독립2리뷰 후 각각 ae1e209·f24bb66·21d1c7로 일반 merge했다. 각 target branch fetch 후 reviewed source와 전체 tree 동일성을 확인했다. 라이브러리 머지3건, 앱 머지0건, 운영 신규 배포0건이다. 기존 앱 초안은 [Weather226](https://github.com/digitie/kor-travel-weather/pull/226), [Concierge265](https://github.com/digitie/kor-travel-concierge/pull/265), [Docker Manager588](https://github.com/digitie/kor-travel-docker-manager/pull/588)이다.
+C11은 UI0.2.0·tokens0.1.1의 최초 출시 전 후보이며 producer a354813에서 한 번 생성한 bytes만 각 앱에 복사한다. C10→C11의 일반파일119개 중 정책JSON2개만 Scope fix.1→fix.2로 바뀌고 나머지117개는 byte 동일하다. 다만 외부 Scope runtime은 변경되었으므로 이전 modal/browser 수용 결과를 새 후보에 그대로 전용하지 않는다. 이미 출시한 버전의 다른 bytes를 재발행하지 않는다.
 
-후보9는 한 번 생성한 같은 UI0.2.0·tokens0.1.1과 SHA512를 쓴다. 후보8→9 전체 일반 파일119개 중 checker2개만 바뀌었고 나머지 runtime/CSS/metadata117개는 byte 동일하다. VWorld3개와 fix.4도 동일하다. 따라서 checker/lock/정본 검사 갱신과 실제 제품 runtime 검증을 구분하며, 이미 출시한 같은 버전의 다른 배포물을 재발행하지 않는다.
+- UI SHA512: sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA==
+- tokens SHA512: sha512-85mqNJXqhTlA4RbtKUhmzx6rH6mOOeNmsXTJtCetQ5y8njLy+5XLZbdT6j1tf3ME9XQA6X63Ah4kmuLdqEZHbA==
+- FocusScope SHA512: sha512-v3XweXrUSZ/QfrMVvYmsAkVNDnvcN21QKbSrViXYf0OQf5Ue9xSgqQIukgGjsYMEBQ5qxQW8fnOC9t1Y0ENPXw==
 
-검증용 이미지를 운영 배포로 집계하지 않는다. 각 앱의 최종 두 독립 리뷰와 CI 후 정확 merged SHA에서 새 이미지를 만들고 이미지 digest·health·로그인·대표 UI/API의 실제 결과를 기록한다. Docker Manager frontend는 기존 systemd 배포 단위를 따른다. Pinvi Expo export는 실제 기기·앱스토어 출시에 해당하지 않는다.
+[Common49](https://github.com/digitie/kor-travel-common/pull/49)은 e8ed3ae로 머지했다. [Geo631](https://github.com/digitie/kor-travel-geo/pull/631)·[Map1496](https://github.com/digitie/kor-travel-map/pull/1496)·[Weather226](https://github.com/digitie/kor-travel-weather/pull/226)·[Concierge265](https://github.com/digitie/kor-travel-concierge/pull/265)·[Manager588](https://github.com/digitie/kor-travel-docker-manager/pull/588)·[Transport181](https://github.com/digitie/kor-travel-transport/pull/181)은 현재 앱/공통 후속 gate 대상이다. 확인한 라이브러리·공통 머지5건, 앱 머지0건, 운영 신규 배포0건이다. 검증용 이미지를 운영 배포로 집계하지 않는다.
+
+각 앱의 최종 두 독립 리뷰와 CI 후 정확 merged SHA에서 새 이미지를 만들고 digest·health·로그인·대표 UI/API 결과를 기록한다. Map UI만 선택하는 정식 candidate 경로가 기존 Manager에 없어 필요한 CLI/SDK를 원본에 추가했으며, 승인된 merged SHA·OCI image identity·기존 G/lock/frozen render/pin/current receipt를 재사용한다. UI 외 DB/API/Dagster identity 보존과 실패 시 미발행을 검증한다. 새 Manager backend source 자체도 두 원 리뷰어의 별도 gate 대상이다. Docker Manager frontend는 기존 systemd 단위, Pinvi는 웹 이미지 배포를 따른다.
 
 ## 모든 직접 의존성의 기준선과 후보 비교
 
-다음은 고정 기준선과 현재 작업 트리 package.json의 dependencies/devDependencies 전체 비교다. 선언값과 lock의 실제 설치 버전을 구분한다. 내부 workspace/SDK에는 웹 앱 필수 목록을 일괄 강제하지 않는다. 앱 도메인별로만 필요한 라이브러리는 유지한다.
+다음은 고정 기준선과 현재 package.json의 dependencies·devDependencies·peerDependencies·optionalDependencies 전체 비교다. 종류별 같은 이름의 선언도 따로 표시해 peer 계약을 누락하지 않는다. 선언 범위와 lock의 실제 설치 버전은 다르다. root override는 공통 UI·tokens의 단일 bytes와 고정 CSS·FocusScope를 잠금 그래프 전체에 강제하며 native mobile에 DOM engine 직접 의존성을 요구하지 않는다. 내부 SDK와 도메인별 라이브러리의 목록은 앱마다 필요한 범위를 유지한다.
 
 <details>
-<summary>Geo — eab5f7a</summary>
+<summary>Geo — 기준 eab5f7a7, 후보 43c4a7f0</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
 | @hookform/resolvers | 실행 | 5.9.2 | 7.0.5 |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.6.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
-| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
-| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
-| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
 | @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
 | @tanstack/react-table | 실행 | 8.21.3 | 9.3.1 |
 | @tanstack/react-virtual | 실행 | 3.14.22 | 3.14.26 |
+| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
+| clsx | 실행 | 2.1.1 | 2.1.1 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
+| maplibre-vworld-react | 실행 | file:vendor/maplibre-vworld-react-ffa5523b5f4f.tgz | 제거 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| pretendard | 실행 | 없음 | 1.3.9 |
+| radix-ui | 실행 | 1.8.1 | 1.8.1 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 7.91.0 | 7.92.0 |
+| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
+| undici | 실행 | 8.12.3 | 8.12.4 |
+| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | 4.6.7 | 4.6.7 |
+| zustand | 실행 | 5.0.16 | 5.1.0 |
+| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
+| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
+| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
 | @testing-library/jest-dom | 개발 | 7.0.1 | 7.0.1 |
 | @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
 | @types/node | 개발 | 22.20.5 | 22.20.5 |
 | @types/react | 개발 | 19.3.0 | 19.3.0 |
 | @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
 | @vitejs/plugin-react | 개발 | 6.1.2 | 6.3.0 |
-| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
-| clsx | 실행 | 2.1.1 | 2.1.1 |
 | eslint | 개발 | 9.39.5 | 10.14.0 |
 | eslint-config-next | 개발 | 16.4.3 | 제거 |
 | eslint-import-resolver-typescript | 개발 | 없음 | 4.4.5 |
@@ -101,34 +130,19 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | eslint-plugin-react-x | 개발 | 없음 | 5.30.1 |
 | jsdom | 개발 | 30.1.3 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
-| maplibre-vworld-react | 실행 | file:vendor/maplibre-vworld-react-ffa5523b5f4f.tgz | 제거 |
-| next | 실행 | 16.4.3 | 16.4.6 |
 | openapi-typescript | 개발 | 7.13.0 | 7.13.0 |
 | postcss | 개발 | 8.5.31 | 8.5.32 |
-| pretendard | 실행 | 없음 | 1.3.9 |
-| radix-ui | 실행 | 1.8.1 | 1.8.1 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 7.91.0 | 7.92.0 |
-| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
-| undici | 실행 | 8.12.3 | 8.12.4 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | 4.6.7 | 4.6.7 |
-| zustand | 실행 | 5.0.16 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Map admin — 32668d0</summary>
+<summary>Map admin — 기준 32668d00, 후보 f56976ec</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
@@ -137,20 +151,35 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @kor-travel-map/map-marker-react | 실행 | * | * |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.9.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
-| @next/eslint-plugin-next | 개발 | 16.4.3 | 16.4.6 |
-| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
-| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
 | @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
 | @tanstack/react-table | 실행 | 8.21.3 | 9.3.1 |
 | @tanstack/react-virtual | 실행 | 3.14.22 | 3.14.26 |
+| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
+| clsx | 실행 | 2.1.1 | 2.1.1 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| pretendard | 실행 | 1.3.9 | 1.3.9 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 없음 | 7.92.0 |
+| sonner | 실행 | 2.0.8 | 2.0.8 |
+| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
+| tw-animate-css | 실행 | 1.4.0 | 1.4.0 |
+| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | 없음 | 4.6.7 |
+| zustand | 실행 | 5.0.16 | 5.1.0 |
+| @next/eslint-plugin-next | 개발 | 16.4.3 | 16.4.6 |
+| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
+| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
 | @testing-library/dom | 개발 | 10.4.2 | 10.4.2 |
 | @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
 | @types/node | 개발 | 22.20.5 | 22.20.5 |
 | @types/react | 개발 | 19.3.0 | 19.3.0 |
 | @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
 | @vitejs/plugin-react | 개발 | 6.1.2 | 6.3.0 |
-| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
-| clsx | 실행 | 2.1.1 | 2.1.1 |
 | eslint | 개발 | 10.13.0 | 10.14.0 |
 | eslint-import-resolver-typescript | 개발 | 4.4.5 | 4.4.5 |
 | eslint-plugin-import-x | 개발 | 4.17.1 | 4.18.1 |
@@ -160,33 +189,19 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | eslint-plugin-react-x | 개발 | 5.28.8 | 5.30.1 |
 | jsdom | 개발 | 30.1.3 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
-| next | 실행 | 16.4.3 | 16.4.6 |
 | openapi-typescript | 개발 | 7.13.0 | 7.13.0 |
-| pretendard | 실행 | 1.3.9 | 1.3.9 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 0.9.1 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 없음 | 7.92.0 |
-| sonner | 실행 | 2.0.8 | 2.0.8 |
-| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
-| tw-animate-css | 실행 | 1.4.0 | 1.4.0 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 8.72.0 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vite-tsconfig-paths | 개발 | 6.1.1 | 6.1.1 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | 없음 | 4.6.7 |
-| zustand | 실행 | 5.0.16 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Map client — 32668d0</summary>
+<summary>Map SDK — 기준 32668d00, 후보 f56976ec</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
@@ -196,7 +211,7 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 </details>
 
 <details>
-<summary>Weather — b55857f</summary>
+<summary>Weather — 기준 b55857f7, 후보 2b34884c</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
@@ -204,11 +219,23 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @hookform/resolvers | 실행 | 없음 | 7.0.5 |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.9.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
+| @radix-ui/react-dropdown-menu | 실행 | 2.2.1 | 제거 |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
+| @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| pretendard | 실행 | 없음 | 1.3.9 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 없음 | 7.92.0 |
+| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | 없음 | 4.6.7 |
+| zustand | 실행 | 없음 | 5.1.0 |
 | @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
 | @playwright/test | 개발 | 1.64.1 | 1.65.0 |
-| @radix-ui/react-dropdown-menu | 실행 | 2.2.1 | 제거 |
 | @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
-| @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
 | @types/node | 개발 | 22.20.5 | 22.20.5 |
 | @types/react | 개발 | 19.3.0 | 19.3.0 |
 | @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
@@ -221,29 +248,18 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
 | eslint-plugin-react-x | 개발 | 없음 | 5.30.1 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
-| next | 실행 | 16.4.3 | 16.4.6 |
 | postcss | 개발 | 없음 | 8.5.32 |
-| pretendard | 실행 | 없음 | 1.3.9 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 없음 | 7.92.0 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| vworld-map-core | 실행 | 없음 | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | 없음 | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | 없음 | 4.6.7 |
-| zustand | 실행 | 없음 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Concierge — 4438328</summary>
+<summary>Concierge — 기준 44383287, 후보 50e707ba</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
@@ -251,56 +267,69 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @hookform/resolvers | 실행 | 5.9.1 | 7.0.5 |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.9.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
+| @tanstack/react-query | 실행 | ^5.40.0 | 5.107.1 |
+| class-variance-authority | 실행 | ^0.7.1 | 0.7.1 |
+| clsx | 실행 | ^2.1.1 | 2.1.1 |
+| lucide-react | 실행 | ^1.17.0 | 1.72.0 |
+| maplibre-gl | 실행 | ^6.0.0 | 6.17.0 |
+| next | 실행 | ^16.2.7 | 16.4.6 |
+| pretendard | 실행 | 1.3.9 | 1.3.9 |
+| react | 실행 | ^19.2.8 | 19.3.1 |
+| react-dom | 실행 | ^19.2.8 | 19.3.1 |
+| react-hook-form | 실행 | ^7.51.5 | 7.92.0 |
+| shadcn | 실행 | ^4.10.0 | 제거 |
+| tailwind-merge | 실행 | ^3.6.0 | 3.7.0 |
+| vworld-map-core | 실행 | file:vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.0.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | ^4.4.3 | 4.6.7 |
+| zustand | 실행 | 없음 | 5.1.0 |
 | @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
 | @tailwindcss/postcss | 개발 | ^4.3.1 | 4.3.5 |
-| @tanstack/react-query | 실행 | ^5.40.0 | 5.107.1 |
+| @testing-library/user-event | 개발 | 없음 | 14.6.9 |
 | @types/node | 개발 | ^20 | 22.20.5 |
 | @types/react | 개발 | ^19.2.17 | 19.3.0 |
 | @types/react-dom | 개발 | ^19.2.3 | 19.3.0 |
 | autoprefixer | 개발 | ^10.4.19 | 제거 |
-| class-variance-authority | 실행 | ^0.7.1 | 0.7.1 |
-| clsx | 실행 | ^2.1.1 | 2.1.1 |
 | eslint | 개발 | ^9.39.4 | 10.14.0 |
 | eslint-config-next | 개발 | ^16.2.7 | 제거 |
 | eslint-import-resolver-typescript | 개발 | 없음 | 4.4.5 |
 | eslint-plugin-import-x | 개발 | 없음 | 4.18.1 |
 | eslint-plugin-jsx-a11y-x | 개발 | 없음 | 0.2.0 |
 | eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
+| jsdom | 개발 | 없음 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | ^1.17.0 | 1.72.0 |
-| maplibre-gl | 실행 | ^6.0.0 | 6.17.0 |
-| next | 실행 | ^16.2.7 | 16.4.6 |
 | postcss | 개발 | ^8.4.38 | 8.5.32 |
-| pretendard | 실행 | 1.3.9 | 1.3.9 |
-| react | 실행 | ^19.2.8 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | ^19.2.8 | 19.3.1 |
-| react-hook-form | 실행 | ^7.51.5 | 7.92.0 |
-| shadcn | 실행 | ^4.10.0 | 제거 |
-| tailwind-merge | 실행 | ^3.6.0 | 3.7.0 |
 | tailwindcss | 개발 | ^4.3.1 | 4.3.5 |
 | tw-animate-css | 개발 | ^1.4.0 | 1.4.0 |
 | typescript | 개발 | ^5.4.5 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vitest | 개발 | ^4.1.9 | 5.1.0 |
-| vworld-map-core | 실행 | file:vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.0.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | ^4.4.3 | 4.6.7 |
-| zustand | 실행 | 없음 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Docker Manager — 351e15b</summary>
+<summary>Docker Manager — 기준 351e15b4, 후보 158db1ab</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
 | @kor-travel/tokens | 실행 | 없음 | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | 없음 | file:vendor/kor-travel-ui-0.2.0.tgz |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
+| @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| pretendard | 실행 | 없음 | 1.3.9 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 없음 | 7.92.0 |
+| recharts | 실행 | 3.10.1 | 3.10.1 |
+| zod | 실행 | 없음 | 4.6.7 |
+| zustand | 실행 | 없음 | 5.1.0 |
 | @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
 | @playwright/test | 개발 | 없음 | 1.65.0 |
 | @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
-| @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
 | @testing-library/dom | 개발 | 10.4.2 | 10.4.2 |
 | @testing-library/jest-dom | 개발 | 7.0.1 | 7.0.1 |
 | @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
@@ -317,37 +346,25 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | eslint-plugin-react-x | 개발 | 없음 | 5.30.1 |
 | jsdom | 개발 | 30.1.3 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| next | 실행 | 16.4.3 | 16.4.6 |
 | postcss | 개발 | 8.5.31 | 8.5.32 |
-| pretendard | 실행 | 없음 | 1.3.9 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 없음 | 7.92.0 |
-| recharts | 실행 | 3.10.1 | 3.10.1 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| zod | 실행 | 없음 | 4.6.7 |
-| zustand | 실행 | 없음 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Pinvi web/admin — d42ac95</summary>
+<summary>Pinvi web — 기준 d42ac953, 후보 f3d4ddd8</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
-| @axe-core/playwright | 개발 | 4.14.0 | 4.14.0 |
 | @base-ui/react | 실행 | 1.9.0 | 제거 |
-| @eslint-react/eslint-plugin | 개발 | 없음 | 5.30.1 |
 | @hookform/resolvers | 실행 | 5.9.2 | 7.0.5 |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.9.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
-| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
 | @pinvi/api-client | 실행 | * | * |
 | @pinvi/design-tokens | 실행 | * | * |
 | @pinvi/domain | 실행 | * | * |
@@ -355,19 +372,36 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @pinvi/i18n | 실행 | * | * |
 | @pinvi/schemas | 실행 | * | * |
 | @pinvi/state | 실행 | * | * |
-| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
-| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
 | @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
 | @tanstack/react-table | 실행 | 8.21.3 | 9.3.1 |
 | @tanstack/react-virtual | 실행 | 3.14.22 | 3.14.26 |
+| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
+| clsx | 실행 | 2.1.1 | 2.1.1 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| next-intl | 실행 | 4.14.9 | 4.15.0 |
+| pretendard | 실행 | 1.3.9 | 1.3.9 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 7.91.0 | 7.92.0 |
+| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
+| vworld-map-core | 실행 | file:../mobile/vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.2.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | 4.6.7 | 4.6.7 |
+| zustand | 실행 | 5.0.16 | 5.1.0 |
+| @axe-core/playwright | 개발 | 4.14.0 | 4.14.0 |
+| @eslint-react/eslint-plugin | 개발 | 없음 | 5.30.1 |
+| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
+| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
+| @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
 | @testing-library/jest-dom | 개발 | 7.0.1 | 7.0.1 |
 | @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
 | @testing-library/user-event | 개발 | 14.6.8 | 14.6.9 |
 | @types/node | 개발 | 22.20.5 | 22.20.5 |
 | @types/react | 개발 | 19.2.18 | 19.3.0 |
 | @types/react-dom | 개발 | 19.2.7 | 19.3.0 |
-| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
-| clsx | 실행 | 2.1.1 | 2.1.1 |
 | eslint | 개발 | 9.39.5 | 10.14.0 |
 | eslint-config-next | 개발 | 16.4.3 | 제거 |
 | eslint-plugin-import-x | 개발 | 없음 | 4.18.1 |
@@ -376,35 +410,21 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | globals | 개발 | 없음 | 17.14.0 |
 | jsdom | 개발 | 30.1.3 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
-| next | 실행 | 16.4.3 | 16.4.6 |
-| next-intl | 실행 | 4.14.9 | 4.15.0 |
 | postcss | 개발 | 8.5.31 | 8.5.32 |
-| pretendard | 실행 | 1.3.9 | 1.3.9 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 7.91.0 | 7.92.0 |
-| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| vworld-map-core | 실행 | file:../mobile/vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.2.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | 4.6.7 | 4.6.7 |
-| zustand | 실행 | 5.0.16 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Pinvi mobile — d42ac95</summary>
+<summary>Pinvi mobile — 기준 d42ac953, 후보 f3d4ddd8</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
-| @babel/core | 개발 | 7.29.7 | 7.29.7 |
 | @kor-travel/tokens | 실행 | 없음 | file:../web/vendor/kor-travel-tokens-0.1.1.tgz |
 | @maplibre/maplibre-react-native | 실행 | 11.5.0 | 11.5.1 |
 | @pinvi/api-client | 실행 | * | * |
@@ -415,12 +435,7 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @pinvi/schemas | 실행 | * | * |
 | @pinvi/state | 실행 | * | * |
 | @react-native-async-storage/async-storage | 실행 | 2.2.0 | 3.1.1 |
-| @tailwindcss/postcss | 개발 | 없음 | 4.3.5 |
 | @tanstack/react-query | 실행 | 5.104.5 | 5.107.1 |
-| @types/react | 개발 | 19.2.18 | 19.3.0 |
-| eslint | 개발 | 9.39.5 | 10.14.0 |
-| eslint-config-expo | 개발 | 57.0.2 | 제거 |
-| eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
 | expo | 실행 | 57.0.32 | 58.0.23 |
 | expo-build-properties | 실행 | 57.0.23 | 58.0.12 |
 | expo-constants | 실행 | 57.0.23 | 58.0.15 |
@@ -432,12 +447,9 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | expo-secure-store | 실행 | 57.0.4 | 58.0.3 |
 | expo-status-bar | 실행 | 57.0.1 | 58.0.5 |
 | expo-web-browser | 실행 | 57.0.3 | 58.0.8 |
-| lightningcss | 개발 | 없음 | file:../web/vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
 | nativewind | 실행 | 4.2.7 | 5.0.0-rc.1 |
-| postcss | 개발 | 없음 | 8.5.32 |
 | pretendard | 실행 | 없음 | 1.3.9 |
 | react | 실행 | 19.3.1 | 19.3.1 |
-| react-doctor | 개발 | 없음 | 0.9.22 |
 | react-dom | 실행 | 19.3.1 | 19.3.1 |
 | react-hook-form | 실행 | 없음 | 7.92.0 |
 | react-native | 실행 | 0.86.3 | 0.88.1 |
@@ -447,65 +459,75 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | react-native-screens | 실행 | 4.26.2 | 4.30.1 |
 | react-native-web | 실행 | 0.21.4 | 0.21.4 |
 | react-native-worklets | 실행 | 0.13.0 | 0.13.1 |
-| tailwindcss | 개발 | 3.4.19 | 4.3.5 |
-| typescript | 개발 | 5.9.3 | 5.9.3 |
-| typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vworld-map-core | 실행 | file:vendor/vworld-map-core-1.0.0.tgz | file:../web/vendor/vworld-map-core-1.0.1.tgz |
 | vworld-map-rn | 실행 | file:vendor/vworld-map-rn-1.0.0.tgz | file:../web/vendor/vworld-map-rn-1.0.1.tgz |
 | vworld-map-web | 실행 | 없음 | file:../web/vendor/vworld-map-web-1.0.3.tgz |
 | zod | 실행 | 4.6.7 | 4.6.7 |
 | zustand | 실행 | 5.0.16 | 5.1.0 |
+| @babel/core | 개발 | 7.29.7 | 7.29.7 |
+| @tailwindcss/postcss | 개발 | 없음 | 4.3.5 |
+| @types/react | 개발 | 19.2.18 | 19.3.0 |
+| eslint | 개발 | 9.39.5 | 10.14.0 |
+| eslint-config-expo | 개발 | 57.0.2 | 제거 |
+| eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
+| lightningcss | 개발 | 없음 | file:../web/vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
+| postcss | 개발 | 없음 | 8.5.32 |
+| react-doctor | 개발 | 없음 | 0.9.22 |
+| tailwindcss | 개발 | 3.4.19 | 4.3.5 |
+| typescript | 개발 | 5.9.3 | 5.9.3 |
+| typescript-eslint | 개발 | 없음 | 8.72.2 |
 
 </details>
 
 <details>
-<summary>Transport web — 59e1d82</summary>
+<summary>Transport public — 기준 59e1d821, 후보 b327e2a7</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
 | @base-ui/react | 실행 | 1.9.0 | 제거 |
 | @kor-travel/tokens | 실행 | 없음 | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | 없음 | file:vendor/kor-travel-ui-0.2.0.tgz |
-| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
-| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
 | @tailwindcss/postcss | 실행 | 4.3.3 | 4.3.5 |
-| @testing-library/jest-dom | 개발 | 7.0.1 | 7.0.1 |
-| @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
-| @testing-library/user-event | 개발 | 14.6.8 | 14.6.9 |
-| @types/node | 개발 | 22.20.5 | 22.20.5 |
-| @types/react | 개발 | 19.3.0 | 19.3.0 |
-| @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
 | class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
 | cn | 실행 | 0.5.0 | 제거 |
 | date-fns | 실행 | 4.4.0 | 4.4.0 |
-| eslint | 개발 | 없음 | 10.14.0 |
-| eslint-plugin-jsx-a11y-x | 개발 | 없음 | 0.2.0 |
-| eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
-| jsdom | 개발 | 30.1.3 | 31.0.0 |
-| lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
 | lucide-react | 실행 | 1.61.0 | 1.72.0 |
 | next | 실행 | 16.4.3 | 16.4.6 |
 | postcss | 실행 | 8.5.31 | 8.5.32 |
 | pretendard | 실행 | 없음 | 1.3.9 |
 | react | 실행 | 19.3.1 | 19.3.1 |
 | react-day-picker | 실행 | 10.0.2 | 10.0.2 |
-| react-doctor | 개발 | 없음 | 0.9.22 |
 | react-dom | 실행 | 19.3.1 | 19.3.1 |
 | react-hook-form | 실행 | 없음 | 7.92.0 |
 | shadcn | 실행 | 4.22.1 | 제거 |
 | tailwindcss | 실행 | 4.3.3 | 4.3.5 |
 | tw-animate-css | 실행 | 1.4.0 | 1.4.0 |
+| zod | 실행 | 없음 | 4.6.7 |
+| zustand | 실행 | 없음 | 5.1.0 |
+| @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
+| @playwright/test | 개발 | 1.64.1 | 1.65.0 |
+| @testing-library/jest-dom | 개발 | 7.0.1 | 7.0.1 |
+| @testing-library/react | 개발 | 16.3.3 | 16.3.3 |
+| @testing-library/user-event | 개발 | 14.6.8 | 14.6.9 |
+| @types/node | 개발 | 22.20.5 | 22.20.5 |
+| @types/react | 개발 | 19.3.0 | 19.3.0 |
+| @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
+| eslint | 개발 | 없음 | 10.14.0 |
+| eslint-plugin-jsx-a11y-x | 개발 | 없음 | 0.2.0 |
+| eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
+| jsdom | 개발 | 30.1.3 | 31.0.0 |
+| lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
+| react-doctor | 개발 | 없음 | 0.9.22 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| zod | 실행 | 없음 | 4.6.7 |
-| zustand | 실행 | 없음 | 5.1.0 |
 
 </details>
 
 <details>
-<summary>Transport admin — 59e1d82</summary>
+<summary>Transport admin — 기준 59e1d821, 후보 b327e2a7</summary>
 
 | 라이브러리 | 종류 | 기준선 선언 | 후보 선언 |
 |---|---|---|---|
@@ -513,6 +535,22 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @kor-travel/parking-ui | 실행 | file:../../../frontend/src | file:../../../frontend/src |
 | @kor-travel/tokens | 실행 | file:vendor/kor-travel-tokens-0.1.0.tgz | file:vendor/kor-travel-tokens-0.1.1.tgz |
 | @kor-travel/ui | 실행 | file:vendor/kor-travel-ui-0.1.0-dev.9.tgz | file:vendor/kor-travel-ui-0.2.0.tgz |
+| @radix-ui/react-focus-scope | 실행 | 없음 | file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz |
+| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
+| clsx | 실행 | 2.1.1 | 2.1.1 |
+| echarts | 실행 | 6.1.0 | 6.1.0 |
+| lucide-react | 실행 | 1.61.0 | 1.72.0 |
+| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
+| next | 실행 | 16.4.3 | 16.4.6 |
+| pretendard | 실행 | 없음 | 1.3.9 |
+| react | 실행 | 19.3.1 | 19.3.1 |
+| react-dom | 실행 | 19.3.1 | 19.3.1 |
+| react-hook-form | 실행 | 없음 | 7.92.0 |
+| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
+| vworld-map-core | 실행 | file:vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
+| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.1.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
+| zod | 실행 | 없음 | 4.6.7 |
+| zustand | 실행 | 없음 | 5.1.0 |
 | @next/eslint-plugin-next | 개발 | 없음 | 16.4.6 |
 | @playwright/test | 개발 | 1.64.1 | 1.65.0 |
 | @tailwindcss/postcss | 개발 | 4.3.3 | 4.3.5 |
@@ -520,34 +558,19 @@ Geo·Map·Weather·Concierge·Docker Manager·Pinvi 웹/모바일·Transport 웹
 | @types/react | 개발 | 19.3.0 | 19.3.0 |
 | @types/react-dom | 개발 | 19.3.0 | 19.3.0 |
 | @types/supercluster | 개발 | 7.1.3 | 7.1.3 |
-| class-variance-authority | 실행 | 0.7.1 | 0.7.1 |
-| clsx | 실행 | 2.1.1 | 2.1.1 |
-| echarts | 실행 | 6.1.0 | 6.1.0 |
 | eslint | 개발 | 9.39.5 | 10.14.0 |
 | eslint-config-next | 개발 | 16.4.3 | 제거 |
 | eslint-plugin-jsx-a11y-x | 개발 | 없음 | 0.2.0 |
 | eslint-plugin-react-hooks | 개발 | 없음 | 7.1.1 |
 | jsdom | 개발 | 30.1.3 | 31.0.0 |
 | lightningcss | 개발 | 없음 | file:vendor/lightningcss-1.33.0+nativecss.fix.4.tgz |
-| lucide-react | 실행 | 1.61.0 | 1.72.0 |
-| maplibre-gl | 실행 | 6.15.0 | 6.17.0 |
-| next | 실행 | 16.4.3 | 16.4.6 |
-| pretendard | 실행 | 없음 | 1.3.9 |
-| react | 실행 | 19.3.1 | 19.3.1 |
 | react-doctor | 개발 | 없음 | 0.9.22 |
-| react-dom | 실행 | 19.3.1 | 19.3.1 |
-| react-hook-form | 실행 | 없음 | 7.92.0 |
-| tailwind-merge | 실행 | 3.7.0 | 3.7.0 |
 | tailwindcss | 개발 | 4.3.3 | 4.3.5 |
 | tw-animate-css | 개발 | 1.4.0 | 1.4.0 |
 | typescript | 개발 | 5.9.3 | 5.9.3 |
 | typescript-eslint | 개발 | 없음 | 8.72.2 |
 | vite | 개발 | 8.3.5 | 8.3.8 |
 | vitest | 개발 | 5.0.5 | 5.1.0 |
-| vworld-map-core | 실행 | file:vendor/vworld-map-core-1.0.0.tgz | file:vendor/vworld-map-core-1.0.1.tgz |
-| vworld-map-web | 실행 | file:vendor/vworld-map-web-1.0.1.tgz | file:vendor/vworld-map-web-1.0.3.tgz |
-| zod | 실행 | 없음 | 4.6.7 |
-| zustand | 실행 | 없음 | 5.1.0 |
 
 </details>
 
