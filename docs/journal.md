@@ -1,3 +1,11 @@
+## 2026-11-11 — 공통 UI 소비와 Geo 호환 계약 검증
+
+- 공통 부품은 재export, 표는 공통 VirtualTable의 도메인 열 변환으로 연결했다. 세부 범위와 전체 라이브러리 비교는 [통합 보고서](kor-travel-common-library-review.md)를 따른다.
+- CodeGraph MCP가 노출되지 않아 Linux CLI sync/status/impact를 사용했다. VirtualTable 영향 그래프가 자기 심벌/파일만 반환해 호출자 검색으로 BackupsPanel·ConsistencyPanel·ReconcileTab을 추가 확인했다.
+- 기존 fr 열 너비 무시와 헤더 입력 remount/포커스 손실을 실제 회귀2개로 먼저 실패시켰다. 열 비율을 공통 크기 모델에 연결하고 고정 헤더 컴포넌트가 현재 meta를 읽게 변경한 뒤 해당13개·전체289개가 통과했다. lint·타입·Doctor 전체 진단0도 확인했다.
+- 옛 private root-source alias에서 webpack 빌드가 실제 모듈 해석 오류로 실패했다. 공개 core/web 배포물 진입점으로 정리한 뒤 webpack·Turbopack 빌드가 모두 통과했다. 사용하지 않는 설치 후 source 변경 스크립트와 이전 vendor 파일을 제거했다.
+- 현재 소비 파일은 공통 후보6이며 최종 CSS 원본 수정/공통 정책과 새 단일 pack은 아직 후속이다. 독립2리뷰·정확 CI·PR·배포 gate를 통과로 집계하지 않는다.
+
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 
 - Map MOIS 숙박 적재 run 1ce7feec·33d88d25가 geo `/v2/geocode` 504로 끝났다. 원인은 도로·지번 미발견 → 행정구역 후보 SQL이 시도~리 약 2만 행마다 대표점·공백 제거(regexp 최대 4회)를 계산해 성공 시에도 2.3~4.9초였고, odroid CPU 포화(load 11~21, 온도 정상) 때 statement_timeout 5초를 넘긴 것이다. 같은 주소는 재시도해도 같은 504였다(PG 취소 시각 = 504 시각).

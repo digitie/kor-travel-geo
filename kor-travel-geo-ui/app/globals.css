@@ -6,6 +6,8 @@
    스캔되면 Tailwind v4 CSS 파싱이 죽는 문제(로컬 next dev 재현)의 원천 차단. */
 @import "tailwindcss" source(none);
 @import "@kor-travel/tokens/theme.css";
+@import "@kor-travel/tokens/radix.css";
+@import "@kor-travel/tokens/font.css";
 @import "@kor-travel/ui/dagster.css";
 @source "../node_modules/@kor-travel/ui/dist";
 @source "../app";
@@ -119,7 +121,7 @@
   --color-code-ink: oklch(0.9 0.014 210);
   --color-overlay: oklch(0.22 0.024 244 / 0.42);
   --font-display: "Pretendard Variable", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  --font-body: "Noto Sans KR", "Pretendard Variable", "Apple SD Gothic Neo", sans-serif;
+  --font-body: var(--kt-font-sans);
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;

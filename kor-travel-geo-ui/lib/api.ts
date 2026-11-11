@@ -187,6 +187,8 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
       window.location.pathname !== "/login"
     ) {
       const next = encodeURIComponent(window.location.pathname + window.location.search);
+      // 인증 컨텍스트와 클라이언트 캐시를 폐기하려 전체 문서를 새로 연다.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign(`/login?next=${next}`);
     }
     const text = await response.text();

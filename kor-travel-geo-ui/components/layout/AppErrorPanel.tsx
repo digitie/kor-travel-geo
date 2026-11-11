@@ -24,6 +24,8 @@ function goBack() {
     window.history.back();
     return;
   }
+  // 라우터가 손상된 런타임 복구 화면에서도 동작해야 하므로 전체 문서를 연다.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign("/debug/geocode");
 }
 

@@ -1,3 +1,7 @@
+## 2026-11-11 — 공통 Radix·표·지도 라이브러리 이관 후보
+
+공통 적용 범위·장단점·전체 직접 의존성 비교와 최신 검증/미완 gate는 [통합 보고서](kor-travel-common-library-review.md)에 기록한다. 공개 지도 패키지 소비로 전환하고 설치 후 source 수정과 private root alias를 제거했다. 다음은 최종 단일 pack 동기화·독립2리뷰·CI·PR머지·운영 UI 배포다. 현재 후보는 운영에 배포하지 않았다.
+
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 
 - Map MOIS 숙박 적재 run 1ce7feec·33d88d25가 geo `/v2/geocode` 504로 끝났다. 원인은 도로·지번 미발견 → 행정구역 후보 SQL이 시도~리 약 2만 행마다 대표점·공백 제거(regexp 최대 4회)를 계산해 성공 시에도 2.3~4.9초였고, odroid CPU 포화(load 11~21, 온도 정상) 때 statement_timeout 5초를 넘긴 것이다. 같은 주소는 재시도해도 같은 504였다(PG 취소 시각 = 504 시각).

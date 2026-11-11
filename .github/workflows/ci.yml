@@ -264,6 +264,8 @@ jobs:
         run: git diff --exit-code -- types/api.gen.ts lib/schemas.gen.ts
       - name: Lint, type-check, test, build
         run: |
+          npm run check:dependencies
+          npm run doctor
           npm run lint
           npm run type-check
           npm run test

@@ -299,6 +299,8 @@ async function logout() {
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } finally {
+    // 인증 컨텍스트와 클라이언트 캐시를 폐기하려 전체 문서를 새로 연다.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
   }
 }
