@@ -275,13 +275,10 @@ function FileDetailDialog({
     queryKey: ["file-inventory-detail", item?.id],
     enabled: Boolean(item && isSourceGroup),
     queryFn: () =>
-      requestJson<FileInventorySourceDetail>(
-        fileInventoryPaths.sourceGroupDetail(item?.id ?? "")
-      )
+      requestJson<FileInventorySourceDetail>(fileInventoryPaths.sourceGroupDetail(item?.id ?? ""))
   });
 
   if (!item) return null;
-  const meta = lifecycleOf(item.lifecycle);
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
@@ -292,40 +289,7 @@ function FileDetailDialog({
         </DialogHeader>
 
         <div className="grid gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="neutral">{fileKindLabels[item.file_kind] ?? item.file_kind}</Badge>
-            <StatusBadge value={meta.label} tone={badgeToneOf(meta.tone)} />
-            {item.in_use ? <Badge tone="ok">사용 중</Badge> : null}
-            {item.temporary ? <Badge tone="warn">임시</Badge> : null}
-            <HelpTip label="상태 도움말">{meta.hint}</HelpTip>
-          </div>
-
-          <KeyValueGrid
-            items={[
-              { label: "분류", value: item.category },
-              { label: "원본 상태", value: item.state, help: "백엔드가 기록한 원본 state 값입니다." },
-              { label: "크기", value: formatBytes(item.size_bytes) },
-              { label: "파일 수", value: item.file_count ?? "—" },
-              { label: "기준년월", value: item.user_yyyymm ?? "—" },
-              { label: "받은 시각", value: formatTimestamp(item.acquired_at) },
-              { label: "등록 시각", value: formatTimestamp(item.registered_at) },
-              { label: "마지막 검증", value: formatTimestamp(item.last_verified_at) },
-              {
-                label: "마지막 적재",
-                value: formatTimestamp(item.last_loaded_at),
-                help: "이 파일이 포함된 매칭 세트가 마지막으로 적재 완료된 시각입니다."
-              },
-              { label: "만료 시각", value: formatTimestamp(item.expires_at) },
-              {
-                label: "저장 위치",
-                value: (
-                  <code className="break-all text-xs">{item.storage_ref ?? "—"}</code>
-                ),
-                help: item.storage_kind ? `storage_kind: ${item.storage_kind}` : undefined
-              },
-              { label: "SHA-256", value: <code className="break-all text-xs">{item.sha256 ?? "—"}</code> }
-            ]}
-          />
+          <FileDetailMetadata item={item} />
 
           {isSourceGroup ? (
             detailPending ? (
@@ -484,5 +448,48 @@ function ArtifactLinkage({ item }: { item: FileInventoryItem }) {
         </>
       )}
     </div>
+  );
+}
+
+function FileDetailMetadata({ item }: { item: FileInventoryItem }) {
+  const meta = lifecycleOf(item.lifecycle);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone="neutral">{fileKindLabels[item.file_kind] ?? item.file_kind}</Badge>
+        <StatusBadge value={meta.label} tone={badgeToneOf(meta.tone)} />
+        {item.in_use ? <Badge tone="ok">사용 중</Badge> : null}
+        {item.temporary ? <Badge tone="warn">임시</Badge> : null}
+        <HelpTip label="상태 도움말">{meta.hint}</HelpTip>
+      </div>
+
+      <KeyValueGrid
+        items={[
+          { label: "분류", value: item.category },
+          { label: "원본 상태", value: item.state, help: "백엔드가 기록한 원본 state 값입니다." },
+          { label: "크기", value: formatBytes(item.size_bytes) },
+          { label: "파일 수", value: item.file_count ?? "—" },
+          { label: "기준년월", value: item.user_yyyymm ?? "—" },
+          { label: "받은 시각", value: formatTimestamp(item.acquired_at) },
+          { label: "등록 시각", value: formatTimestamp(item.registered_at) },
+          { label: "마지막 검증", value: formatTimestamp(item.last_verified_at) },
+          {
+            label: "마지막 적재",
+            value: formatTimestamp(item.last_loaded_at),
+            help: "이 파일이 포함된 매칭 세트가 마지막으로 적재 완료된 시각입니다."
+          },
+          { label: "만료 시각", value: formatTimestamp(item.expires_at) },
+          {
+            label: "저장 위치",
+            value: <code className="break-all text-xs">{item.storage_ref ?? "—"}</code>,
+            help: item.storage_kind ? `storage_kind: ${item.storage_kind}` : undefined
+          },
+          {
+            label: "SHA-256",
+            value: <code className="break-all text-xs">{item.sha256 ?? "—"}</code>
+          }
+        ]}
+      />
+    </>
   );
 }

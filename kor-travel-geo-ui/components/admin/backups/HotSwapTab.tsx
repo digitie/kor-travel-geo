@@ -223,21 +223,7 @@ export function HotSwapTab({
   );
 }
 
-function HotSwapLayout({
-  blocked,
-  execReady,
-  lifecycle,
-  onBuildPlan,
-  onExecute,
-  onOpenWindow,
-  onRollback,
-  onStateChange,
-  onVerifySource,
-  restoreDbListId,
-  restoreDbOptions,
-  rollbackReady,
-  state
-}: {
+type HotSwapLayoutProps = {
   blocked: boolean;
   execReady: boolean;
   lifecycle?: DbLifecycleCapabilities | null;
@@ -251,243 +237,260 @@ function HotSwapLayout({
   restoreDbOptions: string[];
   rollbackReady: boolean;
   state: HotSwapState;
-}) {
-  const {
-    restoreDatabase,
-    previousAlias,
-    reason,
-    plan,
-    windowOpened,
-    execConfirmation,
-    rollbackConfirmation,
-    result,
-    sourceVerify,
-    rollbackResult,
-    busy,
-    error
-  } = state;
+};
 
+function HotSwapLayout(props: HotSwapLayoutProps) {
   return (
     <div className="grid two">
-      <Panel
-        title="1 · Hot-swap plan"
-        description={
-          <>
-            운영 serving DB를 즉시 교체하는 위험 작업입니다.
-            <HelpTip label="Hot-swap 도움말">
-              Hot-swap은 <code>ALTER DATABASE RENAME</code>으로 운영 serving DB를 교체합니다. plan
-              → maintenance window → typed confirmation 순서로만 실행됩니다.
+      <HotSwapPlanPanel {...props} />
+      <div className="hotswap-side">
+        <HotSwapMaintenancePanel {...props} />
+        <HotSwapExecutePanel {...props} />
+        <HotSwapRecoveryPanel {...props} />
+      </div>
+    </div>
+  );
+}
+
+function HotSwapPlanPanel(props: HotSwapLayoutProps) {
+  const { blocked, lifecycle, onBuildPlan, onStateChange, restoreDbListId, restoreDbOptions } =
+    props;
+  const { restoreDatabase, previousAlias, plan, busy, error } = props.state;
+  return (
+    <Panel
+      title="1 · Hot-swap plan"
+      description={
+        <>
+          운영 serving DB를 즉시 교체하는 위험 작업입니다.
+          <HelpTip label="Hot-swap 도움말">
+            Hot-swap은 <code>ALTER DATABASE RENAME</code>으로 운영 serving DB를 교체합니다. plan →
+            maintenance window → typed confirmation 순서로만 실행됩니다.
+          </HelpTip>
+        </>
+      }
+    >
+      <DbLifecycleNotice capabilities={lifecycle} feature="Hot-swap" />
+      {error ? (
+        <Alert role="alert" variant="destructive">
+          <XCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="form-grid">
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="hs-restore">복원된 DB 이름</FieldLabel>
+            <HelpTip label="복원된 DB 이름 도움말">
+              API 필드 <code>restore_database</code> — [복원] 위저드로 만든 DB 이름. 최근 복원
+              이력에서 자동 완성됩니다.
             </HelpTip>
-          </>
-        }
-      >
-        <DbLifecycleNotice capabilities={lifecycle} feature="Hot-swap" />
-        {error ? (
-          <Alert role="alert" variant="destructive">
-            <XCircle aria-hidden="true" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
+          </span>
+          <Input
+            id="hs-restore"
+            list={restoreDbListId}
+            onChange={(e) => onStateChange({ restoreDatabase: e.target.value })}
+            value={restoreDatabase}
+          />
+          <datalist id={restoreDbListId}>
+            {restoreDbOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </datalist>
+        </Field>
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="hs-prev">previous alias</FieldLabel>
+            <HelpTip label="previous alias 도움말">
+              API 필드 <code>previous_alias</code> — 교체 전 운영 DB에 붙일 별칭 (선택).
+            </HelpTip>
+          </span>
+          <Input
+            id="hs-prev"
+            onChange={(e) => onStateChange({ previousAlias: e.target.value })}
+            placeholder="비우면 자동 생성"
+            value={previousAlias}
+          />
+        </Field>
+        <div className="button-row">
+          <Button
+            disabled={blocked || !restoreDatabase || busy === "plan 생성"}
+            onClick={onBuildPlan}
+            type="button"
+          >
+            plan 생성
+          </Button>
+        </div>
+      </div>
+      {plan ? (
+        <div className="hotswap-plan">
+          <KeyValueGrid
+            items={[
+              { label: "current", value: plan.current_database },
+              { label: "restore", value: plan.restore_database },
+              { label: "previous alias", value: plan.previous_alias },
+              {
+                label: "실행 가능",
+                value: (
+                  <StatusBadge
+                    tone={plan.can_execute ? "ok" : "error"}
+                    value={plan.can_execute ? "가능" : "불가"}
+                  />
+                )
+              }
+            ]}
+          />
+          {!plan.can_execute && plan.blockers && plan.blockers.length > 0 ? (
+            <IssueList items={plan.blockers} title="blockers" tone="error" />
+          ) : null}
+          {plan.steps && plan.steps.length > 0 ? (
+            <ol className="hotswap-steps">
+              {plan.steps.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+function HotSwapMaintenancePanel(props: HotSwapLayoutProps) {
+  const { blocked, onOpenWindow, onStateChange } = props;
+  const { reason, plan, windowOpened, busy } = props.state;
+  return (
+    <Panel title="2 · Maintenance window">
+      {plan ? (
         <div className="form-grid">
           <Field>
             <span className="flex items-center gap-1">
-              <FieldLabel htmlFor="hs-restore">복원된 DB 이름</FieldLabel>
-              <HelpTip label="복원된 DB 이름 도움말">
-                API 필드 <code>restore_database</code> — [복원] 위저드로 만든 DB 이름. 최근 복원
-                이력에서 자동 완성됩니다.
+              <FieldLabel htmlFor="hs-reason">사유</FieldLabel>
+              <HelpTip label="사유 도움말">
+                API 필드 <code>reason</code> — maintenance window 감사 기록에 남습니다.
               </HelpTip>
             </span>
             <Input
-              id="hs-restore"
-              list={restoreDbListId}
-              onChange={(e) => onStateChange({ restoreDatabase: e.target.value })}
-              value={restoreDatabase}
-            />
-            <datalist id={restoreDbListId}>
-              {restoreDbOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </datalist>
-          </Field>
-          <Field>
-            <span className="flex items-center gap-1">
-              <FieldLabel htmlFor="hs-prev">previous alias</FieldLabel>
-              <HelpTip label="previous alias 도움말">
-                API 필드 <code>previous_alias</code> — 교체 전 운영 DB에 붙일 별칭 (선택).
-              </HelpTip>
-            </span>
-            <Input
-              id="hs-prev"
-              onChange={(e) => onStateChange({ previousAlias: e.target.value })}
-              placeholder="비우면 자동 생성"
-              value={previousAlias}
+              id="hs-reason"
+              onChange={(e) => onStateChange({ reason: e.target.value })}
+              value={reason}
             />
           </Field>
-          <div className="button-row">
-            <Button
-              disabled={blocked || !restoreDatabase || busy === "plan 생성"}
-              onClick={onBuildPlan}
-              type="button"
-            >
-              plan 생성
-            </Button>
-          </div>
+          <Button
+            disabled={blocked || !plan.can_execute || busy === "maintenance window 열기"}
+            onClick={onOpenWindow}
+            type="button"
+          >
+            maintenance window 열기 (kind=restore)
+          </Button>
+          {windowOpened ? (
+            <p className="wizard-hint">
+              <CheckCircle2 size={14} /> window {windowOpened.maintenance_window_id} ·{" "}
+              <StatusBadge value={windowOpened.state} />
+            </p>
+          ) : null}
         </div>
-        {plan ? (
-          <div className="hotswap-plan">
-            <KeyValueGrid
-              items={[
-                { label: "current", value: plan.current_database },
-                { label: "restore", value: plan.restore_database },
-                { label: "previous alias", value: plan.previous_alias },
-                {
-                  label: "실행 가능",
-                  value: (
-                    <StatusBadge
-                      tone={plan.can_execute ? "ok" : "error"}
-                      value={plan.can_execute ? "가능" : "불가"}
-                    />
-                  )
-                }
-              ]}
-            />
-            {!plan.can_execute && plan.blockers && plan.blockers.length > 0 ? (
-              <IssueList items={plan.blockers} title="blockers" tone="error" />
-            ) : null}
-            {plan.steps && plan.steps.length > 0 ? (
-              <ol className="hotswap-steps">
-                {plan.steps.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ol>
-            ) : null}
-          </div>
+      ) : (
+        <p className="wizard-hint">먼저 plan을 생성하세요.</p>
+      )}
+    </Panel>
+  );
+}
+
+function HotSwapExecutePanel(props: HotSwapLayoutProps) {
+  const { execReady, onExecute, onStateChange } = props;
+  const { plan, windowOpened, execConfirmation, result, busy, error } = props.state;
+  return (
+    <Panel title="3 · 실행 (위험)">
+      {plan ? (
+        <div className="form-grid">
+          <TypedConfirmField
+            heading="실행 확인"
+            label="typed confirmation"
+            onChange={(value) => onStateChange({ execConfirmation: value })}
+            phrase={plan.typed_confirmation}
+            value={execConfirmation}
+          />
+          <Button
+            disabled={!execReady || busy === "hot-swap 실행"}
+            onClick={onExecute}
+            type="button"
+            variant="destructive"
+          >
+            <AlertTriangle aria-hidden="true" size={15} /> hot-swap 실행
+          </Button>
+          {!windowOpened ? (
+            <small className="wizard-hint">active maintenance window가 필요합니다.</small>
+          ) : null}
+          {result ? (
+            <div className="wizard-done">
+              <p>
+                {result.swapped ? (
+                  <StatusBadge tone="ok" value="swap 완료" />
+                ) : result.rolled_back ? (
+                  <StatusBadge tone="warn" value="자동 rollback" />
+                ) : (
+                  <StatusBadge tone="error" value="실패" />
+                )}{" "}
+                smoke: {String(result.smoke_ok)}
+              </p>
+              <JsonDetails value={result} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="wizard-hint">먼저 plan과 maintenance window를 준비하세요.</p>
+      )}
+    </Panel>
+  );
+}
+
+function HotSwapRecoveryPanel(props: HotSwapLayoutProps) {
+  const { onRollback, onStateChange, onVerifySource, rollbackReady } = props;
+  const { plan, rollbackConfirmation, sourceVerify, rollbackResult, busy, error } = props.state;
+  return (
+    <Panel title="4 · source 재검증 / rollback">
+      <div className="form-grid">
+        <Button
+          disabled={busy === "source 재검증"}
+          onClick={onVerifySource}
+          type="button"
+          variant="outline"
+        >
+          source 재검증
+        </Button>
+        {sourceVerify ? (
+          <p className="wizard-hint">
+            {sourceVerify.reconstruct_unavailable ? (
+              <StatusBadge tone="error" value="재구성 불가" />
+            ) : (
+              <StatusBadge tone="ok" value="검증됨" />
+            )}{" "}
+            mismatch {sourceVerify.mismatch_count}
+          </p>
         ) : null}
-      </Panel>
-
-      <div className="hotswap-side">
-        <Panel title="2 · Maintenance window">
-          {plan ? (
-            <div className="form-grid">
-              <Field>
-                <span className="flex items-center gap-1">
-                  <FieldLabel htmlFor="hs-reason">사유</FieldLabel>
-                  <HelpTip label="사유 도움말">
-                    API 필드 <code>reason</code> — maintenance window 감사 기록에 남습니다.
-                  </HelpTip>
-                </span>
-                <Input
-                  id="hs-reason"
-                  onChange={(e) => onStateChange({ reason: e.target.value })}
-                  value={reason}
-                />
-              </Field>
-              <Button
-                disabled={blocked || !plan.can_execute || busy === "maintenance window 열기"}
-                onClick={onOpenWindow}
-                type="button"
-              >
-                maintenance window 열기 (kind=restore)
-              </Button>
-              {windowOpened ? (
-                <p className="wizard-hint">
-                  <CheckCircle2 size={14} /> window {windowOpened.maintenance_window_id} ·{" "}
-                  <StatusBadge value={windowOpened.state} />
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <p className="wizard-hint">먼저 plan을 생성하세요.</p>
-          )}
-        </Panel>
-
-        <Panel title="3 · 실행 (위험)">
-          {plan ? (
-            <div className="form-grid">
-              <TypedConfirmField
-                heading="실행 확인"
-                label="typed confirmation"
-                onChange={(value) => onStateChange({ execConfirmation: value })}
-                phrase={plan.typed_confirmation}
-                value={execConfirmation}
-              />
-              <Button
-                disabled={!execReady || busy === "hot-swap 실행"}
-                onClick={onExecute}
-                type="button"
-                variant="destructive"
-              >
-                <AlertTriangle aria-hidden="true" size={15} /> hot-swap 실행
-              </Button>
-              {!windowOpened ? (
-                <small className="wizard-hint">active maintenance window가 필요합니다.</small>
-              ) : null}
-              {result ? (
-                <div className="wizard-done">
-                  <p>
-                    {result.swapped ? (
-                      <StatusBadge tone="ok" value="swap 완료" />
-                    ) : result.rolled_back ? (
-                      <StatusBadge tone="warn" value="자동 rollback" />
-                    ) : (
-                      <StatusBadge tone="error" value="실패" />
-                    )}{" "}
-                    smoke: {String(result.smoke_ok)}
-                  </p>
-                  <JsonDetails value={result} />
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="wizard-hint">먼저 plan과 maintenance window를 준비하세요.</p>
-          )}
-        </Panel>
-
-        <Panel title="4 · source 재검증 / rollback">
-          <div className="form-grid">
+        {plan ? (
+          <>
+            <TypedConfirmField
+              heading="rollback 확인"
+              label="rollback confirmation"
+              onChange={(value) => onStateChange({ rollbackConfirmation: value })}
+              phrase={plan.rollback_confirmation}
+              value={rollbackConfirmation}
+            />
             <Button
-              disabled={busy === "source 재검증"}
-              onClick={onVerifySource}
+              disabled={!rollbackReady || busy === "rollback 실행"}
+              onClick={onRollback}
               type="button"
               variant="outline"
             >
-              source 재검증
+              <RotateCcw aria-hidden="true" size={15} /> rollback 실행
             </Button>
-            {sourceVerify ? (
-              <p className="wizard-hint">
-                {sourceVerify.reconstruct_unavailable ? (
-                  <StatusBadge tone="error" value="재구성 불가" />
-                ) : (
-                  <StatusBadge tone="ok" value="검증됨" />
-                )}{" "}
-                mismatch {sourceVerify.mismatch_count}
-              </p>
-            ) : null}
-            {plan ? (
-              <>
-                <TypedConfirmField
-                  heading="rollback 확인"
-                  label="rollback confirmation"
-                  onChange={(value) => onStateChange({ rollbackConfirmation: value })}
-                  phrase={plan.rollback_confirmation}
-                  value={rollbackConfirmation}
-                />
-                <Button
-                  disabled={!rollbackReady || busy === "rollback 실행"}
-                  onClick={onRollback}
-                  type="button"
-                  variant="outline"
-                >
-                  <RotateCcw aria-hidden="true" size={15} /> rollback 실행
-                </Button>
-                {rollbackResult ? <JsonDetails value={rollbackResult} /> : null}
-              </>
-            ) : null}
-          </div>
-        </Panel>
+            {rollbackResult ? <JsonDetails value={rollbackResult} /> : null}
+          </>
+        ) : null}
       </div>
-    </div>
+    </Panel>
   );
 }

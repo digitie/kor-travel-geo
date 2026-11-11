@@ -118,9 +118,6 @@ export function PerfValidationSummary() {
     void load();
   }, [load]);
 
-  const latestReport = state.reports[0] ?? null;
-  const activeSet = state.matchSets.find((set) => set.state === "active") ?? null;
-
   return (
     <Panel
       title="성능·검증 요약"
@@ -141,67 +138,11 @@ export function PerfValidationSummary() {
         </div>
       ) : (
         <>
-          <section className="perf-summary-section">
-            <strong>성능 benchmark (latest vs baseline)</strong>
-            {state.benchmarks.length === 0 ? (
-              <p className="form-note">
-                등록된 benchmark artifact가 없습니다.
-                <HelpTip label="benchmark 등록 방법 도움말">
-                  benchmark run(T-138/T-141/T-146) 결과를{" "}
-                  <code>POST /v1/admin/ops/benchmark-artifacts</code>로 등록하면 여기에 비교가
-                  노출됩니다.
-                </HelpTip>
-              </p>
-            ) : (
-              <VirtualTable
-                as="table"
-                columns={BENCHMARK_COLUMNS}
-                compact
-                rowKey={(row) => row.group}
-                rows={state.benchmarks}
-              />
-            )}
-          </section>
+          <BenchmarkSection benchmarks={state.benchmarks} />
 
-          <section className="perf-summary-section">
-            <strong>C1~C17 검증 (최신 정합성 리포트)</strong>
-            {latestReport ? (
-              <p className="perf-validation-line">
-                <StatusBadge value={latestReport.severity_max} />{" "}
-                <span>
-                  {latestReport.scope} · {formatTimestamp(latestReport.finished_at)} ·{" "}
-                  {latestReport.generated_by}
-                </span>{" "}
-                <DocumentNavLink className="perf-artifact-link" href="/admin/consistency">
-                  <ExternalLink size={13} /> 상세
-                </DocumentNavLink>
-              </p>
-            ) : (
-              <p className="form-note">정합성 리포트가 없습니다.</p>
-            )}
-          </section>
+          <ConsistencySummarySection reports={state.reports} />
 
-          <section className="perf-summary-section">
-            <strong>source match set 상태</strong>
-            {state.matchSets.length === 0 ? (
-              <p className="form-note">매칭 세트가 없습니다.</p>
-            ) : (
-              <p className="perf-validation-line">
-                {activeSet ? (
-                  <>
-                    <span>활성: {activeSet.name}</span>{" "}
-                    <StatusBadge value={matchSetStateLabels[activeSet.state]} />
-                    {activeSet.integrity_alert ? (
-                      <StatusBadge tone="error" value="무결성 경보" />
-                    ) : null}
-                  </>
-                ) : (
-                  <span>활성 매칭 세트가 없습니다.</span>
-                )}{" "}
-                <small className="form-note">총 {state.matchSets.length}개</small>
-              </p>
-            )}
-          </section>
+          <MatchSetSummarySection matchSets={state.matchSets} />
         </>
       )}
     </Panel>
@@ -232,5 +173,78 @@ function MetricCell({
         </small>
       ) : null}
     </div>
+  );
+}
+
+function BenchmarkSection({ benchmarks }: { benchmarks: BenchmarkSummaryRow[] }) {
+  return (
+    <section className="perf-summary-section">
+      <strong>성능 benchmark (latest vs baseline)</strong>
+      {benchmarks.length === 0 ? (
+        <p className="form-note">
+          등록된 benchmark artifact가 없습니다.
+          <HelpTip label="benchmark 등록 방법 도움말">
+            benchmark run(T-138/T-141/T-146) 결과를{" "}
+            <code>POST /v1/admin/ops/benchmark-artifacts</code>로 등록하면 여기에 비교가 노출됩니다.
+          </HelpTip>
+        </p>
+      ) : (
+        <VirtualTable
+          as="table"
+          columns={BENCHMARK_COLUMNS}
+          compact
+          rowKey={(row) => row.group}
+          rows={benchmarks}
+        />
+      )}
+    </section>
+  );
+}
+
+function ConsistencySummarySection({ reports }: { reports: ConsistencyReportSummary[] }) {
+  const latestReport = reports[0] ?? null;
+  return (
+    <section className="perf-summary-section">
+      <strong>C1~C17 검증 (최신 정합성 리포트)</strong>
+      {latestReport ? (
+        <p className="perf-validation-line">
+          <StatusBadge value={latestReport.severity_max} />{" "}
+          <span>
+            {latestReport.scope} · {formatTimestamp(latestReport.finished_at)} ·{" "}
+            {latestReport.generated_by}
+          </span>{" "}
+          <DocumentNavLink className="perf-artifact-link" href="/admin/consistency">
+            <ExternalLink size={13} /> 상세
+          </DocumentNavLink>
+        </p>
+      ) : (
+        <p className="form-note">정합성 리포트가 없습니다.</p>
+      )}
+    </section>
+  );
+}
+
+function MatchSetSummarySection({ matchSets }: { matchSets: SourceMatchSet[] }) {
+  const activeSet = matchSets.find((set) => set.state === "active") ?? null;
+  return (
+    <section className="perf-summary-section">
+      <strong>source match set 상태</strong>
+      {matchSets.length === 0 ? (
+        <p className="form-note">매칭 세트가 없습니다.</p>
+      ) : (
+        <p className="perf-validation-line">
+          {activeSet ? (
+            <>
+              <span>활성: {activeSet.name}</span>{" "}
+              <StatusBadge value={matchSetStateLabels[activeSet.state]} />
+              {activeSet.integrity_alert ? <StatusBadge tone="error" value="무결성 경보" /> : null}
+            </>
+          ) : (
+            <span>활성 매칭 세트가 없습니다.</span>
+          )}{" "}
+          <small className="form-note">총 {matchSets.length}개</small>
+        </p>
+      )}
+    </section>
   );
 }

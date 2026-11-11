@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsistencyPanel } from "@/components/admin/ConsistencyPanel";
 import { useConsistencyAnalysisStore } from "@/lib/stores/consistency-analysis-store";
@@ -220,4 +220,24 @@ describe("ConsistencyPanel", () => {
     );
     await screen.findByText("#1");
   });
+  it("표본 선택으로 부모 callback이 바뀌어도 시군구 debounce의 300ms 기한을 유지한다", async () => {
+    renderPanel();
+    await screen.findByText("#1");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      apiMocks.requestJson.mockClear();
+      fireEvent.change(screen.getByLabelText("시군구코드 필터"), {
+        target: { value: "41465" }
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      act(() => useConsistencyAnalysisStore.getState().setSelectedSample("sample-C4"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(apiMocks.requestJson.mock.calls.some(([path]) =>
+        String(path).includes("/samples?") && new URL(String(path), "http://localhost").searchParams.get("sig_cd") === "41465"
+      )).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
 });

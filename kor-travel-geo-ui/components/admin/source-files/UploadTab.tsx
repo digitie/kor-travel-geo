@@ -430,27 +430,11 @@ function CategoryCard({
           <strong>{category.label}</strong>
           <span>{category.category}</span>
         </button>
-        <div className="source-card-badges">
-          <StatusBadge
-            value={servingUsageLabels[category.serving_usage]}
-            tone={servingUsageTones[category.serving_usage]}
-          />
-          {hasActiveSet ? (
-            <StatusBadge
-              value={isActiveServing ? "현재 서빙 포함" : "현재 서빙 미포함"}
-              tone={isActiveServing ? "ok" : "warn"}
-            />
-          ) : null}
-          <HelpTip label={`${category.label} 서빙 반영 도움말`}>
-            <p className="m-0">{servingUsageNote(category.category, category.serving_usage)}</p>
-            {hasActiveSet && !isActiveServing ? (
-              <p className="m-0 mt-1">
-                등록해도 활성 매칭 세트에 포함·활성화되기 전에는 서빙에 반영되지 않습니다(등록됨 ≠
-                활용 중).
-              </p>
-            ) : null}
-          </HelpTip>
-        </div>
+        <CategoryServingBadges
+          category={category}
+          hasActiveSet={hasActiveSet}
+          isActiveServing={isActiveServing}
+        />
       </header>
       <dl className="source-card-meta">
         <div>
@@ -484,51 +468,19 @@ function CategoryCard({
           yyyymmValid={yyyymmValid}
         />
       ) : (
-        <div className="source-card-upload">
-          <YyyymmField
-            id={`yyyymm-${category.category}`}
-            value={userYyyymm}
-            onChange={setUserYyyymm}
-            help={
-              <>
-                API 필드 <code>user_yyyymm</code> — 이 원천 자료의 기준 년월입니다.
-              </>
-            }
-          />
-          <Field data-invalid={oversize || undefined}>
-            <Input
-              aria-label={`${category.label} 파일 선택`}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              type="file"
-            />
-            {file ? (
-              <p className="form-note m-0">
-                {file.name} · {formatBytes(file.size)}
-                {maxBytes ? <> (한도 {formatBytes(maxBytes)})</> : null}
-              </p>
-            ) : null}
-            {oversize ? (
-              <FieldError>
-                파일이 크기 한도 {formatBytes(maxBytes)}를 초과합니다.
-              </FieldError>
-            ) : null}
-          </Field>
-          <Button
-            disabled={!file || !yyyymmValid || uploading || oversize}
-            onClick={() => file && onUpload(userYyyymm, file)}
-            type="button"
-          >
-            <Upload aria-hidden="true" />
-            업로드
-          </Button>
-          {slotProgress.length > 0 ? (
-            <div className="source-progress-list">
-              {slotProgress.map((item) => (
-                <SlotProgressBar key={item.slot} progress={item} />
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <CategoryUploadControls
+          category={category}
+          file={file}
+          setFile={setFile}
+          maxBytes={maxBytes}
+          oversize={oversize}
+          userYyyymm={userYyyymm}
+          setUserYyyymm={setUserYyyymm}
+          yyyymmValid={yyyymmValid}
+          uploading={uploading}
+          onUpload={onUpload}
+          slotProgress={slotProgress}
+        />
       )}
     </article>
   );
@@ -782,4 +734,110 @@ function conflictSessionFromError(error: ApiError): UploadSessionStatus | null {
     return (detail as { session: UploadSessionStatus }).session;
   }
   return null;
+}
+
+function CategoryServingBadges({
+  category,
+  hasActiveSet,
+  isActiveServing
+}: {
+  category: SourceFileCategoryInfo;
+  hasActiveSet: boolean;
+  isActiveServing: boolean;
+}) {
+  return (
+    <div className="source-card-badges">
+      <StatusBadge
+        value={servingUsageLabels[category.serving_usage]}
+        tone={servingUsageTones[category.serving_usage]}
+      />
+      {hasActiveSet ? (
+        <StatusBadge
+          value={isActiveServing ? "현재 서빙 포함" : "현재 서빙 미포함"}
+          tone={isActiveServing ? "ok" : "warn"}
+        />
+      ) : null}
+      <HelpTip label={`${category.label} 서빙 반영 도움말`}>
+        <p className="m-0">{servingUsageNote(category.category, category.serving_usage)}</p>
+        {hasActiveSet && !isActiveServing ? (
+          <p className="m-0 mt-1">
+            등록해도 활성 매칭 세트에 포함·활성화되기 전에는 서빙에 반영되지 않습니다(등록됨 ≠ 활용
+            중).
+          </p>
+        ) : null}
+      </HelpTip>
+    </div>
+  );
+}
+
+function CategoryUploadControls({
+  category,
+  file,
+  setFile,
+  maxBytes,
+  oversize,
+  userYyyymm,
+  setUserYyyymm,
+  yyyymmValid,
+  uploading,
+  onUpload,
+  slotProgress
+}: {
+  category: SourceFileCategoryInfo;
+  file: File | null;
+  setFile: (file: File | null) => void;
+  maxBytes?: number;
+  oversize: boolean;
+  userYyyymm: string;
+  setUserYyyymm: (value: string) => void;
+  yyyymmValid: boolean;
+  uploading: boolean;
+  onUpload: (userYyyymm: string, file: File) => void;
+  slotProgress: SlotUploadProgress[];
+}) {
+  return (
+    <div className="source-card-upload">
+      <YyyymmField
+        id={`yyyymm-${category.category}`}
+        value={userYyyymm}
+        onChange={setUserYyyymm}
+        help={
+          <>
+            API 필드 <code>user_yyyymm</code> — 이 원천 자료의 기준 년월입니다.
+          </>
+        }
+      />
+      <Field data-invalid={oversize || undefined}>
+        <Input
+          aria-label={`${category.label} 파일 선택`}
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          type="file"
+        />
+        {file ? (
+          <p className="form-note m-0">
+            {file.name} · {formatBytes(file.size)}
+            {maxBytes ? <> (한도 {formatBytes(maxBytes)})</> : null}
+          </p>
+        ) : null}
+        {oversize ? (
+          <FieldError>파일이 크기 한도 {formatBytes(maxBytes)}를 초과합니다.</FieldError>
+        ) : null}
+      </Field>
+      <Button
+        disabled={!file || !yyyymmValid || uploading || oversize}
+        onClick={() => file && onUpload(userYyyymm, file)}
+        type="button"
+      >
+        <Upload aria-hidden="true" />
+        업로드
+      </Button>
+      {slotProgress.length > 0 ? (
+        <div className="source-progress-list">
+          {slotProgress.map((item) => (
+            <SlotProgressBar key={item.slot} progress={item} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }

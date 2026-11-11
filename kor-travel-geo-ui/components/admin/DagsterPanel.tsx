@@ -154,11 +154,6 @@ function RunDetailPanel({
   onRefresh: () => void;
   selectedRunId: string | null;
 }) {
-  const run = detail?.run;
-  const failureAlert = detail?.failure_alert ?? null;
-  const backupArtifact = detail?.backup_artifact ?? null;
-  const backupArtifactHref = backupDownloadHref(backupArtifact?.download_url);
-  const loadJobId = run?.tags?.["kor_travel_geo.job_id"];
   return (
     <Panel
       title="Run detail"
@@ -189,68 +184,7 @@ function RunDetailPanel({
       ) : isPending ? (
         <Skeleton className="h-48 w-full" />
       ) : detail ? (
-        <div className="grid gap-3">
-          {detail.errors?.length ? (
-            <Alert role="alert" variant={detail.status === "ok" ? "default" : "destructive"}>
-              <AlertTitle>Dagster 응답 메시지</AlertTitle>
-              <AlertDescription>{detail.errors.join(" / ")}</AlertDescription>
-            </Alert>
-          ) : null}
-          {run && dagsterStatusTone(run.status) === "error" ? (
-            <RunFailureBanner
-              ackPending={ackPending}
-              alert={failureAlert}
-              onAck={onAckFailure}
-              run={run}
-            />
-          ) : null}
-          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">status</dt>
-            <dd>
-              <StatusBadge value={detail.status} tone={dagsterStatusTone(detail.status)} />
-            </dd>
-            <dt className="text-muted-foreground">job</dt>
-            <dd className="min-w-0 break-all">{run?.job_name ?? "-"}</dd>
-            {loadJobId ? (
-              <>
-                <dt className="text-muted-foreground">load job</dt>
-                <dd className="min-w-0 break-all font-mono">{loadJobId}</dd>
-              </>
-            ) : null}
-            {backupArtifact ? (
-              <>
-                <dt className="text-muted-foreground">backup artifact</dt>
-                <dd className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="min-w-0 break-all font-mono">
-                    {backupArtifact.display_name ?? backupArtifact.artifact_id}
-                  </span>
-                  <StatusBadge
-                    value={backupArtifact.state}
-                    tone={dagsterStatusTone(backupArtifact.state)}
-                  />
-                  {backupArtifact.size_bytes != null ? (
-                    <span className="text-muted-foreground">
-                      {formatBytes(backupArtifact.size_bytes)}
-                    </span>
-                  ) : null}
-                  {backupArtifactHref ? (
-                    <Button asChild size="sm" variant="outline">
-                      <a aria-label="backup artifact 다운로드" href={backupArtifactHref}>
-                        <Download aria-hidden="true" />
-                        다운로드
-                      </a>
-                    </Button>
-                  ) : null}
-                </dd>
-              </>
-            ) : null}
-            <dt className="text-muted-foreground">started (UTC)</dt>
-            <dd>{formatDagsterEpoch(run?.start_time)}</dd>
-            <dt className="text-muted-foreground">updated (UTC)</dt>
-            <dd>{formatDagsterEpoch(run?.update_time)}</dd>
-          </dl>
-          <OpLogGroups events={detail.events ?? []} />
-        </div>
+        <LoadedRunDetails detail={detail} ackPending={ackPending} onAckFailure={onAckFailure} />
       ) : (
         <p className="wizard-hint">Run 상세를 불러오지 않았습니다.</p>
       )}
@@ -428,6 +362,23 @@ function RecentFailuresPanel({ onSelectRun }: { onSelectRun: (runId: string) => 
   );
 }
 
+const OP_LOG_COLUMNS: VirtualColumn<DagsterRunEvent>[] = [
+  {
+    key: "time",
+    header: "time (UTC)",
+    cellClassName: "whitespace-nowrap font-mono",
+    cell: (event) => formatDagsterEventTime(event.timestamp)
+  },
+  { key: "event", header: "event", cell: (event) => event.event_type },
+  { key: "level", header: "level", cell: (event) => event.level ?? "-" },
+  {
+    key: "message",
+    header: "message",
+    cellClassName: "break-all",
+    cell: (event) => event.message ?? event.error?.message ?? "-"
+  }
+];
+
 function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
   const groups = useMemo(() => groupEventsByStep(events), [events]);
   if (groups.length === 0) {
@@ -453,39 +404,115 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
               {backup ? <Badge tone="info">backup op</Badge> : null}
               <Badge tone="neutral">{group.events.length} event</Badge>
             </summary>
-            <div className="dagster-op-log border-t border-border" role="region"
-              aria-label={`${group.stepId ?? "run-level"} 이벤트 로그`} tabIndex={0}>
-              <table className="dagster-op-log-table w-full text-left text-xs">
-                <thead>
-                  <tr className="text-muted-foreground">
-                    <th className="px-3 py-1 font-medium">time (UTC)</th>
-                    <th className="px-3 py-1 font-medium">event</th>
-                    <th className="px-3 py-1 font-medium">level</th>
-                    <th className="px-3 py-1 font-medium">message</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.events.map((event) => (
-                    <tr
-                      key={`${event.timestamp ?? ""}:${event.event_type}:${event.level ?? ""}:${event.message ?? event.error?.message ?? ""}`}
-                      className="border-t border-border/50 align-top"
-                    >
-                      <td className="whitespace-nowrap px-3 py-1 font-mono">
-                        {formatDagsterEventTime(event.timestamp)}
-                      </td>
-                      <td className="px-3 py-1">{event.event_type}</td>
-                      <td className="px-3 py-1">{event.level ?? "-"}</td>
-                      <td className="px-3 py-1 break-all">
-                        {event.message ?? event.error?.message ?? "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div
+              className="dagster-op-log border-t border-border"
+              role="region"
+              aria-label={`${group.stepId ?? "run-level"} 이벤트 로그`}
+              tabIndex={0}
+            >
+              <div className="dagster-op-log-table w-full text-left text-xs">
+              <VirtualTable
+                as="table"
+                columns={OP_LOG_COLUMNS}
+                compact
+                wrapCells
+                rowKey={(event) =>
+                  `${event.timestamp ?? ""}:${event.event_type}:${event.level ?? ""}:${event.message ?? event.error?.message ?? ""}`
+                }
+                rows={group.events}
+              />
+              </div>
             </div>
           </details>
         );
       })}
     </div>
+  );
+}
+
+function LoadedRunDetails({
+  detail,
+  ackPending,
+  onAckFailure
+}: {
+  detail: DagsterRunDetailData;
+  ackPending: boolean;
+  onAckFailure: (runId: string) => void;
+}) {
+  const run = detail.run;
+  const failureAlert = detail.failure_alert ?? null;
+  return (
+    <div className="grid gap-3">
+      {detail.errors?.length ? (
+        <Alert role="alert" variant={detail.status === "ok" ? "default" : "destructive"}>
+          <AlertTitle>Dagster 응답 메시지</AlertTitle>
+          <AlertDescription>{detail.errors.join(" / ")}</AlertDescription>
+        </Alert>
+      ) : null}
+      {run && dagsterStatusTone(run.status) === "error" ? (
+        <RunFailureBanner
+          ackPending={ackPending}
+          alert={failureAlert}
+          onAck={onAckFailure}
+          run={run}
+        />
+      ) : null}
+      <RunDetailMetadata detail={detail} />
+      <OpLogGroups events={detail.events ?? []} />
+    </div>
+  );
+}
+
+function RunDetailMetadata({ detail }: { detail: DagsterRunDetailData }) {
+  const run = detail.run;
+  const backupArtifact = detail.backup_artifact ?? null;
+  const backupArtifactHref = backupDownloadHref(backupArtifact?.download_url);
+  const loadJobId = run?.tags?.["kor_travel_geo.job_id"];
+  return (
+    <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+      <dt className="text-muted-foreground">status</dt>
+      <dd>
+        <StatusBadge value={detail.status} tone={dagsterStatusTone(detail.status)} />
+      </dd>
+      <dt className="text-muted-foreground">job</dt>
+      <dd className="min-w-0 break-all">{run?.job_name ?? "-"}</dd>
+      {loadJobId ? (
+        <>
+          <dt className="text-muted-foreground">load job</dt>
+          <dd className="min-w-0 break-all font-mono">{loadJobId}</dd>
+        </>
+      ) : null}
+      {backupArtifact ? (
+        <>
+          <dt className="text-muted-foreground">backup artifact</dt>
+          <dd className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 break-all font-mono">
+              {backupArtifact.display_name ?? backupArtifact.artifact_id}
+            </span>
+            <StatusBadge
+              value={backupArtifact.state}
+              tone={dagsterStatusTone(backupArtifact.state)}
+            />
+            {backupArtifact.size_bytes != null ? (
+              <span className="text-muted-foreground">
+                {formatBytes(backupArtifact.size_bytes)}
+              </span>
+            ) : null}
+            {backupArtifactHref ? (
+              <Button asChild size="sm" variant="outline">
+                <a aria-label="backup artifact 다운로드" href={backupArtifactHref}>
+                  <Download aria-hidden="true" />
+                  다운로드
+                </a>
+              </Button>
+            ) : null}
+          </dd>
+        </>
+      ) : null}
+      <dt className="text-muted-foreground">started (UTC)</dt>
+      <dd>{formatDagsterEpoch(run?.start_time)}</dd>
+      <dt className="text-muted-foreground">updated (UTC)</dt>
+      <dd>{formatDagsterEpoch(run?.update_time)}</dd>
+    </dl>
   );
 }
