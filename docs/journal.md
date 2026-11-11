@@ -4,7 +4,8 @@
 - CodeGraph MCP가 노출되지 않아 Linux CLI sync/status/impact를 사용했다. VirtualTable 영향 그래프가 자기 심벌/파일만 반환해 호출자 검색으로 BackupsPanel·ConsistencyPanel·ReconcileTab을 추가 확인했다.
 - 기존 fr 열 너비 무시와 헤더 입력 remount/포커스 손실을 실제 회귀2개로 먼저 실패시켰다. 열 비율을 공통 크기 모델에 연결하고 고정 헤더 컴포넌트가 현재 meta를 읽게 변경한 뒤 해당13개·전체289개가 통과했다. lint·타입·Doctor 전체 진단0도 확인했다.
 - 옛 private root-source alias에서 webpack 빌드가 실제 모듈 해석 오류로 실패했다. 공개 core/web 배포물 진입점으로 정리한 뒤 webpack·Turbopack 빌드가 모두 통과했다. 사용하지 않는 설치 후 source 변경 스크립트와 이전 vendor 파일을 제거했다.
-- 현재 소비 파일은 공통 후보6이며 최종 CSS 원본 수정/공통 정책과 새 단일 pack은 아직 후속이다. 독립2리뷰·정확 CI·PR·배포 gate를 통과로 집계하지 않는다.
+- 최종 소비는 단일 후보9 UI0.2.0/tokens0.1.1·VWorld core1.0.1/web1.0.3·Lightning CSS fix.4다. 실제 vendor/설치/lock/원장/SRI와 외부 정본 guard가 일치한다. 후보8→9는 checker 두 파일만 달라 runtime117파일의 실제 byte 동등성을 확인했다.
+- n150 clean npm ci/peer tree와 두 production builder, Chromium27·Firefox27을 통과했다. 병렬 Firefox 최초 지도 준비 시간 초과는 보존하고 동일 assertion 순차 전체27 PASS와 구분한다. 최종 검증 source는 eee413d이며 이후 통합 보고서·중앙 CI pin·진척 문서만 갱신한다. 독립2리뷰·정확 CI·PR·운영 배포는 후속 gate다.
 
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 

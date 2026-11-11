@@ -1,6 +1,6 @@
 ## 2026-11-11 — 공통 Radix·표·지도 라이브러리 이관 후보
 
-공통 적용 범위·장단점·전체 직접 의존성 비교와 최신 검증/미완 gate는 [통합 보고서](kor-travel-common-library-review.md)에 기록한다. 공개 지도 패키지 소비로 전환하고 설치 후 source 수정과 private root alias를 제거했다. 다음은 최종 단일 pack 동기화·독립2리뷰·CI·PR머지·운영 UI 배포다. 현재 후보는 운영에 배포하지 않았다.
+공통 적용 범위·장단점·전체 직접 의존성 비교와 최신 검증/미완 gate는 [통합 보고서](kor-travel-common-library-review.md)에 기록한다. 공개 지도 패키지 소비로 전환하고 설치 후 source 수정과 private root alias를 제거했다. 최종 후보9 실제 파일·lock·SHA512·외부 정본 guard, strict npm ci/peer tree, 두 빌드와 Chromium27/Firefox27을 통과했다. 다음은 독립2리뷰·CI·PR머지·운영 UI 배포다. 현재 후보는 운영에 배포하지 않았다.
 
 ## 2026-11-10 — geocode 504: 행정구역 후보 SQL 비용 제거(#629)
 
