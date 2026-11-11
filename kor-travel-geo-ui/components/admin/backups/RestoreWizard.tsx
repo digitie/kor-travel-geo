@@ -428,12 +428,10 @@ function RestoreSubmittedStep({ controller }: { controller: RestoreStepControlle
 function RestoreChooseStep({ controller }: { controller: RestoreStepController }) {
   const {
     artifacts,
-    step,
     artifactId,
     archivePath,
     mode,
     targetDatabase,
-    error,
     targetDbError,
     step1Valid,
     dispatchState
@@ -539,7 +537,7 @@ function RestoreChooseStep({ controller }: { controller: RestoreStepController }
 }
 
 function RestorePreviewStep({ controller }: { controller: RestoreStepController }) {
-  const { step, archivePath, busy, selected, dispatchState, runDryRun } = controller;
+  const { archivePath, busy, selected, dispatchState, runDryRun } = controller;
   return (
     <div className="wizard-preview">
       <ManifestPreview archivePath={archivePath} artifact={selected} />
@@ -556,7 +554,7 @@ function RestorePreviewStep({ controller }: { controller: RestoreStepController 
 }
 
 function RestoreDryRunStep({ controller }: { controller: RestoreStepController }) {
-  const { step, dryRun, dispatchState } = controller;
+  const { dryRun, dispatchState } = controller;
   return (
     <div className="wizard-dryrun">
       <DryRunReport result={dryRun} />
@@ -574,7 +572,6 @@ function RestoreDryRunStep({ controller }: { controller: RestoreStepController }
 
 function RestoreConfirmStep({ controller }: { controller: RestoreStepController }) {
   const {
-    step,
     mode,
     confirmation,
     dryRun,

@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldTitle } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError, getErrorMessage, postJson } from "@/lib/api";
@@ -431,20 +431,20 @@ function FileDropZone({
   disabled: boolean;
   onFileSelected: (file: File) => void;
 }) {
-  const [dragOver, setDragOverState] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const oversize = Boolean(file && maxBytes && file.size > maxBytes);
 
   return (
     <div
       className={cn("upload-dropzone", dragOver && "drag-over", disabled && "disabled")}
-      onDragLeave={() => setDragOverState(false)}
+      onDragLeave={() => setDragOver(false)}
       onDragOver={(event) => {
         event.preventDefault();
-        if (!disabled) setDragOverState(true);
+        if (!disabled) setDragOver(true);
       }}
       onDrop={(event) => {
         event.preventDefault();
-        setDragOverState(false);
+        setDragOver(false);
         if (disabled) return;
         const dropped = event.dataTransfer.files?.[0];
         if (dropped) onFileSelected(dropped);
@@ -561,7 +561,7 @@ function UploadWizardStep({ controller }: { controller: UploadWizardController }
 }
 
 function UploadCategoryStep({ controller }: { controller: UploadWizardController }) {
-  const { categories, step, categoryKey, file, preview, session, dispatch } = controller;
+  const { categories, categoryKey, dispatch } = controller;
   return (
     <CategoryPickerStep
       categories={categories}

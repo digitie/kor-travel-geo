@@ -78,12 +78,7 @@ export function HotSwapTab({
     plan,
     windowOpened,
     execConfirmation,
-    rollbackConfirmation,
-    result,
-    sourceVerify,
-    rollbackResult,
-    busy,
-    error
+    rollbackConfirmation
   } = state;
   // 복원 이력(db_restore_log)의 target_database들 — restore_database datalist 자동 완성.
   const [restoreDbOptions, setRestoreDbOptions] = useState<string[]>([]);
@@ -400,7 +395,7 @@ function HotSwapMaintenancePanel(props: HotSwapLayoutProps) {
 
 function HotSwapExecutePanel(props: HotSwapLayoutProps) {
   const { execReady, onExecute, onStateChange } = props;
-  const { plan, windowOpened, execConfirmation, result, busy, error } = props.state;
+  const { plan, windowOpened, execConfirmation, result, busy } = props.state;
   return (
     <Panel title="3 · 실행 (위험)">
       {plan ? (
@@ -448,7 +443,7 @@ function HotSwapExecutePanel(props: HotSwapLayoutProps) {
 
 function HotSwapRecoveryPanel(props: HotSwapLayoutProps) {
   const { onRollback, onStateChange, onVerifySource, rollbackReady } = props;
-  const { plan, rollbackConfirmation, sourceVerify, rollbackResult, busy, error } = props.state;
+  const { plan, rollbackConfirmation, sourceVerify, rollbackResult, busy } = props.state;
   return (
     <Panel title="4 · source 재검증 / rollback">
       <div className="form-grid">

@@ -129,7 +129,7 @@ describe("admin auth", () => {
       outcome: "denied",
       payload_redacted: { reason: "invalid_credentials" }
     }));
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => {
       return new Response(JSON.stringify(rows), {
         headers: { "content-type": "application/json" },
         status: 200
