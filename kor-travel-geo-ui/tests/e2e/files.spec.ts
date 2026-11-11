@@ -170,7 +170,7 @@ test.describe("파일 관리 /admin/files (T-283)", () => {
     await expect(table.getByText("kor_travel_geo-20260701.tar.zst")).toBeVisible();
     await expect(table.getByText("서빙 사용 중")).toBeVisible();
     await expect(table.getByText("미등록 객체")).toBeVisible();
-    await expect(table.getByText("사용 중")).toBeVisible();
+    await expect(table.getByText("사용 중", { exact: true })).toBeVisible();
   });
 
   test("임시/정리 대상 필터가 쿼리로 전달된다", async ({ page }) => {
