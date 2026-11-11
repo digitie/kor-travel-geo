@@ -1,3 +1,9 @@
+## 2026-11-12 — 독립 리뷰의 Button 공통 위임 누락 수정
+
+- A-CONS-P2-03의 지역 Button/전체 CVA 소유를 제거하고 공통 Button·서버 호출 가능한 순수 button-variants를 직접 소비한다. CodeGraph MCP 미노출로 Linux CLI sync→status→impact를 실행했고, graph가 두 자기 노드만 반환하여23개 import 경로와7개 명시적 submit 호출을 검색으로 추가 확인했다.
+- 같은 회귀5개에서 수정 전3 FAIL/2 PASS, 수정 후5 PASS를 확인했다. 진행 중 활성화 차단·비활성화 이유·기본 폼 동작·asChild 링크·React19 ref와 Radix trigger의 Escape/포커스 복귀를 검사했다. 전체294·타입·lint·Doctor0을 통과했다.
+- 작업 트리의 후보10 설치 bytes/guard와 source 수정 검증을 구분한다. Scope의 후속 disabled-fieldset 원본 수정2차와 최종 공통 후보·두 리뷰·새 브라우저/CI/merge/deploy는 후속이다. 원 리뷰어 재확인 전 finding을 임의 닫지 않는다.
+
 ## 2026-11-11 — 공통 UI 소비와 Geo 호환 계약 검증
 
 - 공통 부품은 재export, 표는 공통 VirtualTable의 도메인 열 변환으로 연결했다. 세부 범위와 전체 라이브러리 비교는 [통합 보고서](kor-travel-common-library-review.md)를 따른다.
