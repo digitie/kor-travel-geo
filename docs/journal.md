@@ -1,3 +1,10 @@
+## 2026-11-13 — B-GEOBUILD-P2-01의 lint warning0 연결
+
+- 실제 lint에 --max-warnings 0만 추가했다. 기존 설정 진단7개와 rules/severity/ignore는 그대로다.
+- 동일 warning-only TSX는 실제 ESLint10.14.0에서 errors0/warnings1이며 기존 CLI exit0·새 인자 exit1이다. 현재 전체 앱 npm run lint도 exit0이다.
+- 로컬 기존 읽기 전용 모듈·Node22.22.2/npm11.19.1로 실행한 source lint이며 선택된 Node22.23.1/npm12의 최종 cloud CI를 대체하지 않는다. 설치·새 이미지·UI 수정0이다.
+- 원55c와 B 조건부 원문은 보존한다. 원 두 리뷰의 source2 재확인·최종 exact CI·새 non-root 이미지 수용은 아직 미완이다.
+
 ## 2026-11-13 — 실제 병합된 Common toolchain guard 연결
 
 - reusable uses/common-ref를 실제 merge36e4d285ea926b9d8c20da4221ade86ebf74c04d로 고정했다. 기존 frontend matrix의 private anchor와 생산 Node Dockerfile 경로를 JSON으로 연결하며 추가 설치 anchor는 없다.

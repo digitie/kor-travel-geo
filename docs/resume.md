@@ -1,3 +1,10 @@
+## 현재 상태 — 2026-11-13 lint warning0 후속 후보
+
+B-GEOBUILD-P2-01을 위해 기존 lint에 --max-warnings 0을 추가했다.
+warning-only 실제 CLI 전exit0/후exit1과 현재 전체 npm run lint exit0을 확인했다.
+rules/severity/ignore·설정 진단7개·lock/vendor/공통 보고서는 변경하지 않았다.
+로컬 source lint와 canonical Node/npm 최종 CI는 구분한다. 다음은 원2 bounded 재확인과 새 exact CI/이미지 QA다.
+
 ## 현재 상태 — 2026-11-13 최종 Common ref 연결 후보
 
 Common 실제 merge36e4d285ea926b9d8c20da4221ade86ebf74c04d의 reusable guard에
