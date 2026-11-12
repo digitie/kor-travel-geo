@@ -109,7 +109,9 @@ ktgctl refresh mv --swap
 ```bash
 cd ~/dev/kor-travel-geo-codex-test/kor-travel-geo-ui
 cp .env.local.example .env.local
-npm ci
+nvm use
+npm install --global npm@12.0.1
+npm ci --engine-strict
 npm run gen:types
 npm run dev -- --port 12505
 ```
@@ -158,7 +160,7 @@ python scripts/export_openapi.py --check --output openapi.json
 ```bash
 scripts/frontend_check.sh
 cd kor-travel-geo-ui
-npx react-doctor@latest . --offline --verbose --json
+npm run doctor
 ```
 
 Playwright e2e와 실제 브라우저 검증은 n150 Linux 환경에서 먼저 실행합니다. n150에서 실행할 수 없는 경우에만 Windows Playwright를 fallback으로 사용하고, 그 사유와 명령을 작업 기록에 남깁니다.

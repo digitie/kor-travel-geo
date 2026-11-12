@@ -1,3 +1,19 @@
+## 2026-11-13 — CI-33의 웹 runner non-root 소스 후보
+
+최종 runner를 USER node로 고정하고 .next와 이미지 내부 cache의 소유권만 조정했다.
+전체 node_modules와 기존 npm start/Compose 명령을 유지하며 next.config.mjs를 명시 복사한다.
+public 자산/worker는 기존 빌드 산출물을 그대로 보존한다. host chmod·root ENV·backend UID·UI/라이브러리 변경0이다.
+이는 소스 후보이며 실제 새 이미지의 uid/config/cache/worker/start·로그인fixture·SSR/health QA는 미실행이다.
+기존 native QA를 새 image profile 수용으로 소급하지 않는다. 실제 Common guard ref/새 이미지 QA/원2리뷰 뒤 최종 merged source에서 한 번 배포한다.
+## 2026-11-13 — Node/npm 도구 선택과 검증 진입점 정렬 후보
+
+- 실제 main 8ddfea6d에서 별도 branch agent/build-rules-geo-20261113을 만들었다. 앞선 e63 branch와 C11 산출물·공통 라이브러리 종합 보고서는 보존한다.
+- private UI anchor에 Node22.23.1/npm12.0.1과 packageManager를 선언하고 .nvmrc·engine-strict 설정을 추가했다. lock은 root engines metadata만 갱신하며 의존성 그래프·버전·SRI는 변경하지 않는다.
+- 기존 CI step 상대 순서를 유지한 채 설치 step에서 npm12를 전역 선택하고 strict ci를 사용한다. Alpine UI Docker 3개 stage는 공식 registry에서 검산한 같은 Node22.23.1 multi-arch digest와 npm12를 사용한다. 새 base ARG·label·운영 입력은 추가하지 않는다.
+- 로컬 frontend helper에 같은 도구 버전 확인·의존성 guard·Doctor를 추가하고 문서의 unbounded latest 명령을 잠긴 npm run doctor로 맞춘다. 기존 full/blocking warning 기준을 유지한다.
+- Python T-440의 lock·pre-commit·GDAL ABI·Dagster constraints는 별도 읽기 전용 검토로 남기며 이 후보에서 Python/DB/runtime을 바꾸지 않는다.
+- 로컬 설치·full build·원격 heavy 검증은 실행하지 않았다. 공통 새 checker/reusable guard의 실제 code ref와 지원 input이 아직 미제공이므로 현재55 ref를 임의 교체하거나 push하지 않는다. 정적 diff·구문/metadata 확인과 영향별 후속 검증 계획만 먼저 준비한다.
+
 ## 2026-11-12 — C11 정본 채택·공통 머지와 최종 UI 검증
 
 공통 PR49는 원 A/B COMMON7 PASS·정확 CI 성공 후 e8ed3ae로 머지했다. Geo는 단일 C11 UI/tokens 및 원본에서 수정·머지한 FocusScope fix.2를 채택했다. actual263파일·설치/외부 정본 guard·단위294·type/lint·Doctor273파일0진단을 확인했다. 공통 Button source43c4a7f의 기존 회귀5개도 통과한다. 단일 통합 보고서에 모든10개 표면의 실행/개발/peer/선택 의존성 비교를 갱신했다. 다음은 C11 production build·Chromium27/Firefox27, 정확 PR631 CI·최종 두 독립 리뷰·merged SHA 새 UI 이미지와 실제 화면 수용이다. 현재 운영 신규 배포는 없다.

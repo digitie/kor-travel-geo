@@ -24,7 +24,11 @@ fi
 if [ -z "${KTG_SKIP_NVM:-}" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1091
   . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
-  nvm use --silent default >/dev/null 2>&1 || true
+  _kg_node_version="$(cat "$(dirname "${BASH_SOURCE[0]}")/../.nvmrc")"
+  if ! nvm use --silent "$_kg_node_version" >/dev/null 2>&1; then
+    echo "agent_env: WARN .nvmrc의 Node $_kg_node_version 을 먼저 설치하세요." >&2
+  fi
+  unset _kg_node_version
 fi
 
 _kg_npm="$(command -v npm 2>/dev/null || true)"
