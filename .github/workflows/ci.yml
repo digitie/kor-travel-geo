@@ -4,9 +4,23 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
+  common-policy:
+    permissions:
+      contents: read
+    uses: digitie/kor-travel-common/.github/workflows/frontend-consumer-guard.yml@9e163936d72b6323f5a38e266004534152767751
+    with:
+      common-ref: 9e163936d72b6323f5a38e266004534152767751
+      frontends: >-
+        [{"package":"kor-travel-geo-ui/package.json","lock":"kor-travel-geo-ui/package-lock.json","workspace":"","profile":"web"}]
+      toolchain-manifests: '[]'
+      node-dockerfiles: >-
+        ["kor-travel-geo-ui/Dockerfile"]
+
   backend:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -43,6 +57,7 @@ jobs:
   # round trip. They skip without KTG_TEST_PG_DSN, so this job provides one and then fails if
   # anything was skipped or too few tests were collected (a silent skip is not coverage).
   integration-postgis:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -170,6 +185,7 @@ jobs:
   # resolve: the main lib, the Dagster package, and a real Postgres-backed Dagster instance
   # through the psycopg2 storage URL the image requires (dagster_postgres is psycopg2-only).
   dagster:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -245,6 +261,8 @@ jobs:
           PY
 
   frontend:
+    if: github.event_name != 'workflow_dispatch'
+    needs: common-policy
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -262,15 +280,17 @@ jobs:
           node --version
           npm --version
           npm ci --engine-strict
+      - name: Frontend lint
+        run: npm run lint
+      - name: React Doctor
+        run: npm run doctor
       - name: Generate API types
         run: npm run gen:types
       - name: Verify generated files are committed
         run: git diff --exit-code -- types/api.gen.ts lib/schemas.gen.ts
-      - name: Lint, type-check, test, build
-        run: |
-          npm run check:dependencies
-          npm run doctor
-          npm run lint
-          npm run type-check
-          npm run test
-          npm run build
+      - name: Frontend type-check
+        run: npm run type-check
+      - name: Frontend unit tests
+        run: npm run test
+      - name: Frontend production build
+        run: npm run build
