@@ -1,6 +1,32 @@
 # 공통 라이브러리 비교·구현·검증 통합 보고서
 
-작성 기준: 2026-11-12 한국시간. 최신 Transport 요구인 Geo형 모바일 Drawer·PC 세로 rail의 실제 정상9/9검사 PASS를 부모가 독립 확인했다. 현재 운영은 PR186 merged f30dbd823614399d6dc671eb1f1bf4d8f46c6064 / ARM image sha256:0ac648f860f7aba501ad6ff1b6f4457344e0ed91ebd60a2d1a9a4338b97be69b다. 6개 앱의 배포·실제 수용을 확인한 범위와 Map 사용자 제외를 유지한다. owner 최종 영수증·63개 index 검산과 [Common50](https://github.com/digitie/kor-travel-common/pull/50) 병합678a5bcf를 확인했다. 최종 실제 수용은 [공개6개 앱 배포 영수증](https://github.com/digitie/kor-travel-common/blob/678a5bcf0150ac0386bfa86106e7e0f4f77e8639/docs/reviews/adversarial/evidence/2026-11-12-frontend-deployment-receipt.json)과 연결한다. 이 단일 MD의 최종 사실 delta는 기존 원 A/B와 정확 CI 검토 대상이며, 후속 빌드 생태계·CI/테스트 통일·최후 CI 순서 최적화는 미완료다.
+> **2026-11-13 최종 정산 — 이번 대상 소스·runtime·정상 QA·CI-LAST 완료.** 아래 표가 최종 확인 상태이며 뒤의 phase1·초기 phase2 표와 FAIL은 해당 시점의 역사다. 최종 PR CI와 실제 merged 소스의 동일 payload를 근거로 판정했다. 병합으로 자동 시작하는 main push CI는 별도 실행이며 그 중복 전체 suite 완료를 기다리거나 모두 PASS라고 선언하지 않는다. 문서 때문에 새 빌드·로그인·runtime 검사를 반복하지 않았다.
+
+### 현재 실제 상태
+
+| 대상 | 최신 실제 상태 | 완료와 구분하는 경계 |
+|---|---|---|
+| Docker Manager | 기본 UI048과 보조 UI746의 실제 정상 수용 완료. 보조 UI의 Node22.23.1/npm12.0.1·HTTP200·로그인/공통 표/메뉴/폰트/로그아웃 확인 | 보조 UI의 과거 Node22.22.1/npm9.2.0·source marker 미확정과 최초401은 역사 |
+| Manager SDK | [602 / 127adf48](https://github.com/digitie/kor-travel-docker-manager/commit/127adf48ce02686067840b826c02c3db7765e3fe) 양 호스트 정상 설치 완료. 각각 설치1회/exit0/health200·source498/Python75 일치, 실제 프론트와 인증값 보존 | backend Python 전체 역할의 exact 통일을 뜻하지 않음. 후속 workflow-only ref 변경 때문에 runtime 설치를 반복하지 않음 |
+| Weather | [378a0841](https://github.com/digitie/kor-travel-weather/commit/378a0841e82eb33b8e0bbb8f6f485d6a65ee3c6d)의 새 API·CS·web ARM 이미지3개 적용·healthy/CURRENT·원래 수집기24개 복구·최소 정상 UI PASS | DB0040 실제 Alembic upgrade 완료. 같은 head 배포에서 백업·DDL 재실행0. 첫 잘못된 QA Origin403은 별도 보존 |
+| Transport | [d9d4559c](https://github.com/digitie/kor-travel-transport/commit/d9d4559c02076975c80b688410591da0106b5873)의 새 core/공개/관리자 실행·healthy/CURRENT, 원래 수집기20개 복구와 post-core 최소 인증 PASS | 이전 CS writable-layer checkpoint 보존은 미확인이다. healthy/CURRENT를 그 보존 증거로 표시하지 않음. schema0042 유지와 별도 |
+| Pinvi | 실제 M2c1/web660 공식 운영 적용·최종 정상 UI23PASS 완료 | 초기 격리19PASS와 별개 결과. native 물리 기기·EAS·스토어 NOT_RUN |
+| Concierge | 실제 Md247/new087 공식 활성화·정상 운영 UI PASS 완료 | 초기 c515 parser/timeout 실패는 다른 이미지·세션의 역사로 유지 |
+| Geo | [634 / 253b4459](https://github.com/digitie/kor-travel-geo/commit/253b445985c293518fab9a2ba4aa397b7459c3a0)의 새 UI 이미지 반입·native·공식 적용·healthy/CURRENT와 실제 최소 정상 QA26.19초 PASS | 로그인/로그아웃 각1·보호401·표 검색·실제 Pretendard·PNG bitmap1. Toast dismiss는 안전한 정상 trigger가 없어 NOT_RUN, 5폭·줌 재실행0 |
+| 공통 정책·CI | [Common56 / 9e163936](https://github.com/digitie/kor-travel-common/commit/9e163936d72b6323f5a38e266004534152767751) 정확 HEAD4f41c46의4workflow/15job SUCCESS, 소비6repo·8표면도 최종 PR CI와 실제 병합 완료 | 모두 uses와 common-ref를9e1639로 연결. Pinvi 조건부SKIP1·Transport 기존 live-e2e SKIP은 PASS에 합산하지 않음. C11·Toast bytes·운영 이미지 변경0 |
+
+프론트 toolchain 기준은 **Node22.23.1/npm12.0.1**, Pinvi Expo는 **58.0.25**다. 이번 대상의 완료를 **backend Python 전체 역할의 exact 통일 완료**로 확대하지 않으며 역할별 의존성·ABI·예외 감사의 한계를 남긴다. 임의로 모든 backend를 같은 Python으로 올리지 않았다. Map은 Claude 별도 소유로 이 작업의 source/build/image/runtime/apply에서 제외했다. **CI-LAST는 Common56과 소비6repo·8표면의 최종 PR CI·병합까지 완료**됐다. 문서 작성자는 기존 최종 결과를 취합했으며 새 CI 조사·전체 suite를 반복하지 않았다.
+
+<details>
+<summary>초기 phase2 요약 — 다음 대기·현재 표현은 당시 역사이며 최신 판정이 아님</summary>
+
+다음 단락은 phase2 초기 체크포인트이며 이후 실제 진행은 §2의 2026-11-13 후속 상태 갱신을 따른다. 현재 phase2 toolchain은 Node22.23.1/npm12.0.1이다. Common52는 실제 merged `2a34d8557ea055d4b7dd4c5d18e858faa901bf4a`로 확정됐고 원 A/B 모두 PASS·자체 P2 FIXED·신규0, 정확4CI/15job SUCCESS다. Common36과의 이력을 구분하며 비Map 소비 ref 전파는 아직 별도 미완 gate다. Manager 기본 UI는 기술 배포 PASS이며 이전 정상 로그인401은 역사로 보존한다. 이후 사용자 명시로 Manager 비밀번호만 Geo 검증값에 맞췄고 새 정상 QA는 대기다. 보조 UI의 실제 Node22.22.1/npm9.2.0 drift와 배포 source 미확정은 별도 미완 항목이며, Pinvi 새 이미지는 격리19PASS까지다. Geo ARM 빌드와 Concierge 빌드/QA는 진행 중, Weather·Transport 새 merged 이미지는 대기다. SDK593 이후 SDK594도 실제 merged `746c4009879f7b166e26f563199ea1c0b6abec51`로 확정됐다. 검토d117/tree37c70212와 동일하며 원 A/B 모두 PASS·신규0, 정확2CI/3job·backend4147PASS/40SKIP·frontend54/browser2/Doctor0이다. 양 호스트 공식 SDK746 설치와 변경 전 보존 검증은 완료했다. 그 뒤 승인된 Manager password-only 변경은 별도 증거이며 보조 UI toolchain 갱신은 아직 계획이다. 자세한 분리는 §2와 §7.2.1을 따른다. **CI 순서/needs/fail-fast는 VERY LAST·NOT_STARTED**, Map 추가 작업0, native 실기기/EAS/store는 NOT_RUN이다.
+
+</details>
+
+### Phase1 역사 — 2026-11-12 당시의 배포·수용 기록
+
+작성 기준: 2026-11-12 한국시간. 최신 Transport 요구인 Geo형 모바일 Drawer·PC 세로 rail의 실제 정상9/9검사 PASS를 부모가 독립 확인했다. 당시 phase1 운영은 PR186 merged f30dbd823614399d6dc671eb1f1bf4d8f46c6064 / ARM image sha256:0ac648f860f7aba501ad6ff1b6f4457344e0ed91ebd60a2d1a9a4338b97be69b다. 6개 앱의 배포·실제 수용을 확인한 범위와 Map 사용자 제외를 유지한다. owner 최종 영수증·63개 index 검산과 [Common50](https://github.com/digitie/kor-travel-common/pull/50) 병합678a5bcf를 확인했다. 최종 실제 수용은 [공개6개 앱 배포 영수증](https://github.com/digitie/kor-travel-common/blob/678a5bcf0150ac0386bfa86106e7e0f4f77e8639/docs/reviews/adversarial/evidence/2026-11-12-frontend-deployment-receipt.json)과 연결한다. 이 단일 MD의 최종 사실 delta는 기존 원 A/B와 정확 CI 검토 대상이며, 후속 빌드 생태계·CI/테스트 통일·최후 CI 순서 최적화는 미완료다.
 
 최종 source bd08·CI 합성8303·merged f30의 전체 tree는4fec4f76df0cd88fdaca22d42ae2acb2f876ce6f로 같다. 정상 ARM docker build6.6초의 같은 tree cache 재사용은 retag가 아니며 source909/COPY298/Common263/routes32·승인 키·환경·OCI/default M strict 검증을 통과했다. SDK508 dry-run1/confirm1·오류0·healthy/current/postproof와 부모의 원격44개 원문 검산을 완료했다. 선택된 Transport 관리자 current는 새 tuple로 갱신하고 타54개·공개936·backend499/schema0042·auth/env/pin 및 타 앱 current는 보존했다.
 
@@ -19,19 +45,19 @@
 | 공통 영역 | 확정된 구현·버전 | 앱이 유지하는 책임 |
 |---|---|---|
 | 웹 엔진 | React/DOM19.3.1, Next16.4.6, Tailwind 및 PostCSS 플러그인4.3.5, PostCSS8.5.32 | 라우트·서버/클라이언트 경계·앱별 빌드 설정 |
-| 컴포넌트 | @kor-travel/ui0.2.0의 shadcn/ui Radix 프리미티브·overlay·공통 로그인·Dagster UI | 도메인 필드·작업·인가·데이터 연결 |
+| 컴포넌트 | @kor-travel/ui0.2.0의 shadcn/ui Radix 프리미티브·overlay·공통 로그인·Dagster UI, 선택형 @kor-travel/toast0.1.0 | 도메인 필드·작업·인가·데이터 연결 |
 | 표 | 공통 VirtualTable, TanStack Table9.3.1·Virtual3.14.26 | 서버 정렬/페이지·행 키·선택 권한·도메인 셀 내용 |
 | 폼·상태 | RHF7.92.0, Zod4.6.7, Zustand5.1.0, resolver7.0.5는 사용하는 앱에서 일치 | 입력 스키마·제출 API·서버 캐시·상태 수명 |
 | 토큰·폰트 | @kor-travel/tokens0.1.1, Pretendard1.3.9, 의미 토큰·웹 CSS bridge | 앱 브랜드·레이아웃·데이터 시각화 의미 |
 | 지도 | vworld-map-core1.0.1/web1.0.3/RN1.0.1, 웹 MapLibre6.17.0 | 중심/범위·업무 geometry·API 결과·플랫폼 어댑터 |
 | 품질 | ESLint10.14.0, React Doctor0.9.22, 타입·단위·production browser·중앙 정책 CI | 의미 있는 회귀 단언·예외 근거·정확 소스와 증거 연결 |
-| 모바일 | Expo58.0.24, RN0.88.1, NativeWind5.0.0-rc.1, react-native-css3.1.0-rc.1 | native UI·Metro/Babel·export·실제 기기 수용 |
+| 모바일 | Expo58.0.25, RN0.88.1, NativeWind5.0.0-rc.1, react-native-css3.1.0-rc.1 | native UI·Metro/Babel·export·실제 기기 수용 |
 
 웹 공통 UI는 DOM/Radix 계약이다. Pinvi native에는 DOM UI나 개별 Radix를 넣지 않고 tokens·RHF·Zod·Zustand·실제 native 폰트와 지도 RN 어댑터를 적용했다. Manager와 Transport 공개 웹은 지도 기능이 없어 지도 패키지를 추가하지 않았다. 모든 앱의 도메인 의존성 목록을 같게 만드는 정책은 아니다.
 
 ## 2. 최종 병합 소스와 기준선
 
-아래 7개 주 PR은 모두 병합되었다. 로컬 Git object에서 각각 검토 HEAD와 merged SHA의 **전체 tree 동일성**을 다시 확인했다. 후속 Manager SDK589/590은 이 7개 주 PR과 구분한다. Map1496 병합은 역사적 사실로 보존하며 사용자 제외 지시를 이유로 되돌리지 않는다.
+아래 7개 주 PR은 **phase1의 고정 기준선**이며 모두 병합되었다. 로컬 Git object에서 각각 검토 HEAD와 merged SHA의 **전체 tree 동일성**을 다시 확인했다. 후속 Manager SDK589/590은 이 7개 주 PR과 구분한다. Map1496 병합은 역사적 사실로 보존하며 사용자 제외 지시를 이유로 되돌리지 않는다.
 
 | 프로젝트 | 주 PR | 최종 merged SHA | 검토 HEAD | 전체 tree |
 |---|---|---|---|---|
@@ -44,6 +70,60 @@
 | Transport | [181](https://github.com/digitie/kor-travel-transport/pull/181) | 936fdb90b0ee9f6392d2f888255053ee1f4066b2 | 4e25c98e | 동일 |
 
 Pinvi는 저장소가 허용하는 squash 방법으로 병합했다. 이전 PR 합성 merge의 SHA를 실제 checkout으로 간주하지 않는다. 검증한 source/tree와 이미지의 OCI revision·고유 ENV를 대조하는 계약을 별도로 적용했다.
+
+### 2.1 Phase2 최신 병합 소스와 실제 운영의 구분
+
+현재 운영 상태는 첫 표와 §7.2.1을 따른다. 아래는 대표 후속 변경이며 소스·CI, 정상 이미지, 실제 적용, 정상 UI 수용을 서로 대체하지 않는다.
+
+| 대상 | 실제 merged 소스 | 현재 의미 |
+|---|---|---|
+| Common52→53 | [2a34d855](https://github.com/digitie/kor-travel-common/commit/2a34d8557ea055d4b7dd4c5d18e858faa901bf4a) → [bb1cd5a5](https://github.com/digitie/kor-travel-common/commit/bb1cd5a58732a57b03fd3376ea17d1d577faa253) | alias guard 수정·선택형 Motion14.13.0/ECharts6.1.0 정책의 병합 이력 |
+| Common55 | [39d5fc25](https://github.com/digitie/kor-travel-common/commit/39d5fc25772d3af3432393a228330fdb8407b480) | 선택형 Toast·정책·원장과 당시 비Map8소비처 ref 전파 완료 이력 |
+| Common56 | [9e163936](https://github.com/digitie/kor-travel-common/commit/9e163936d72b6323f5a38e266004534152767751) | 정확 HEAD4f41c46·4workflow/15job SUCCESS. 검사 순서·의존관계·stale 취소·기존 Toast3 자동 실행과 소비6repo·8표면 ref 전파 완료 |
+| Geo CI635 | [5c0b307e](https://github.com/digitie/kor-travel-geo/commit/5c0b307ed9c0313d84c281e68d7aa89978fa1bb2) | CI 확인 뒤 실제 병합.2workflow만 변경, Common9e 두 ref 연결. 운영 UI253/c5 payload와 동일하며 이 문서 브랜치도 이 최신 main 위로 전진 |
+| Concierge CI269 | [41cc5920](https://github.com/digitie/kor-travel-concierge/commit/41cc59206508b1039cc4c0dbaa14580bde9bfc7f) | CI 확인 뒤 실제 병합.2workflow만 변경, 제품·이미지·운영 재배포 없음 |
+| Pinvi CI741 | [665b06b0](https://github.com/digitie/pinvi/commit/665b06b056b478f7b5fa1d817cd5e7e9dbc5600b) | 저장소 허용 squash로 실제 병합.22job SUCCESS·기존 조건부SKIP1이며23PASS가 아님.4workflow만 변경, web660 운영 이미지는 재빌드하지 않음 |
+| Weather CI237 | [fcc65378](https://github.com/digitie/kor-travel-weather/commit/fcc65378150a80f996309c594022a9cc02d9a392) | 최종3job SUCCESS 뒤 실제 병합. 검증7682d066과 전체 tree 동일·workflow2개만 변경 |
+| Transport CI199 | [10858bc3](https://github.com/digitie/kor-travel-transport/commit/10858bc3a985708e8fde4c76902ffe6d0ca84f2c) | backend·공통2·공개·관리자5job SUCCESS, 기존 live-e2e SKIP. 검증7074a819와 전체 tree 동일·실제 병합 |
+| Manager CI604 | [2c3f95b6](https://github.com/digitie/kor-travel-docker-manager/commit/2c3f95b6c24bd7773a0ba243cf754895a38d3e02) | backend·frontend·별도 Common3check SUCCESS 뒤 실제 병합. workflow2개만 변경·운영 SDK602/UI는 재설치하지 않음 |
+| Manager UI592 / SDK594 | [04818f65](https://github.com/digitie/kor-travel-docker-manager/commit/04818f65ad34348663e05219b94b271196617eef) / [746c4009](https://github.com/digitie/kor-travel-docker-manager/commit/746c4009879f7b166e26f563199ea1c0b6abec51) | 기본048 UI와 frontend bytes가 같은746을 보조 UI 정상 빌드에 사용. 두 UI 실제 정상 수용 완료 |
+| Manager SDK602 | [127adf48](https://github.com/digitie/kor-travel-docker-manager/commit/127adf48ce02686067840b826c02c3db7765e3fe) | 양 호스트 실제 설치. Weather full-core와 실제 migration graph·비paired 부재·완료 oneshot·Compose start 호환 보정 포함 |
+| Pinvi738 | [2c1dad6f](https://github.com/digitie/pinvi/commit/2c1dad6f2574d0be1c7fb7e83d5389f21d8ce149) | Expo58.0.25·web660 정상 이미지·공식 적용·정상23PASS 완료 |
+| Weather233→234 | [ba7f048f](https://github.com/digitie/kor-travel-weather/commit/ba7f048f43aa3e0f98cd998b14be90aeef8579a8) → [378a0841](https://github.com/digitie/kor-travel-weather/commit/378a0841e82eb33b8e0bbb8f6f485d6a65ee3c6d) | Motion14.13·엄격한 지도 fixture 교정·정상3역할 producer. 최신 기능과0040을 포함한 실제3역할 배포·UI 수용 완료 |
+| Concierge266 | [d247ba07](https://github.com/digitie/kor-travel-concierge/commit/d247ba07ece6f311fb5513ed1c133cf4845e67d6) | new087 실제 운영 적용·정상 UI 수용 완료 |
+| Transport193 | [d9d4559c](https://github.com/digitie/kor-travel-transport/commit/d9d4559c02076975c80b688410591da0106b5873) | 최신 기능 보존·Motion14.13·정상 제품 빌드 및 운영 역할 정렬. checkpoint 미확인은 별도 한계 |
+| Geo633→634 | [c77c0c19](https://github.com/digitie/kor-travel-geo/commit/c77c0c1904f7ff6ae2b23750e02e930a3c41c7aa) → [253b4459](https://github.com/digitie/kor-travel-geo/commit/253b445985c293518fab9a2ba4aa397b7459c3a0) | 새253 UI 정상 빌드·반입·native·공식 적용·실제 최소 정상 QA PASS. Toast dismiss NOT_RUN은 별도 한계 |
+
+Weather783 배포안은 최신 기능을 포함하라는 사용자 지시로 대체됐다. source13bfc의0040 지역 읽기 모델을 포함한378의 API·CS·web을 실제 배포했으며 UI만 새것으로 바꾸는 안이 아니다. 후속 workflow-only Common ref commit은 앱 runtime·lock·산출물 bytes가 같은 범위에서 정책 전파로 기록한다. 이미지를 재tag해 그 후속 commit에서 빌드한 것으로 표시하거나 불필요한 runtime 설치를 반복하지 않는다.
+
+<details>
+<summary>초기 phase2 source 표와 당시 후속 요약 — 최신 완료 판정은 위 표를 따름</summary>
+
+#### 당시 병합 소스 — 운영 수용과 별도
+
+다음 SHA는 phase1 표를 대체하거나 phase1 영수증을 재발행하지 않는다. 소스·검토·CI가 완료되어도 해당 merged 소스의 정상 새 이미지와 공식 적용·실제 수용은 별도 gate다. 아래 상태는 초안 작성 시점의 부모 확인 사실이며 진행 중인 산출물의 성공을 예상하여 기입하지 않는다.
+
+| 대상 | phase2 실제 merged 소스 | 소스·CI와 남은 경계 |
+|---|---|---|
+| Common51 | [36e4d285](https://github.com/digitie/kor-travel-common/commit/36e4d285ea926b9d8c20da4221ade86ebf74c04d) | 실제 main CI SUCCESS; 후속 Common52 병합·정확 source CI 완료, 소비 ref 전파 별도 |
+| Common52 | [2a34d855](https://github.com/digitie/kor-travel-common/commit/2a34d8557ea055d4b7dd4c5d18e858faa901bf4a) | tree445752cf는 검토70b와 동일; 원 A/B PASS·자체 P2 FIXED·신규0·정확4CI/15job SUCCESS; 비Map 소비 ref 전파 대기 |
+| Manager UI592 | [04818f65](https://github.com/digitie/kor-travel-docker-manager/commit/04818f65ad34348663e05219b94b271196617eef) | 검토·정확 CI 완료; 새 UI 기술 적용과 실제 인증 수용 구분 |
+| Manager SDK593 | [d83d7cfd](https://github.com/digitie/kor-travel-docker-manager/commit/d83d7cfd3ec1fce9ba50e5a4c5ecc92c71e91a60) | 검토·정확 source/main CI 완료; 운영 SDK 설치 전 |
+| Manager SDK594 | [746c4009](https://github.com/digitie/kor-travel-docker-manager/commit/746c4009879f7b166e26f563199ea1c0b6abec51) | 검토d117/tree37c70212와 동일; 원 A/B PASS·신규0·정확2CI/3job SUCCESS; 양 호스트 공식 설치·source/config494/Python74 검산 완료; UI toolchain·정상 수용과 별도 |
+| Pinvi738 | [2c1dad6f](https://github.com/digitie/pinvi/commit/2c1dad6f2574d0be1c7fb7e83d5389f21d8ce149) | 검토·정확 CI 완료; 새 web 이미지의 격리 QA까지 |
+| Geo633 | [c77c0c19](https://github.com/digitie/kor-travel-geo/commit/c77c0c1904f7ff6ae2b23750e02e930a3c41c7aa) | 실제 main CI SUCCESS; ARM 정상 merged 빌드 진행 중 |
+| Weather227 | [78382601](https://github.com/digitie/kor-travel-weather/commit/7838260159e0b94a0570fcaa7751a824b74bc1fb) | 실제 main CI SUCCESS; 새 정상 이미지·수용 대기 |
+| Concierge266 | [d247ba07](https://github.com/digitie/kor-travel-concierge/commit/d247ba07ece6f311fb5513ed1c133cf4845e67d6) | 실제 main CI SUCCESS; 정상 이미지 빌드/QA 진행 중 |
+| Transport187 | [4b24e0de](https://github.com/digitie/kor-travel-transport/commit/4b24e0de99fa13dacc0a349396769b8d07f414af) | 소스 검토·정확 CI SUCCESS; 새 merged 이미지 대기 |
+
+Map은 위 phase2 작업 대상에서 제외한다. phase1의 고정 Git 참조를 보존하며 Map 소스·빌드·이미지·runtime·적용은 수행하지 않는다.
+
+**2026-11-13 후속 상태 갱신(초기 phase2 표의 대기 상태와 구분):** Geo는 실제 merged c77/image f5 공식 배포와 비선택54개 보존을 완료했다. 정상 UI QA의 첫 실패는 조회 전 하네스 오류로 별도 교정 중이며 실제 수용 완료로 합산하지 않는다. Weather783 배포안은 사용자의 “최신 코드” 지시로 **SUPERSEDED**다. 최신 main [13bfc14b](https://github.com/digitie/kor-travel-weather/commit/13bfc14b2a73e7b652c4746f95515eae51014d11)의 기능과0040 읽기 모델을 포함한 [Weather233](https://github.com/digitie/kor-travel-weather/pull/233) 후보 `056a135ff734996b11a2e845c6156a8ab6e0a285`가 push됐다. Motion14.13.0 manifest/lock/vendor 현행 선언을 맞췄고 기존 ECharts6.1.0·라이선스·컴포넌트 bytes는 보존했다. main의 지도 fixture19PASS/1FAIL은 초기 줌 반영을 드래그 완료로 오인한 테스트 순서 문제로 재현했다. 중심 변경을 기다리도록 보강한 뒤 정확 카메라 보존 assertion을 유지한 전체 fixture20PASS·type/lint/Doctor0, 기존 unit350·생산 build·guard·실제 C11 263파일은 동일 runtime/lock 증거로 연결했다. PR233 원 A/B 검토는 대기이며 정확 CI는 진행 중·policy는 SUCCESS다. 로컬 통과나 policy 성공을 병합·전체 CI·운영 수용으로 표시하지 않는다.
+
+Weather 최신 배포는0040의 두 파생 테이블·API·CS·UI의 실제 merged 소스/이미지와 현재 schema를 공식 경로로 맞추어야 한다. 0040 자체 backfill은 없고 초기 projection의 ready:false는 정상이다. 기존 publication 뒤 캐시 갱신 경로를 보존하며 이 문서 작업은 DB 조회·migration·실제 빌드·적용을 하지 않았다. 오래된783 이미지나 이전 API에 UI만 적용하는 계획으로 대체하지 않는다. Transport의 이전 main `b353a4415a9c7830e1c649c89cb1f1a7b860f3bd` CI SUCCESS는 역사로 보존한다. 이후 [PR193](https://github.com/digitie/kor-travel-transport/pull/193)은 실제 merged `d9d4559c02076975c80b688410591da0106b5873`로 확정됐고 전체 tree `88d04ad`는 검토 `ab69`와 같다. 부모가 모든 정확 CI와 원 A/B SOURCE PASS를 확인했다. 제품 3종의 빌드는 아직 수행하지 않았으며, 빌더 격리 관찰용 자체 fixture의 실패를 소유자가 교정 중이다. 이 관찰 fixture 실패를 제품 빌드 실패로 분류하지 않고, source·CI 통과를 실제 이미지·전체 스택 적용·정상 수용 완료로 합산하지 않는다. Manager [SDK595](https://github.com/digitie/kor-travel-docker-manager/pull/595)는 실제 `5755b76484fcb4c0f5ce1e68b7045eb97e70cd82`로 병합됐고 양 호스트 설치는 별도 operator가 준비한다. 이전746 설치 사실을595 설치 완료로 바꾸지 않는다. ARM 보조 Manager UI의 toolchain/source 갱신 계획은 별도 operator 소유이며 아직 실행 완료로 세지 않는다. Common53의 선택 라이브러리 정책 및 최종 ref 전파는 후속 gate다. **CI 순서/needs/fail-fast는 여전히 VERY LAST·NOT_STARTED**다.
+
+
+</details>
 
 ## 3. 장점과 비용: 이번 통합에서 확인한 결과
 
@@ -86,6 +166,10 @@ Transport 후속 이관은 이 비용을 구체적으로 보여 준다. 운영 �
 
 ### 4.3 의존성·소스·CI 정책
 
+아래 기존 code pin 기록은 phase1 당시의 검사 소스 이력이다. 그 짧은 55 표기를 Common PR55와 혼동하지 않는다. Common55로의8소비처 전파는 완료 이력이고 현재 중앙 정본은 Common56 실제 merged9e163936이다. 최종 소비6repo·8표면도 정확 PR CI 뒤 새 code/data ref로 병합됐다. 과거 code pin을 현재 ref로 다시 주장하지 않는다.
+
+다음 표의 55 고정 실행 ref는 **phase1의 정책 이력**이다. phase2 초기 정본은 Common36이며, 후속 Common52의 최종 merged SHA는 `2a34d8557ea055d4b7dd4c5d18e858faa901bf4a`이며 소비 ref 전파는 아직 별도다. 기존 표와 C11 내장 checker를 새 정책 검증 완료로 소급하지 않는다.
+
 | 검사 경계 | 실제 강제 내용 | 놓치지 말아야 할 점 |
 |---|---|---|
 | 정본 | common versions.json의 axes + frontendPolicy에서 frontend-dependencies.json·내장 정책을 생성 | 과거 일반 버전 예외 설명과 이번 exact frontend 정책을 혼동하지 않는다 |
@@ -99,7 +183,7 @@ Transport 후속 이관은 이 비용을 구체적으로 보여 준다. 운영 �
 | 이미지 provenance | git rev-parse HEAD를 expected PR/push SHA와 비교한 단일 revision 사용, OCI+고유 ENV 실제 inspect | 다른 유효40hex label도 거부하는 실제 negative control |
 | CI 경로 | 존재하지 않는 apps/mobile/vendor 두 경로 제거, 실제 apps/web 공유 vendor 감시 유지 | 빈 가짜 폴더·skip·단언 약화로 green을 만들지 않음 |
 
-필요 라이브러리·사용 계약의 정본은 [Common 최종 frontend-libraries 규약](https://github.com/digitie/kor-travel-common/blob/678a5bcf0150ac0386bfa86106e7e0f4f77e8639/docs/standards/frontend-libraries.md)이다. 이 문서의 전체412개 직접 선언 비교와 실제 수용 범위는 해당 정본·공개 영수증을 함께 읽는다.
+현재 필요 라이브러리·사용 계약의 정본은 [Common56 frontend-libraries 규약](https://github.com/digitie/kor-travel-common/blob/9e163936d72b6323f5a38e266004534152767751/docs/standards/frontend-libraries.md)이다. CI 순서 변경으로 라이브러리·공개 산출물을 다시 만들지 않았다. 이 문서의412개 직접 선언 표는 phase1의 고정 비교이며 이후 Expo·Motion·선택 Toast 차이는 phase2 절에서 따로 읽는다. 규약·선언 대조·실제 운영 수용의 범위를 혼동하지 않는다.
 
 중앙 정책 데이터가 갱신되면 이전 소비 소스의 검사가 달라질 수 있다. 재현하려면 검사 코드 SHA뿐 아니라 실제 policy/ledger 데이터 SHA도 보존해야 한다. 데이터가 이동한다는 이유로 실행 코드를 moving ref로 바꾸지는 않는다.
 
@@ -108,6 +192,21 @@ Transport 후속 이관은 이 비용을 구체적으로 보여 준다. 운영 �
 ESLint10을 지원하는 typescript-eslint·Next plugin·import-x·react-x/react-dom·jsx-a11y-x 조합으로 옮겼다. ESLint 구버전 peer를 `--legacy-peer-deps`/`--force`로 무시하지 않았다. Expo 모바일 lint도 실제 새 조합에서 검증했다. Doctor의 실제 CLI 옵션과 각 앱 script를 확인했고 버전에 없는 옛 AGENTS 명령을 그대로 실행한 것으로 기록하지 않는다.
 
 TypeScript5.9.3은 openapi-typescript의5.x 및 typescript-eslint의 <6.1 peer 때문에 유지했다. Babel7.29.7은 Expo58 플러그인 peer 계약에 따른 호환성 선택이다. TypeScript7·Babel8을 검증한 것으로 기록하지 않는다. Pinvi/Map workspace의 npm12.0.1 고정은 실제 Node22 소비 환경 및 lock 생성 도구와 함께 기록한다.
+
+#### Phase2 toolchain·guard 전파의 현재 상태
+
+중앙 정본은 Common56 merged9e163936d72b6323f5a38e266004534152767751이다. Common55의8소비처 전파·policy PASS·A3/B5 확인은 완료 이력으로 보존한다. 최종 uses@merged SHA와 with.common-ref를 모두9e163936으로 연결한 Geo635·Concierge269·Pinvi741·Weather237·Transport199·Manager604는 관련 최종 PR CI 뒤 실제 병합됐다. 소비6repo·8표면 전파 완료이며 조건부 SKIP을 PASS로 바꾸지 않는다. Common52 source1 alias P2와 source2 수정·검토·CI 이력도 보존한다.
+
+C11 최초7pack과 내장 checker bytes는 그대로 두고 외부 code/data ref로 정책을 적용한다. 선택형 @kor-travel/toast0.1.0도 이 CI 작업에서 재pack하지 않았다. Common56의4YAML은 검사 command multiset을 유지했고 root npm test는 이미 존재하던 Toast3개를 자동 실행에 포함했다. 새 테스트·공개 artifact·운영 이미지를 추가한 변경이 아니다. 라이브러리 정책 전파와 CI 순서 결과는 별도 기록한다.
+
+<details>
+<summary>초기 toolchain·guard 체크포인트 — 당시 ref 전파 미완 이력</summary>
+
+phase2의 실행 기준은 **Node22.23.1/npm12.0.1**이다. manifest/toolchain 선언, 엄격한 clean install, 실제 실행 버전, Doctor, 이미지 USER/cache 소유권과 시작 검사를 서로 구분한다. 이전 native snapshot을 새 nonroot Docker profile의 PASS로 바꾸지 않는다.
+
+Common36 이후 [Common52](https://github.com/digitie/kor-travel-common/pull/52)의 source1 npm alias 경로 P2 OPEN은 당시 역사로 보존한다. source2 `70b8bfb72a6c39c02e0bf3806540cd8dc8063c9c`는 원 A/B 모두 SOURCE PASS·자체 P2 FIXED·신규0과 정확4CI/15job SUCCESS를 받았다. 실제 merged `2a34d8557ea055d4b7dd4c5d18e858faa901bf4a`의 전체 tree445752cf가 검토 source2와 같음을 부모가 확인했다. source1 CI나 이전 소비 검사 성공으로 새 checker 전파를 대체하지 않는다. 최종 병합 후 비Map 소비 workflow의 **`uses@<최종 merged SHA>`와 `with.common-ref: <같은 최종 merged SHA>`를 모두** 갱신하고 실제 실행 ref/정책 ref·정확 CI를 확인해야 한다. Common52 원2인 검토·병합 완료와 아직 미완인 소비 ref 전파를 구분한다. C11 UI0.2.0/tokens0.1.1과 기존 릴리스 bytes는 불변이며, guard 전파를 위해 같은 버전을 다른 bytes로 재pack하지 않는다.
+
+</details>
 
 ## 5. 원 라이브러리 결함 수정과 출시 산출물
 
@@ -174,6 +273,12 @@ C10→C11의 일반 파일119개 중 정책JSON2개만 바뀌고117개는 byte �
 
 Common UI/tokens 자체는 GPL-3.0-or-later다. 내장한 shadcn/Radix MIT 고지는 별도로 보존하며 전체 패키지를 MIT로 오기하지 않는다. VWorld3종은 GPL-3.0-only, Lightning CSS는 MPL-2.0, FocusScope는 MIT다. 필요한 LICENSE/NOTICE/SPDX·대응 소스·provenance와 실제 배포 archive 검사를 함께 유지한다. 공통화가 서로 다른 원본의 라이선스를 없애지는 않는다.
 
+### 5.5 선택형 공통 Toast0.1.0
+
+[Common55](https://github.com/digitie/kor-travel-common/pull/55)는 Geo 알림용 @kor-travel/toast0.1.0을 별도 추가했다. radix-ui1.8.1의 Toast namespace를 그대로 공개하는 얇은 wrapper이며 duration·pause·focus·swipe·접근성을 자체 엔진이나 Alert 대용 타이머로 다시 만들지 않는다. packed namespace 동일성과 Geo 표시/닫기/만료3건·중앙/로컬 guard·잘못된 version/tgz 거부는 소스·패키지 검증 결과다.
+
+C11 최초7pack의 버전·bytes·원장은 보존하고 새 Toast의 version/SRI만 추가한다. 사용하지 않는 앱과 native 모바일에 설치를 요구하지 않는다. Geo253 새 UI의 실제 최소 정상 QA는 통과했지만 Toast dismiss/expire 운영 수용은 NOT_RUN이다. 안전한 정상 읽기 동작에서 trigger를 찾지 않아 주입하지 않았다. selector 일치0만으로 widget mount 부재를 단정하지 않는다. Common namespace·close·expiry3건의 기존 단위 PASS는 이 실제 세션의 dismiss 관측을 대신하지 않는다.
+
 ## 6. Pinvi 모바일: 최종 SDK 패치와 검증의 경계
 
 기준선 Expo57/RN0.86.3/NativeWind4/Tailwind3에서 최종 Expo58/RN0.88.1/NativeWind5 RC/Tailwind4로 이관했다. 이관 체크포인트328의 Expo Doctor는19/20였고 workflow informational SUCCESS와 구분해 실제 버전 표를 조사했다. 마지막4종은 RC peer를 이유로 무시할 문제가 아니라 다음 patch drift였다.
@@ -189,9 +294,22 @@ Common UI/tokens 자체는 GPL-3.0-or-later다. 내장한 shadcn/Radix MIT 고�
 
 최종528(merged dd3와 동일 tree)에서 필수 Expo Doctor20/20, React Doctor0, type/lint·중앙 정책, Android/iOS/WebSSR export·네 OTF·375/1280px CSS/폰트/입력 스모크, 실제 macOS 강제WASM export를 확인했다. GitHub CI의 합성 merge77afd9도 전체 tree가528과 같다. **실제 native 기기 실행·EAS·스토어 출시는 NOT_RUN**이다.
 
+### 6.1 Phase2 Expo58.0.25와 웹 운영 수용 — phase1 표와 별도
+
+현재 실제 병합 소스는 Expo58.0.25와 동반 patch 정렬을 포함한다. web660 초기 격리19PASS 뒤 실제 production 공식 적용·정상 UI23PASS까지 완료했으며, 로그인1/로그아웃1·보호401·이전 cookie401·실제 PNG2+2 decode·camera12→11·5폭·폰트/메뉴·정리 결과를 확인했다. 격리19와 운영23은 서로 다른 검사다. **native 물리 기기·EAS·스토어는 여전히 NOT_RUN**이며 웹 결과를 native 수용으로 확대하지 않는다.
+
+<details>
+<summary>초기 Expo patch 갱신 체크포인트 — 당시 격리19까지만 완료된 상태</summary>
+
+위 Expo58.0.24/dd3 표는 phase1 역사다. phase2 Pinvi738의 병합 소스는 **Expo58.0.25**와 동반 patch 정렬을 포함한다. 부모의 patch 요약에서 확인한 항목은 `expo-dev-client58.0.20`, `expo-location58.0.22`이며, root/mobile 선언과 lock anchor를 함께 갱신했다. 이 나열을 동반 변경 전체 목록으로 간주하지 않는다. C11 bytes는 유지한다.
+
+새 web 이미지의 격리19PASS는 모바일 실기기나 운영 web 수용을 뜻하지 않는다. **native 물리 기기·EAS·스토어 배포는 여전히 NOT_RUN**이다. Expo export/Doctor와 브라우저·운영 수용을 별도 기록하며 이전 실패·중간 patch 표를 삭제하지 않는다.
+
+</details>
+
 ## 7. 검증·리뷰·운영 배포 현황
 
-### 7.1 최종 source 검증
+### 7.1 Phase1 최종 source 검증
 
 | 대상 | 최종 확인 결과 | 해석 |
 |---|---|---|
@@ -210,7 +328,7 @@ Doctor0과 ESLint 경고0을 동일시하지 않는다. Pinvi 웹의 기존 인�
 
 Pinvi A의 checkout/image provenance 오표기와 B의 dead trigger2개는 같은 불변528 후속 입력에서 각각 원 리뷰어가 직접 FIXED/PASS로 닫았다. source531/209 결과와 API2259 결과를 이전328/527/2258 체크포인트로 대체하지 않는다.
 
-### 7.2 실제 배포와 runtime 수용
+### 7.2 Phase1 실제 배포와 runtime 수용
 
 | 프로젝트 | 배포 source·산출물 | 실제 수용·상태 |
 |---|---|---|
@@ -288,9 +406,77 @@ M9의 첫 정상 전체9검사는 **8PASS/1FAIL**이다. 이전M885에서 실패
 
 현재의 실제 PNG decode2+2/zoom7→8·UXfeedback2.808995초/bootstrap5.644271초·own loader0은 새 UX5/total60 계약의 관찰이다. 원 early-canvas5초 FAIL2건과 형식 검사 관찰45/19건은 계속 실패/관찰로 남기며 성능 개선이나 이전 조건 통과로 재해석하지 않는다. 각 source·계약·이미지·세션의 증거를 구분한다. PNG cleanup·browser close·node exit0·owner 최종 영수증과63개 frozen index·부모 검산을 완료했다. 새 정상 세션은 추가 세션/target/retry0으로 동결되었고 그 뒤 Common50 병합678a와 공개 영수증 연결도 완료했다. 추가 runtime QA 없이 단일 MD 최종 사실 delta를 원 A/B·정확 CI에 인계한다.
 
+### 7.2.1 Phase2 현재 상태 — source CI / 이미지 / 공식 적용 / 정상 UI
+
+다음 표는 최신 실제 운영 요약이다. phase1의6개 수용을 새 배포 수에 더하지 않고 한 앱의 여러 소스·이미지·세션을 중복 집계하지 않는다. 성공한 후속 세션이 기존 FAIL·timeout·관찰 한계를 덮지 않는다.
+
+| 대상 | 실제 소스·이미지 | 적용·보존 | 정상 UI와 한계 |
+|---|---|---|---|
+| Manager 기본·보조 UI | 기본048, 보조746(후속 frontend와 bytes 동일), Node22.23.1/npm12.0.1 | 보조 UI 정상 systemd 기동·HTTP200·새 source marker/BUILD_ID. 전용 runtime 사용, host global Node/npm 변경0 | 기본 UI는 승인된 Manager password-only 정렬 뒤 PASS. 보조 UI 정상15.2198초·로그인1/로그아웃1·공통 표/메뉴/Pretendard·보호200→401·WS1열림/1닫힘·오류/잔여0. 장기 WS 안정성으로 확대하지 않음 |
+| Manager SDK602 | actual127adf48, 양 호스트 source498/Python75 mismatch0 | 각각 정상 설치1회/exit0/health200. 실제 frontend·선택 NPM 설정을 포함한 당시 전체 ENV·인증값·CURRENT/pins 보존 | N15019.732초·비선택33개, 보조 호스트 비선택56개 보존. 과거 source746의494/74 검산과 다른 시점의 결과 |
+| Pinvi | M2c1/web660 정상 이미지 | 공식 production 적용 완료 | 최종 정상23PASS. 초기 격리19와 이전 실제 실패는 별도, native/EAS/store NOT_RUN |
+| Concierge | Md247/new087 | 기존 공식4service 활성화·실제 정상 수용 완료 | 로그인/보호200·로그아웃200→보호401·표80·폰트·390/1440폭·실제 PNG4개 decode/관찰16개·오류/잔여0 |
+| Weather | M378, API b9afa7e5 / CS4dd7290c / web43e8e54c | 실제3역할 healthy·공식 SDK adoption CURRENT, 기존 state·다른53개·ENV 보존. 원래24 RUNNING/3 STOPPED 복구 | 정상18.0456초·로그인1/로그아웃1·보호401→200→401·공통 표/Pretendard·PNG20건 image200/실제 decode1·지역 API ready:true/items272. catalog는 관찰1page1000행이며 실패 fallback 강제 검사는 미실행 |
+| Transport | 실제 D9 core·공개·관리자 최신 실행 | healthy/CURRENT·schema0042 유지·원래20 RUNNING 복구, post-core 최소 정상 인증 PASS | 이전 CS writable-layer checkpoint 보존은 미확인. 새 healthy/CURRENT를 보존 증거로 쓰지 않음 |
+| Geo UI | 새253 정상 빌드 exit0·2666.668초, N150 manifest ba9159a9 → 실제 ARM receiver c5acabe7 | 반입 exit0/0·296.334초·Config/12 RootFS layer bridge·native UID1000/Node22.23/npm12·Common263+Toast8/27routes/native CSS export PASS. SDK602 공식 dryrun/confirm/show/verify PASS·healthy/CURRENT. ENV·Manager units·비선택55개와 다른 current 보존 | 실제 최소 정상 QA26.189초 PASS·로그인200/로그아웃200 각1·보호/runtime-config401·표37행/검색·실제 Pretendard35glyph·geocode200·PNG256×256 bitmap1·page/asset/domain-write 오류0·브라우저/자체PID 정리. Toast dismiss NOT_RUN, 5폭·줌 재실행0 |
+
+Weather 최신 배포에서는 사용자 지시로 실제 Alembic0039→0040을1회 실행했고 같은 head 배포에서 백업·DDL을 반복하지 않았다. N150 OCI manifest descriptor와 ARM classic-store image ID의 차이는 canonical config·순서 있는 RootFS diffID·source/tree/role 동등성으로 연결했다. 실제 receiver ID를 사용했으며 retag나 다른 소스의 빌드로 허위 표기하지 않았다. 별도 standalone native preprobe를 추가 필수 gate로 삼지 않고 실제 production command의 API·CS·web 시작/health를 기록했다.
+
+SDK600 confirm1은 snapshot·복원·새3개 생성 뒤 구형 Compose의 start --wait 미지원으로 실패했다. 원문 exit1을 유지한 채 정확한 새 이미지3개만 일반 start1회로 기동했다. state 의미·schema·비선택·ENV 확인 뒤 기존 공식 SDK adoption으로 healthy 이미지를 등록하고 원래24개 수집기를 복구했다. 이를 최초 confirm 전체 성공으로 쓰거나 stop/restore/DDL을 다시 실행한 것으로 세지 않는다. 후속 SDK602는 Weather·Transport의 start를 호환 호출과 기존 health 검증의 bounded 대기로 수정했다. 실제 구형 옵션 거부 재현 뒤 표적9PASS·Ruff·실제 ARM CLI 도움말 확인으로 검증했다.
+
+Weather 첫 정상 UI 로그인403은 허용 Origin과 직접 mapped QA Origin의 불일치였다. 기존 허용 Origin을 선택한 다음 정상 세션이 통과했으며 비밀번호·키·ENV·CSRF 정책 변경0이다. 비로그인 / 응답401을 실패로 본 사후 확인 하네스 결과도 운영 비밀번호 불일치로 재분류하지 않았다. Manager의 최초401·사용자 승인 password-only 정렬·후속 정상 수용, 보조 UI bootstrap UID/cwd 오류, systemctl ExecStart의 가변 metadata를 backend 변경으로 오인한 rollback도 각 이력으로 유지한다.
+
+Geo253 공식 적용의 첫 실행기 오류는 파일명이 Python 표준 모듈을 가린 문제로 SDK 호출0회에서 끝났다. 원문을 유지한 채 파일명과 isolated Python 문맥만 교정하고 같은 이미지로 정상 적용했다. 이미지 빌드·native profile을 반복하지 않았으며 이를 제품·SDK 적용 실패로 재분류하지 않는다.
+
+**backend Python의 역할별 exact 통일은 미완**이다. frontend toolchain 정합성을 Python/Dagster/native ABI·peer 예외 감사의 완료로 확대하지 않는다. 근거 없이 backend UID·Python·DB engine을 한꺼번에 바꾸지 않았으며 실제 버전과 필요한 역할별 예외를 따로 정산한다.
+
+<details>
+<summary>초기 phase2 운영 체크포인트 — 아래 pending·미완·FAIL은 당시 역사이며 현재 판정이 아님</summary>
+
+phase1의 6개 수용을 새 phase2 배포 수로 합산하지 않는다. 아래 `대기`는 실패 판정이 아니며 완료 판정도 아니다. build cache·candidate 이미지·격리 fixture 결과를 실제 merged 이미지·운영 세션 결과와 혼용하지 않는다.
+
+| 대상 | source·CI | 새 이미지·기술 검사 | 공식 적용 | 정상 UI·최종 수용 |
+|---|---|---|---|---|
+| Manager UI048 | 검토·정확 CI PASS | 기본 UI 정상 빌드·공통153파일 일치; apply2/postproof 기술 PASS | 기본 새 UI 실행 확인; 보조 UI는 source marker 부재·Node22.22.1/npm9.2.0 | 이전 실제1회 로그인401 보존; 이후 승인 password-only 정렬 완료·새 정상 QA 대기. 보조 UI746/전용 Node22.23.1/npm12.0.1 업그레이드는 계획만 |
+| SDK d83 → 746 | d83 검토·CI 완료 이력 보존; 594 source1 P2 OPEN 이력 뒤 source2 d117 원 A/B PASS·정확 CI4147PASS/40SKIP·최종746 병합 | archive subsystem 실제 Engine PASS; full factory admission은 아님 | **양 호스트746 설치 완료**; 각각 공식1회/exit0·owned PID health200·source/config494/Python74 검산·전 보호 항목 보존 | SDK 설치 당시 인증값 전체 보존 PASS. 뒤의 사용자 승인 password 한키 정렬은 별도 변경이며 UI 정상 세션 수용을 대신하지 않음 |
+| Pinvi M2c1 | 검토·정확 CI PASS | 정상 amd64 web image `sha256:66052861a3217eea32a85140cecfdfd17c5abdb8848153a1ccc8fb8bdaa60c5d`; 격리19PASS | 새 이미지 운영 적용 전 | 운영 로그인/지도/종료 수용 대기; 격리 bitmap decode는 NOT_MEASURED |
+| Geo Mc77 | 실제 main CI PASS | ARM 정상 merged 빌드 시작·진행 중 | 새 phase2 적용 전 | 새 이미지 실제 정상 수용 대기 |
+| Weather M783 | 실제 main CI PASS | 정상 merged 이미지 대기 | 새 phase2 적용 전 | 새 이미지 실제 정상 수용 대기 |
+| Concierge Md247 | 실제 main CI PASS | 정상 이미지 빌드/QA 진행 중 | 새 phase2 적용 전 | 새 이미지 실제 정상 수용 대기 |
+| Transport M4b | 소스·정확 CI PASS | 정상 merged 이미지 대기 | phase1 관리자M30/공개936·기존 backend/schema 보존; 새 phase2 적용 전 | 새 이미지 정상 수용 대기 |
+
+Manager apply1의 health 실패와 이전 UI 복원 HTTP200은 원문 이력으로 유지한다. 동시에 관찰한 높은 I/O 및 Next version 명령 지연은 원인 확정이 아니다. apply2 기술 PASS 이후의 실제 로그인401은 당시 수용 실패이며 source 검사나 HTTP readiness로 소급 PASS하지 않는다. 그 뒤 사용자가 Manager 비밀번호를 Geo의 검증된 비밀번호와 맞추도록 명시했다. 두 Manager 인스턴스 모두 공식 단일키 helper/G 아래 독립 salt hash 한키만1회 갱신하고 backend를 각1회 재시작했다. 다른 ENV bytes·username·session secret·frontend·비선택 lifecycle은 보존했고 operator 로그인은0이다. 새 정상 UI 세션 수용은 지정 QA owner의 후속 증거로 확정한다. 보조 UI의 old toolchain/source 미확정은 이 비밀번호·SDK 변경으로 해결하지 않았다.
+
+
+Manager SDK746은 기본 호스트19.846초/비선택33개, 보조 호스트152.522초/비선택55개를 각각 보존했고 각494개 tracked source/config와74개 installed Python module의 해시 불일치0을 확인했다. 두 설치의15개 원문 index는 변경 전 증거로 동결했다. 이후 승인된 password-only 변경은 새 RootENV/PID의 별도 기록으로 유지하여 설치 당시 whole-ENV 보존 주장을 덮지 않는다. secondary UI는 실제 source marker 없음·Node22.22.1/npm9.2.0이며, reviewed M048과 frontend74개 path가 같은 actual746으로 정상 ARM build·전용 runtime prefix·기존 R8 systemd 교체 경로를 계획했다. download/build/UI apply는 아직0이다.
+
+Pinvi의 신규 official 경로는 기존 paired Map component CURRENT 부재를 발견한 읽기 전용 admission에서 중지했다. 그 CURRENT가 존재했다고 SDK 설치의 빈 current 관찰로 추론하지 않는다. 기존 pair/live identity와 부재를 보존하는 후속 최소 source 검토가 필요하며, 이를 우회하려는 Map root/CURRENT 생성·adopt는0이다. 새 Pinvi 이미지의 격리19PASS를 production apply나 정상 수용으로 세지 않는다.
+
+Weather r1은 기존 native gate15/16PASS와 runtime probe exit124 **NOT_PASS**를 분리해 보존한다. 해당 결과를 이후 nonroot Docker profile의 PASS나 새 이미지 시작 성공으로 바꾸지 않는다. Geo의 이전 native 검증도 동일한 source snapshot 경계를 유지한다. 새 nonroot profile에는 실제 이미지 시작 UID/cache·worker/auth/proxy에 맞는 검증이 별도로 필요하다.
+
+SDK archive subsystem의 기본 PUT·비영 UID/GID/mode 보존 PASS는 그 좁은 helper 검사다. Transport 전체 factory의 실제 이미지 tuple·schema 읽기 범위·quiescence·G/lease·비선택 보존 admission을 대신하지 않는다. SDK594 source1의 P2 OPEN 이력은 보존하며 source2 `d1175004bbbb131429a6bfe1117d732315671dae`는 원 A/B 모두 PASS·신규0 및 정확2CI/3job·backend4147PASS/40SKIP·frontend54/browser2/Doctor0 뒤 actual746으로 병합됐다. 실제 SDK 설치까지 완료했으며, 그 뒤 actual app apply·정상 UI 수용과는 구분한다. Common52 source2는 원 A/B PASS·정확4CI/15job SUCCESS 뒤 merged2a34로 확정됐으며 소비 ref 전파는 미완이다. 두 후보를 운영 설치 완료나 서로의 gate 대체로 세지 않는다.
+
+</details>
+
 ### 7.3 증거와 완료 조건
 
 공개 소스·CI 링크는 각 주 PR과 정확 merged package 경로를 따른다. 상세 runtime 영수증은 부모의 비공개 통합 감사 보관소에 유지하며 접속값·credential 파일·쿠키·키 URL·로그인 요청 본문을 이 문서에 넣지 않는다.
+
+현재 phase2 결과는 다음 기존 영수증과 연결한다. 새 archive나 원문 복제는 만들지 않았으며 실제 파일의 private 경로는 출판하지 않는다.
+
+| phase2 증거 | 확인된 사실·기존 SHA256 |
+|---|---|
+| Pinvi 최종 정상 UI final-receipt.json | M2c1/web660 공식 적용 뒤23PASS. b3037f6365d408ca4002ffa7870251b2536a88c9cb84ee0818420817f924967a |
+| Concierge 정상 운영 final-deployment-normal-acceptance-manifest.json | Md247/new087 실제 운영 수용 PASS. 1c3cf9e1444c5f1bc500704b2f447c09e8c3f8ffa848c607d5ce4e0b6db86c26 |
+| Weather 운영 후속 결과 | M378 실제3역할·CURRENT·state·다른53개·원래24/3 상태 확인. 250b0199e289b7dfa18147e96d91841604f277d299c975d048af547aa68cd5ab |
+| Weather 최소 정상 UI final-receipt.json | 기존 허용 Origin에서18.0456초 PASS. 83f36022834218622c41a42c731e4b19b3dabd4e0e94e87f6a29b1b5d6b2598b |
+| Geo253 공식 UI-only receipt.json | SDK602 dryrun/confirm/show/verify PASS·실제 ARM c5acabe7 healthy/CURRENT·ENV/Manager/비선택55개 보존. 2038b3b39b5ce04128c68387b2bb05911401e376febdd43f5acbff12fbc76644. 실제 UI 세션은 다음 별도 영수증으로 연결 |
+| Geo253 최소 정상 UI final-receipt.json | 정상26.189초 PASS·로그인/로그아웃 각1·보호401·표 검색/실제 폰트/PNG bitmap1·정리 완료. Toast dismiss/expire NOT_RUN·5폭/줌 재실행0. 580f0cbcc40afeadd34231717c8033a6c0a671ab6e76536d41ce85fe17203aae |
+| Manager ARM SDK602 execution-state.json | 정상 설치1회/exit0/owned health200·새 frontend/전체 ENV/비선택 보존. b77637906de68e755f3c34cfbef3175d8daa1c24e1351a7e9d06a5513a168f55 |
+| Manager 기본 호스트 SDK602 execution-state.json | 정상 설치1회/exit0/19.732초·source498/Python75·기존 UI/인증값/비선택 보존. 608023995a5715ff4e2f24ab3d0dfd8a09ea5b6ecbbfe0133da9a490de5a3474 |
+| Manager 보조 UI 최소 정상 실행 결과 | 실제15.2198초 PASS·로그인/로그아웃 각1·공통 표/메뉴/폰트·보호401·WS1열림/1닫힘. 기존 담당자 정상 결과로 연결하며 새 세션을 반복하지 않음 |
+
+다음 큰 표는 **phase1 영수증의 고정 역사**다. 오래된 source·이미지·대기 또는 FAIL을 현재 phase2의 상태로 읽지 않는다.
 
 | 증거 | 확정 내용 |
 |---|---|
@@ -323,11 +509,51 @@ M9의 첫 정상 전체9검사는 **8PASS/1FAIL**이다. 이전M885에서 실패
 
 추가 라이브러리 현황 대조는 merged package 선언의 exact registry 대상303개를 확인한 것이다. 아래 전체 직접 의존성의 기준선/최종 합집합412행과 범위가 다르며, file artifact49참조를49개 서로 다른 패키지·설치·이미지로 세지 않는다. 실제 공통 bytes는 불변 C11과 앱별 실제 이미지 감사 영수증으로 별도 증명한다. 이 대조는 npm 최신판 자동 갱신이나 Claude가 별도로 빌드한 Map 이미지 감사가 아니다.
 
-입력1의5개 수용·Transport 대기 문서와 입력2의 CI-LAST 문장 보완은 불변 commit/manifest로 보존했고 원 A/B가 각각 검토했다. 6개 실제 수용·메뉴 정합성 최종 사실은 Common50에서 같은 원 A/B docs5 PASS·정확3CI/9job SUCCESS 뒤 병합678a로 정산했다. 이 문서는 그 공개 영수증에 연결한 제한된 최종 사실 delta를 기존 원 A/B에 인계한다. Geo에는 이 MD 한 파일만 변경하고 리뷰 원문·closure 파일/추가 closure 커밋은 넣지 않는다. raw 리뷰와 불변 입력은 부모 감사 보관소에 유지하고 최종 verdict/SHA는 PR 설명으로 연결한다. 문서 작성자는 새 리뷰어를 시작하거나 자기 PR을 병합하지 않는다. 실제 기기/EAS·Map 별도 작업·확정하지 못한 관찰은 최종 보고에도 그대로 남긴다.
+입력1의5개 수용·Transport 대기 문서와 입력2의 CI-LAST 보완은 불변 commit/manifest로 보존했고 원 A/B가 당시 각각 검토했다. phase1의6개 수용·메뉴 정합성은 Common50의 원 A/B docs5 PASS·정확3CI/9job SUCCESS 뒤 병합678a로 정산한 역사다. 이번 최종 단일 MD는 기존 검토·수용·최종 CI 영수증을 재사용하고 문서 정확성에 비례한 확인만 수행했다. 새2인 전체 리뷰·추가 archive·journal·closure 커밋을 필수 gate로 만들지 않았다. Geo에는 이 MD 한 파일만 변경하고 접속값·credential·private 절대경로를 출판하지 않는다. Geo253 실제 수용과 CI-LAST 최종 PR CI·실제 병합까지 반영했다. 실제 기기/EAS·Map 별도 작업·확정하지 못한 관찰은 확인 한계로 남긴다.
 
-### 7.4 다음 단계 계획과 이번 보고서의 완료 범위
+### 7.4 이번 보고서의 완료 범위와 확인 한계
 
-사용자 후속 지시에 따른 **2단계는 계획 상태이며 미실행**이다. 이전 strip 소스의 실제 테스트·배포 수용과 후속 실패는 보존한다. 최신 Geo형 모바일 Drawer·PC 세로 rail 메뉴는 최종f30/0ac648의 새 계약 정상9PASS를 확인했으며 owner 최종 freeze63 검산은 완료했고 Common50 최종 사실 정산·병합678a도 완료되었다. 현재 이 Geo 단일 MD의 원 A/B 최종 사실 검토·정확 CI·병합이 남았다. 후속 빌드 생태계/모든 프로젝트 CI·테스트 규칙 정합성 작업은 아직 미실행이다.
+이번 대상은 소스·빌드·운영 역할 정렬·정상 QA와 마지막 CI 순서 정산까지 완료됐다. Geo253 실제 최소 정상 수용과 Common56·소비6repo의 최종 PR CI·실제 병합을 모두 반영했다. 자동 시작한 별도 main push CI 전체의 완료를 주장하거나 중복 전체 suite를 기다리지 않는다.
+
+완료 범위와 한계는 다음과 같다.
+
+1. Geo253의 실제 ARM 이미지·native·공식 UI-only 적용·최소 정상 수용을 반영했다. Toast dismiss/expire는 안전한 정상 trigger가 없어 NOT_RUN이며 unit3PASS와 구분한다. 5폭·줌을 재실행했다고 쓰지 않는다.
+2. backend Python 전체 역할의 exact 통일 완료는 이 결과로 증명하지 않는다. 역할별 호환/ABI·예외 감사 범위와 구분한다. Expo58.0.25·C11 불변·선택 Toast0.1.0을 역사적412행 표의 수치와 섞지 않는다.
+3. 전체 runtime·QA 뒤 CI-LAST를 수행했다. **Common56은 정확 소스4workflow/15job SUCCESS 뒤 merged9e163936으로 확정**됐고 Geo635·Concierge269·Pinvi741·Weather237·Transport199·Manager604도 관련 최종 PR CI 뒤 실제 병합됐다. 새 운영 이미지·배포 작업은 없었다.
+4. 최종 변경은 이 MD 한 파일이다. 문서·링크·민감값·diff와 역사 보존을 확인하며 새 앱 전체 suite·운영 로그인·리뷰 매트릭스를 반복하지 않는다.
+
+Map은 Claude 별도 소유로 이 작업의 source/build/image/runtime/apply에서 제외한다. 고정 Git 자료를 읽은 것을 새 Map 검증·수용으로 세지 않는다. native 물리 기기·EAS·스토어는 NOT_RUN을 유지한다. 원문 FAIL·timeout·과거 부분 수용과 정상 후속 결과를 보존하며 이 보고서로 T-218 등 범위 밖의 남은 task를 임의 종료하지 않는다.
+
+#### CI-LAST 최종 전후 비용과 확인 범위
+
+아래 수치는 담당자가 확인한 최종 PR CI의 job/step 비용·시작 시각과 source 변경의 효과 범위다. 병렬 job의 시간을 더해 전체 wall-clock 절감량으로 만들지 않으며 runner·cache 차이를 통제한 성능 개선으로 해석하지 않는다.
+
+| 대상 | 변경 전 확인된 구조·비용 | 변경 후 확인된 범위 | 남는 판정 경계 |
+|---|---|---|---|
+| Common56 | 소비 version/bytes 대조보다 toolchain/selftest가 앞서거나 frontend의 무거운 build보다 타입·Doctor가 늦게 실패할 수 있었음 | 소비 대조를 toolchain/selftest 앞에, 타입·Doctor를 build 앞에 배치. docs/tools/packages는 cheap secret/version 선행 조건, tools static은 Node 앞, frontend/Python stale 실행 취소.4YAML command multiset 유지·기존 Toast3 자동 실행 | 정확 HEAD4f41c46의4workflow/15job SUCCESS. 소비8표면의 전파·정확 CI는 별도 |
+| Geo | 정책 실패 경로에서 기존 후속 작업149초 비용 | 정책 실패 시 해당 고비용 작업을 시작하지 않도록 순서 조정.635 CI 뒤 실제 병합5c0b307e | 실패 시 회피 비용149초이며 정상 성공 경로가149초 빨라졌다는 뜻이 아님 |
+| Concierge | 필수 검사 순서는 이미 적절했음 | cache만 조정, 검사 순서·필수 검사를 불필요하게 다시 바꾸지 않음.269 CI 뒤 실제 병합41cc5920 | 새 fail-fast 개선이나 시간 절감 수치는 주장하지 않음 |
+| Pinvi web | 기존 정적/품질 경로 약110초, Docker build 약211초, E2E job 약310초. 고비용 작업이 품질 검사와 함께 시작 | 실제 후속 static90초 PASS 뒤 unit/build157초·Docker job226초·E2E349초가 병렬 실행 | build step과 job의 범위·서로 다른 run 차이를 유지. 합산 절감량이나 성공 wall-clock 개선으로 해석하지 않음 |
+| Pinvi mobile | 빠른3job38/49/49초 병렬, Linux export200초·mac export106초는 선행 gate 없이 시작 | 후속 doctor47/lint42/type47초 병렬 뒤 Linux export185초·mac WASM131초. 실제5job PASS | 빠른3job 병렬성과 기존 검사 유지. 실패 시 heavy 비용 회피와 성공 경로 gate 대기를 구분, native/EAS/store 수용과 무관 |
+| Manager frontend | type5초 뒤 lint5초·Doctor2초, frontend 총105초 | Common1초→Doctor3초→lint6초→type5초→unit12초/build15초/browser. 최종 frontend124초·CI PASS | 총105→124초를 속도 향상으로 주장하지 않음. 빠른 실패 검사 선행과 기존 명령 유지가 확인 범위 |
+| Manager backend | lint0초→tests1330초, backend job1344초 | 독립 순서 그대로 lint0초→tests1248초, job1261초·최종 PASS | frontend 실패를 기다리게 직렬화하지 않음. 서로 다른 run의 단순 시간 차이를 인과 성과로 세지 않음 |
+| Weather | job 내부 Ruff 시작905초·OpenAPI 시작912초 | 후속 Ruff 시작25초·OpenAPI 시작35초. Ruff→Prometheus→migration→OpenAPI→pytest, 최종3job PASS·병합 | OpenAPI-before-migration의 최초 DuplicateTable FAIL·pytest 미실행을 보존. backend1937PASS/67warnings/23subtests·847.96초는 최종 별도 결과 |
+| Transport | job 내부 lint 시작 public49초·admin60초 | 후속 public26초·admin40초. 최종 backend·공통2·공개·관리자 PASS·병합 | job 내부 시각을 전체 wall-clock 개선으로 환산하지 않음. backend1918PASS/2SKIP/33warnings/54subtests·872.13초, 기존 live-e2e SKIP은 별도 |
+
+Common 변경의 정적 확인은 actionlint v1.7.12·YAML4개·needs 비순환4개 PASS다. 중앙 exact CI 실제 성공과 소비 ref/source 정합성·후속 실제 CI를 모두 구분한다. 워크플로우 순서만 바뀐 commit 때문에 이미 수용한 제품 이미지를 새로 빌드·배포하지 않는다.
+
+Pinvi 관측은 변경 전 [web43425175367](https://github.com/digitie/pinvi/actions/runs/43425175367)·[mobile43425175245](https://github.com/digitie/pinvi/actions/runs/43425175245), 변경 후 [web43441191191](https://github.com/digitie/pinvi/actions/runs/43441191191)·[mobile43441191345](https://github.com/digitie/pinvi/actions/runs/43441191345)의 실제 job timestamp를 따른다. runner·cache 차이를 통제한 성능 실험이 아니며 실패를 더 일찍 반환하고 불필요한 heavy 실행을 회피하는 구조를 확인한 것이다.
+
+[Pinvi741](https://github.com/digitie/pinvi/pull/741)은 검증 headd2ecb621 뒤 저장소 허용 squash로665b06b0에 병합됐다. 실제22job SUCCESS이며 기존 schedule/workflow_dispatch 조건의 contract-staleness1SKIP을23PASS로 세지 않는다. [Manager604](https://github.com/digitie/kor-travel-docker-manager/pull/604)는 head08900640의 [backend/frontend CI43441187346](https://github.com/digitie/kor-travel-docker-manager/actions/runs/43441187346)와 [Common43441187893](https://github.com/digitie/kor-travel-docker-manager/actions/runs/43441187893) 3check SUCCESS 뒤2c3f95b6에 병합됐다. 모두 두 ref를 실제 Common56 merged9e163936으로 연결했다. path filter/aggregate 양방향 누락·기존 ETL3/lock guard와 각 command/event/cache/권한을 보존했고 제품·의존성·runtime을 바꾸지 않았다.
+
+Weather 최종 [CI43441889555](https://github.com/digitie/kor-travel-weather/actions/runs/43441889555)는 python/common/frontend3job SUCCESS, Transport 최종 [CI43441236813](https://github.com/digitie/kor-travel-transport/actions/runs/43441236813)는5job SUCCESS·기존 live-e2e SKIP이다. 두 실제 merged 전체 tree가 검증 head와 같음을 연결했다. 후속 main push CI는 이 최종 PR CI와 별도이며 아직 수집하지 않은 실행까지 모두 PASS라고 쓰지 않는다.
+
+자기소유 임시 산출물 정리 직후 관측한 N150 일반 가용 공간은6,231,998,464bytes(약5.8GiB)다. 정리 직후 시점값이며 정리량이나 현재 실시간 가용량·CI 절감량을 뜻하지 않는다. 운영은 보존됐으며 새 이미지나 추가 운영 검증을 문서 정산 때문에 실행하지 않았다.
+
+<details>
+<summary>phase1 및 초기 phase2의 다음 단계 계획 — 당시 미실행 문구는 현재 판정이 아님</summary>
+
+**아래 두 문단은 phase1 문서 작성 당시의 계획 이력이다.** 당시 사용자 후속 지시에 따른 **2단계는 계획 상태이며 미실행**이었다. 이전 strip 소스의 실제 테스트·배포 수용과 후속 실패는 보존한다. 최신 Geo형 모바일 Drawer·PC 세로 rail 메뉴는 최종f30/0ac648의 새 계약 정상9PASS를 확인했으며 owner 최종 freeze63 검산은 완료했고 Common50 최종 사실 정산·병합678a도 완료되었다. 현재 이 Geo 단일 MD의 원 A/B 최종 사실 검토·정확 CI·병합이 남았다. 후속 빌드 생태계/모든 프로젝트 CI·테스트 규칙 정합성 작업은 아직 미실행이다.
 
 후속 실행 순서는 **Transport 테스트 완료 → Transport Geo형 모바일 Drawer·PC 세로 rail 일치 검증·수정·회귀·새 이미지 실수용(FIRST) → Common/Geo 최종 문서 정산·병합 → Transport 나머지 PR 채택·빌드 생태계 정리 → 모든 프로젝트 빌드·CI·테스트 규칙 정합성 확보 → CI 순서 감사·fail-fast 최적화(VERY LAST)** 이다. CI 순서 감사와 fail-fast 최적화는 앞선 구현·검증·필요한 배포 및 정합성 작업을 마친 맨 마지막에 수행하며, 현재는 미실행이다. 부모가 전체 순서와 소유자를 조정한다.
 
@@ -335,11 +561,19 @@ M9의 첫 정상 전체9검사는 **8PASS/1FAIL**이다. 이전M885에서 실패
 
 이 단계의 모든 주 PR 병합·공통 bytes 일치가 프로젝트별 빌드/CI/테스트 규칙 전체의 동일성을 뜻하지 않는다. 현재도 Next 번들러·workspace/독립 lock·native/Alpine·Expo export·systemd/이미지 배포 등 서로 다른 실행 경계가 있다. 2단계에서 보존할 제품 계약과 통일할 규칙, 해당 소스·실제 검증·필요한 배포를 별도 확정해야 한다.
 
+#### Phase2의 현재 완료 범위와 다음 gate
+
+현재 phase2는 §2.1의 소스 병합·빌드 규칙 정리와 §7.2.1의 이미지/기술 검증까지 실제 진행했으므로 전체를 미실행으로 표현하지 않는다. 남은 것은 양 호스트 SDK746 설치 후 각 앱의 공식 적용·실제 정상 수용과 보조 Manager UI toolchain 정합성 확보, Common52 merged2a34의 소비 ref 전파, 앱별 실제 merged 정상 이미지 및 profile 검증, 공식 적용, 새 정상 UI 수용이다. Manager 인증401과 각 대기 gate는 별도로 남긴다. 최종 runtime 사실을 반영한 이 단일 MD의 검토·정확 CI·병합도 아직 수행하지 않았다.
+
+**CI 순서/needs/fail-fast 감사·최적화는 다른 구현·검증·필요한 배포와 정합성 작업을 마친 VERY LAST이며 NOT_STARTED다.** 이번 초안 작업에서 해당 조사를 하지 않았다. Map 추가 작업0, native 물리 기기/EAS/store NOT_RUN을 유지한다.
+
 공개 영수증의 T-218은 IN_PROGRESS이며 이 보고서로 미완 설계·구현 task를 닫지 않는다. 1단계 보고서가 병합되어도 전체 사용자 목표 완료로 표시하지 않는다. 2단계 구현·검증 이후 같은 문서를 다시 갱신한다. Map의 1단계 사용자 제외와 Claude 별도 빌드 소유권은 유지하며 이 문서 작업자가 새 Map 작업을 시작하지 않는다.
 
-## 8. 전체 직접 의존성: 기준선 → 최종 merged 소스
+</details>
 
-아래 **412개 선언 행**은 각 고정 기준선과 2절의 **최종 merged SHA**에서 Git으로 읽은 package.json의 dependencies·devDependencies·peerDependencies·optionalDependencies 전체 합집합이다. Transport 관리자만 후속PR186의 최종 운영 mergedf30dbd82를 사용하며 주PR181의 package blob·선언값과 동일함을 확인했다. 같은 이름이 서로 다른 종류에 선언되면 각각 표시한다. 이10개 package에는 양 시점 모두 peer/optional 직접 선언이 없다. 변경 없는 직접 의존성도 생략하지 않았다. `없음`은 기준선에 없는 신규 선언, `제거`는 최종 선언에서 삭제를 뜻한다.
+## 8. 전체 직접 의존성: phase1 기준선 → phase1 최종 merged 소스
+
+아래 표는 **phase1의 고정 비교**이며 phase2 버전 표가 아니다. 아래 **412개 선언 행**은 각 고정 기준선과 2절의 **최종 merged SHA**에서 Git으로 읽은 package.json의 dependencies·devDependencies·peerDependencies·optionalDependencies 전체 합집합이다. Transport 관리자만 후속PR186의 최종 운영 mergedf30dbd82를 사용하며 주PR181의 package blob·선언값과 동일함을 확인했다. 같은 이름이 서로 다른 종류에 선언되면 각각 표시한다. 이10개 package에는 양 시점 모두 peer/optional 직접 선언이 없다. 변경 없는 직접 의존성도 생략하지 않았다. `없음`은 기준선에 없는 신규 선언, `제거`는 최종 선언에서 삭제를 뜻한다.
 
 이는 **선언 전체 비교**이며 모든 전이 의존성 목록이나 lock의 실제 설치 전체 목록은 아니다. file: 선언은 위 버전·SRI 원장으로 해석한다. 연결 workspace SDK의 `*`는 해당 merged tree의 내부 package 계약으로 해석하며 외부 공유 라이브러리의 정확 버전 고정을 완화하는 표기가 아니다. 실제 stale cache·중복 설치·SRI는 별도 guard와 파일 대조로 검증했다.
 
