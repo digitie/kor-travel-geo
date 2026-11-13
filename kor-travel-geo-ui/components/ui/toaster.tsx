@@ -1,6 +1,6 @@
 "use client";
 
-import { Toast as ToastPrimitive } from "radix-ui";
+import { Toast as ToastPrimitive } from "@kor-travel/toast";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
