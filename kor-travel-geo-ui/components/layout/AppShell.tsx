@@ -1,4 +1,7 @@
 "use client";
+// Hallmark · genre: editorial-utilitarian · macrostructure: Rail-Workbench · designed-as-app
+// 최신 kor-travel-map admin `AdminShell`(packages/kor-travel-map-admin/frontend/src/components/admin-shell.tsx)의
+// rail·워드마크·메뉴·로그아웃 구조를 그대로 옮겼다. 색은 geo의 blue 토큰을 그대로 쓴다.
 
 import {
   Archive,
@@ -12,30 +15,21 @@ import {
   ListChecks,
   LogOut,
   MapPinned,
-  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
   Settings,
   ShieldCheck,
   TerminalSquare,
-  Workflow,
-  X
+  Workflow
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppMenu, type AppMenuLinkProps } from "@kor-travel/ui/app-menu";
+import { buttonVariants } from "@kor-travel/ui/button-variants";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
-import { useModalA11y } from "@/lib/use-modal-a11y";
-
-const debugLinks = [
-  { href: "/debug/geocode", label: "Geocode", icon: Search },
-  { href: "/debug/reverse", label: "Reverse", icon: MapPinned },
-  { href: "/debug/normalize", label: "Normalize", icon: Braces },
-  { href: "/debug/explain", label: "Explain", icon: TerminalSquare }
-];
+import { cn } from "@/lib/utils";
 
 const adminIcons: Record<AdminPageKey, typeof Search> = {
   home: LayoutDashboard,
@@ -52,281 +46,285 @@ const adminIcons: Record<AdminPageKey, typeof Search> = {
   load: FolderUp
 };
 
-// 사이드바 그룹: 조회·진단(디버그) + 관리 홈 + lib/admin-pages.ts의 기능 그룹.
-// 같은 페이지를 다른 이름으로 다시 노출하던 Runtime 별칭 그룹은 제거했다.
-const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
-  title: group.title,
-  links: group.keys.map((key) => ({
-    href: ADMIN_PAGES[key].path,
-    label: ADMIN_PAGES[key].title,
-    icon: adminIcons[key]
+type NavItem = { href: string; label: string; icon: typeof Search };
+type NavGroup = { group: string | null; items: NavItem[] };
+
+/** 메뉴 그룹의 단일 정본. map처럼 개요(라벨 없는 root)가 먼저 오고, 기능 그룹이 뒤따른다. */
+const NAV_GROUPS: NavGroup[] = [
+  {
+    group: null,
+    items: [{ href: ADMIN_PAGES.home.path, label: ADMIN_PAGES.home.title, icon: LayoutDashboard }]
+  },
+  {
+    group: "조회·진단",
+    items: [
+      { href: "/debug/geocode", label: "Geocode", icon: Search },
+      { href: "/debug/reverse", label: "Reverse", icon: MapPinned },
+      { href: "/debug/normalize", label: "Normalize", icon: Braces },
+      { href: "/debug/explain", label: "Explain", icon: TerminalSquare }
+    ]
+  },
+  ...ADMIN_NAV_GROUPS.map((group) => ({
+    group: group.title,
+    items: group.keys.map((key) => ({
+      href: ADMIN_PAGES[key].path,
+      label: ADMIN_PAGES[key].title,
+      icon: adminIcons[key]
+    }))
+  }))
+];
+
+const COMMON_MENU_GROUPS = NAV_GROUPS.map((group) => ({
+  id: group.group ?? "root",
+  label: group.group ?? undefined,
+  items: group.items.map(({ href, label, icon: Icon }) => ({
+    id: href,
+    href,
+    label,
+    exact: href === ADMIN_PAGES.home.path,
+    icon: <Icon aria-hidden="true" className="size-4" />
   }))
 }));
 
-/** Matches the `@media (max-width: 1023px)` breakpoint where the sidebar becomes a drawer. */
-export const DRAWER_MEDIA_QUERY = "(max-width: 1023px)";
+const navHrefs = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
 
 const SIDEBAR_COLLAPSED_KEY = "kor-travel-geo:sidebar-collapsed";
+const MAIN_CONTENT_ID = "main-content";
 
-/**
- * True while the sidebar is rendered as the off-canvas drawer.
- *
- * Needed because the closed drawer must be `inert` (out of the tab order and the a11y tree)
- * while the *desktop* sidebar — same element, same `menuOpen === false` — must stay fully
- * focusable. Starts `false` so SSR and the first client paint agree.
- */
-function useIsDrawerLayout(): boolean {
-  const [isDrawer, setIsDrawer] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia(DRAWER_MEDIA_QUERY);
-    const sync = () => setIsDrawer(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-  return isDrawer;
+function isActive(pathname: string, href: string) {
+  if (href === ADMIN_PAGES.home.path) return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const sidebarStateLoadedRef = useRef(false);
-  const isDrawerLayout = useIsDrawerLayout();
-  const pathname = usePathname();
-  const sidebarRef = useRef<HTMLElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const mainRef = useRef<HTMLElement>(null);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+/**
+ * Rail nav row / footer row 레시피(map design.md §Macrostructure N3 · M9).
+ * flat row · 30px · 500 · hover surface-subtle · active surface-muted.
+ */
+const railRowClass =
+  "relative flex h-control-sm shrink-0 items-center gap-2.5 rounded-control px-3 text-xs font-medium whitespace-nowrap text-text-secondary transition-[color,background-color] duration-fast ease-out hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:bg-surface-muted";
+
+const railRowCollapsedClass = "lg:size-control lg:justify-center lg:gap-0 lg:px-0";
+
+function subscribeSidebar(listener: () => void) {
+  window.addEventListener("storage", listener);
+  window.addEventListener("geo-sidebar-preference", listener);
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener("geo-sidebar-preference", listener);
+  };
+}
+const readSidebar = () => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+const serverSidebar = () => false;
+
+/** 전체 문서 이동(geo는 RSC 소프트 이동 대신 문서 이동을 쓴다 — navigation.spec). */
+function GeoMenuLink({ children, className, ...props }: AppMenuLinkProps) {
+  return (
+    <DocumentNavLink
+      {...props}
+      ariaLabel={props["aria-label"]}
+      className={className}
+      title={props["aria-label"]}
+    >
+      {children}
+    </DocumentNavLink>
+  );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "/";
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarCollapsed = useSyncExternalStore(subscribeSidebar, readSidebar, serverSidebar);
+  // longest-prefix 일치(예: /admin/consistency/123 → /admin/consistency, /admin 아님).
+  const activeHref = navHrefs
+    .filter((href) => isActive(pathname, href))
+    .reduce<string | undefined>((best, href) => (!best || href.length > best.length ? href : best), undefined);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    sidebarStateLoadedRef.current = true;
-    if (stored === "1") setSidebarCollapsed(true);
-  }, []);
+    if (window.innerWidth >= 1024) return;
+    // reduced-motion 이면 smooth scroll 대신 즉시 이동.
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    menuContainerRef.current?.querySelector("[aria-current=page]")?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+      inline: "center"
+    });
+  }, [activeHref]);
 
-  useEffect(() => {
-    if (!sidebarStateLoadedRef.current) return;
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
-  }, [sidebarCollapsed]);
+  // 로그인 화면은 shell 없이 단독으로 렌더된다(map과 동일 — LoginForm이 <main>을 가진다).
+  if (pathname === "/login") return <>{children}</>;
 
-  // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
-  // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
-  // the tab order and the a11y tree. The CSS keeps a `visibility: hidden` baseline for the
-  // window before this runs (see globals.css) — hydration, on every full page load.
-  //
-  // MUST be declared before useModalA11y: React flushes one commit's passive effects in hook
-  // order, and focusing into an inert subtree is a silent no-op that un-inerting afterwards
-  // does NOT replay. Registered the other way round, opening the drawer left focus stranded on
-  // the hamburger (verified in Chromium and Firefox). tests/unit/app-shell-drawer.test.tsx
-  // pins the ordering.
-  //
-  // Set imperatively: React 18 drops `inert={true}` on the way to the DOM (also covered by
-  // that test), so a JSX prop would silently do nothing. Never applied to the desktop sidebar —
-  // same element, same `menuOpen === false`, but not a drawer.
-  useEffect(() => {
-    sidebarRef.current?.toggleAttribute("inert", isDrawerLayout && !menuOpen);
-  }, [isDrawerLayout, menuOpen]);
-
-  // Growing past the drawer breakpoint while the drawer is open would strand the desktop
-  // layout: body scroll stays locked and <main> stays aria-hidden, while every control that
-  // could close it (top bar, close button, backdrop) is `display: none` outside the media
-  // query — leaving no visible way out.
-  //
-  // Focus has to be re-homed too. On close, useModalA11y restores focus to the hamburger — but
-  // at desktop width the hamburger is inside `.mobile-topbar { display: none }`, and the
-  // `.sidebar-close` the user was probably on is hidden as well, so focus falls to <body> and
-  // a keyboard user loses their place. Hand it to <main> instead.
-  useEffect(() => {
-    if (isDrawerLayout) return;
-    if (!menuOpen) return;
-    const focusInsideSidebar = sidebarRef.current?.contains(document.activeElement) ?? false;
-    setMenuOpen(false);
-    if (focusInsideSidebar) {
-      // After the commit that unlocks <main> (it is aria-hidden while the drawer is open).
-      queueMicrotask(() => mainRef.current?.focus());
-    }
-  }, [isDrawerLayout, menuOpen]);
-
-  // On mobile the sidebar is an off-canvas modal drawer, so give it the same keyboard/AT
-  // behavior as the admin dialogs: Escape closes it, focus moves in and is trapped while open,
-  // and focus returns to the toggle on close. `open` is passed because the drawer is always
-  // mounted and CSS-toggled (unlike the mount-on-open admin modals).
-  useModalA11y({
-    dialogRef: sidebarRef,
-    onClose: closeMenu,
-    initialFocusRef: closeButtonRef,
-    open: menuOpen
-  });
-
-  // Lock background scroll while the drawer is open so touch scroll-chaining can't move the
-  // page behind the backdrop.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [menuOpen]);
-
-  // The login page renders standalone (no shell chrome). Placed after all hooks so hook order
-  // stays stable across routes (rules of hooks).
-  if (pathname === "/login") {
-    return <main className="login-content">{children}</main>;
-  }
+  const toggleSidebar = () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "0" : "1");
+    window.dispatchEvent(new Event("geo-sidebar-preference"));
+  };
 
   return (
-    <div
-      className="app-shell"
-      data-menu-open={menuOpen}
-      data-sidebar-collapsed={sidebarCollapsed}
-    >
-      <a className="skip-link" href="#main-content">
+    <div className="min-h-dvh bg-surface-page text-text-primary">
+      {/* skip link — rail 항목을 건너뛰어 <main> 으로. nav 밖. */}
+      <a
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-control focus:border focus:border-border focus:bg-card focus:px-3 focus:py-2 focus:text-xs focus:font-medium focus:text-text-primary focus:shadow-elevated focus:outline-2 focus:outline-offset-2 focus:outline-focus"
+        href={`#${MAIN_CONTENT_ID}`}
+      >
         본문으로 건너뛰기
       </a>
-      <header className="mobile-topbar">
-        <button
-          className="mobile-menu-toggle"
-          type="button"
-          aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
-          aria-expanded={menuOpen}
-          aria-controls="app-sidebar"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-        <strong className="mobile-topbar-title">Geocoder Admin UI</strong>
-      </header>
-      <button
-        className="sidebar-backdrop"
-        type="button"
-        aria-label="메뉴 닫기"
-        tabIndex={menuOpen ? 0 : -1}
-        onClick={closeMenu}
-      />
-      <aside
-        id="app-sidebar"
-        ref={sidebarRef}
-        className="sidebar"
-        role={menuOpen ? "dialog" : undefined}
-        aria-modal={menuOpen ? true : undefined}
-        aria-label={menuOpen ? "내비게이션 메뉴" : undefined}
-        data-slot="admin-shell-rail"
+      <div
+        className={cn(
+          // gap-0: geo의 레거시 `.grid:not([class*="gap-"])` 간격 규칙이 rail과 본문 사이에 틈을 넣지 않게 한다.
+          "grid min-h-dvh min-w-0 gap-0",
+          sidebarCollapsed ? "lg:grid-cols-[4rem_minmax(0,1fr)]" : "lg:grid-cols-[16rem_minmax(0,1fr)]"
+        )}
+        data-sidebar-collapsed={sidebarCollapsed}
       >
-        <div className="rail-inner">
-          <div className="rail-header">
-            <Link
-              aria-label="Geocoder Admin UI"
-              className="rail-brand"
-              href={ADMIN_PAGES.home.path}
+        {/* Rail: card 표면 위 hairline 분리, rest shadow 없음. lg 에서 sticky 전체 높이. */}
+        <aside
+          className="min-w-0 border-b border-border bg-card lg:sticky lg:top-0 lg:h-dvh lg:self-start lg:border-r lg:border-b-0"
+          data-slot="admin-shell-rail"
+        >
+          <div className="flex h-full min-w-0 flex-col">
+            <div
+              className={cn(
+                "flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4",
+                sidebarCollapsed && "lg:h-auto lg:flex-col lg:justify-center lg:gap-1 lg:px-0 lg:py-2"
+              )}
             >
-              <span className="rail-brand-name">Geocoder</span>
-              <span className="rail-brand-suffix">Admin UI</span>
-              <span aria-hidden="true" className="rail-brand-compact">
-                GA
-              </span>
-            </Link>
-            <div className="rail-actions">
-              <button
-                ref={closeButtonRef}
-                className="sidebar-close"
-                type="button"
-                aria-label="메뉴 닫기"
-                onClick={closeMenu}
+              {/* 타이포 워드마크 — 아이콘 타일 없음. 접힘 시 축약형 `GA`. */}
+              <DocumentNavLink
+                ariaLabel="Geocoder Admin UI"
+                className={cn(
+                  "flex min-w-0 items-baseline gap-1.5 rounded-control text-text-primary no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+                  sidebarCollapsed && "lg:justify-center"
+                )}
+                href={ADMIN_PAGES.home.path}
               >
-                <X size={18} />
-              </button>
-              <button
-                aria-label={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
-                className="sidebar-collapse"
-                title={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
-                type="button"
-                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              >
-                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-              </button>
+                <span className={cn("truncate text-sm font-semibold tracking-tight", sidebarCollapsed && "lg:hidden")}>
+                  Geocoder
+                </span>
+                <span className={cn("text-2xs font-medium text-text-tertiary", sidebarCollapsed && "lg:hidden")}>
+                  Admin UI
+                </span>
+                <span
+                  aria-hidden="true"
+                  className={cn("hidden text-xs font-semibold tracking-tight", sidebarCollapsed && "lg:inline")}
+                >
+                  GA
+                </span>
+              </DocumentNavLink>
+              <div className="flex shrink-0 items-center gap-1">
+                <ButtonLogout className="lg:hidden" iconOnly />
+                <button
+                  aria-label={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
+                  className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "hidden lg:inline-flex")}
+                  title={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
+                  type="button"
+                  onClick={toggleSidebar}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+                </button>
+              </div>
+            </div>
+            <div
+              ref={menuContainerRef}
+              data-collapsed={sidebarCollapsed}
+              className="geo-common-menu geo-common-surface min-h-0 max-w-full overflow-x-auto px-2 py-2 lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
+            >
+              <AppMenu
+                groups={COMMON_MENU_GROUPS}
+                activeItemId={activeHref ?? null}
+                pathname={pathname}
+                label="주요 메뉴"
+                linkComponent={GeoMenuLink}
+                testId="geo-common-menu"
+              />
+            </div>
+            {/* 로그아웃 = rail footer 의 plain row. <lg 에서는 상단 워드마크 행의 아이콘 버튼이 대신한다. */}
+            <div
+              className={cn(
+                "hidden shrink-0 border-t border-border p-2 lg:block",
+                sidebarCollapsed && "lg:flex lg:justify-center"
+              )}
+            >
+              <ButtonLogout collapsed={sidebarCollapsed} />
             </div>
           </div>
-          <div className="rail-nav">
-            <NavGroup
-              collapsed={sidebarCollapsed}
-              title="조회·진단"
-              links={debugLinks}
-              onNavigate={closeMenu}
-            />
-            <NavGroup collapsed={sidebarCollapsed} title="개요"
-              links={[{ href: ADMIN_PAGES.home.path, label: ADMIN_PAGES.home.title, icon: LayoutDashboard }]}
-              onNavigate={closeMenu} />
-            {adminNavGroups.map((group) => (
-              <NavGroup
-                collapsed={sidebarCollapsed}
-                key={group.title}
-                title={group.title}
-                links={group.links}
-                onNavigate={closeMenu}
-              />
-            ))}
-          </div>
-          <div className="sidebar-footer">
-            <button
-              aria-label={sidebarCollapsed ? "로그아웃" : undefined}
-              className="nav-link nav-button"
-              title={sidebarCollapsed ? "로그아웃" : undefined}
-              type="button"
-              onClick={() => void logout()}
-            >
-              <LogOut size={17} />
-              <span className="nav-label">로그아웃</span>
-            </button>
-          </div>
+        </aside>
+        <div className="flex min-w-0 flex-col">
+          {/* <main> 은 children 만 감싼다. skip link 대상. 헤더 밴드는 각 페이지의 PageHeader가 그린다. */}
+          <main
+            className="min-w-0 flex-1 px-6 pb-6 focus-visible:outline-0"
+            data-slot="admin-shell-main"
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+          >
+            {children}
+          </main>
         </div>
-      </aside>
-      <main
-        className="content"
-        aria-hidden={menuOpen || undefined}
-        data-slot="admin-shell-main"
-        id="main-content"
-        ref={mainRef}
-        tabIndex={-1}
-      >
-        {children}
-      </main>
+      </div>
     </div>
   );
 }
 
-async function logout() {
-  try {
-    await fetch("/api/auth/logout", { method: "POST" });
-  } finally {
-    // 인증 컨텍스트와 클라이언트 캐시를 폐기하려 전체 문서를 새로 연다.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/login");
-  }
-}
-
-function NavGroup({
-  title,
-  links,
-  onNavigate
+function ButtonLogout({
+  collapsed = false,
+  iconOnly = false,
+  className
 }: {
-  collapsed: boolean;
-  title: string;
-  links: { href: string; label: string; icon: typeof Search }[];
-  onNavigate: () => void;
+  /** lg rail 접힘 — 라벨을 lg 에서만 숨긴다. */
+  collapsed?: boolean;
+  /** 모든 breakpoint 에서 아이콘만(<lg 상단 행). */
+  iconOnly?: boolean;
+  className?: string;
 }) {
-  const pathname = usePathname() ?? "/";
-  return <MenuNavigationContext value={onNavigate}>
-    <AppMenu pathname={pathname} label={title} groups={[{ id: title, label: title,
-      items: links.map(link => ({ id: link.href, href: link.href, label: link.label,
-        exact: link.href === "/admin", icon: <link.icon size={17} /> })) }]} linkComponent={MenuDocumentLink} />
-  </MenuNavigationContext>;
-}
+  const labelHidden = iconOnly || collapsed;
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
 
-const MenuNavigationContext = createContext<() => void>(() => {});
+  async function logout() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        signal: AbortSignal.timeout(5000)
+      });
+      if (!response.ok) throw new Error("logout failed");
+      // 인증 컨텍스트와 클라이언트 캐시를 폐기하려 전체 문서를 새로 연다.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/login");
+    } catch {
+      setError("로그아웃하지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
 
-function MenuDocumentLink({ children, className, ...props }: AppMenuLinkProps) {
-  const onNavigate = use(MenuNavigationContext);
-  return <DocumentNavLink {...props} ariaLabel={props["aria-label"]} title={props["aria-label"]}
-    className={`${className ?? ""} nav-link`} onNavigate={onNavigate}>{children}</DocumentNavLink>;
+  return (
+    <div>
+      <button
+        aria-busy={busy}
+        aria-disabled={busy}
+        aria-label={labelHidden ? "로그아웃" : undefined}
+        className={cn(
+          railRowClass,
+          iconOnly ? "size-control-sm justify-center gap-0 px-0" : "w-full",
+          !iconOnly && collapsed && railRowCollapsedClass,
+          className
+        )}
+        title={labelHidden ? "로그아웃" : undefined}
+        type="button"
+        onClick={() => void logout()}
+      >
+        <LogOut aria-hidden="true" className="size-4 shrink-0 text-icon-default" />
+        <span className={cn(iconOnly ? "sr-only" : collapsed && "lg:hidden")}>로그아웃</span>
+      </button>
+      {error ? (
+        <p role="alert" className="px-2 text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
 }
