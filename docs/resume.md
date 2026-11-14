@@ -1,3 +1,18 @@
+## 2026-11-14 — 관리 UI 로그인·메뉴·look and feel을 최신 map admin과 정렬(#637) + odroid 배포
+
+- #637(`120d564`): AppShell을 map AdminShell 구조(16rem/4rem rail, 타이포 워드마크, 단일 AppMenu 그룹, 접기 유지,
+  `<lg` 가로 메뉴·drawer 제거)로, PageHeader를 flush header band로, 로그인을 map login 구성으로 맞췄다. 색은 geo 파란
+  토큰 유지. 메뉴·워드마크는 `DocumentNavLink`(_rsc 0). mock e2e 110 중 103 통과 — 실패 7(backups manifest/삭제 4,
+  settings-vworld 2, vworld-map 1)은 origin/main 빌드에서도 동일하게 실패하는 **기존 이슈**(후속 정리 대상).
+- odroid 배포 완료(2026-11-14 02:38Z): 승인 clone `/opt/kor-travel-release-sources/geo-ui-sync-120d564a-claude`에서
+  ARM64 이미지 `kor-travel-geo-ui:merged-120d564a-uisync-arm64`(`sha256:eef3d7a4…`, OCI revision=120d564) 빌드 →
+  `ktdctl service-release apply-component-ui geo` dry-run → `--confirm` healthy. current/geo =
+  `geo-candidate-5bfdfab4…`(previous `geo-candidate-04fc5937…` = UI 253b445). API·코드 서버·weather 무변경.
+  컨테이너 내부 `/login` 200(공통 LoginForm 렌더), `/admin` 미인증 307 → `/login?next=%2Fadmin`.
+- n150: geo 컨테이너·이미지가 없어(odroid 이전 완료) 배포 대상 아님 — 실행하지 않았다.
+- 참고: odroid `~digitie/.docker/buildx/activity/default`가 root 소유(타 에이전트 sudo build 잔재)라 비-sudo
+  `docker build`가 permission denied로 실패한다. 기존 관행대로 `sudo -n docker build`를 사용했다.
+
 ## 현재 상태 — 2026-11-13 lint warning0 후속 후보
 
 B-GEOBUILD-P2-01을 위해 기존 lint에 --max-warnings 0을 추가했다.
