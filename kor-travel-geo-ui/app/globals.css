@@ -78,6 +78,7 @@
   --radius-xl: var(--radius-panel);
   --radius-2xl: var(--radius-panel);
   --font-sans: var(--font-body);
+  --shadow-elevated: var(--shadow-card-hover);
   --font-heading: var(--font-display);
 }
 
@@ -201,217 +202,6 @@ a {
   text-decoration: none;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
-.app-shell {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  min-height: 100vh;
-}
-
-/* Mobile-only top bar + drawer controls. Hidden on desktop; activated in the
-   max-width:980px block where the sidebar becomes an off-canvas drawer. */
-.mobile-topbar {
-  display: none;
-}
-
-.mobile-menu-toggle {
-  align-items: center;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  cursor: pointer;
-  display: inline-grid;
-  height: 44px;
-  justify-items: center;
-  width: 44px;
-}
-
-.mobile-topbar-title {
-  font-size: 15px;
-}
-
-.sidebar-backdrop {
-  display: none;
-}
-
-/* In-drawer close (X). Hidden on desktop where the sidebar is a persistent rail; shown inside
-   the mobile drawer (see the max-width:980px block) so the close affordance is visible above
-   the drawer's own stacking context instead of behind it under the topbar toggle. */
-.sidebar-close {
-  display: none;
-}
-
-.sidebar {
-  border-right: 1px solid var(--line);
-  background: var(--surface-subtle);
-  max-height: 100dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 20px 16px;
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-}
-
-.brand {
-  display: grid;
-  gap: 2px;
-  padding: 4px 8px 18px;
-  border-bottom: 1px solid var(--line);
-}
-
-.brand strong {
-  font-size: 18px;
-}
-
-.brand span {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.nav-group {
-  margin-top: 18px;
-}
-
-.nav-title {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  margin: 0 8px 8px;
-  text-transform: uppercase;
-}
-
-.nav-link {
-  align-items: center;
-  border-radius: 8px;
-  color: var(--text-primary);
-  display: flex;
-  gap: 10px;
-  min-height: 44px;
-  padding: 8px 10px;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
-  width: 100%;
-}
-
-.nav-link:hover,
-.nav-link:focus {
-  background: var(--surface-muted);
-  color: var(--ink);
-  outline: none;
-}
-
-.nav-link:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 28%, transparent);
-}
-
-.nav-link svg {
-  flex: 0 0 auto;
-}
-
-.nav-button {
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.sidebar-footer {
-  border-top: 1px solid var(--line);
-  margin-top: 20px;
-  padding-top: 12px;
-}
-
-.content {
-  min-width: 0;
-  padding: 26px 32px 48px;
-}
-
-.login-content {
-  min-height: 100dvh;
-}
-
-.login-shell {
-  align-items: center;
-  display: grid;
-  min-height: 100dvh;
-  padding: 24px;
-}
-
-.login-panel {
-  background: var(--surface-card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--shadow-card);
-  display: grid;
-  gap: 20px;
-  justify-self: center;
-  max-width: 420px;
-  padding: 24px;
-  width: min(100%, 420px);
-}
-
-.login-brand {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.login-brand p {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin: 0 0 3px;
-}
-
-.login-brand h1 {
-  color: var(--text-strong);
-  font-size: 24px;
-  line-height: 1.25;
-  margin: 0;
-}
-
-.login-icon {
-  align-items: center;
-  background: var(--brand-tint);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--brand);
-  display: grid;
-  height: 48px;
-  justify-items: center;
-  width: 48px;
-}
-
-.login-form {
-  display: grid;
-  gap: 14px;
-}
-
-.login-submit {
-  justify-content: center;
-}
-
-.login-error {
-  color: var(--danger);
-  font-size: 13px;
-  margin: 0;
-}
-
-/* The error node stays mounted as an aria-live region; hide it while empty to avoid a stray gap. */
-.login-error:empty {
-  display: none;
-}
-
 .app-error-shell {
   align-items: center;
   display: flex;
@@ -482,32 +272,6 @@ textarea {
   overflow: auto;
   padding: 10px;
   white-space: pre-wrap;
-}
-
-.page-head {
-  align-items: end;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  display: grid;
-  gap: 6px;
-}
-
-.page-title h1 {
-  color: var(--text-strong);
-  font-size: 24px;
-  line-height: 1.25;
-  margin: 0;
-}
-
-.page-title p {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin: 0;
 }
 
 .grid {
@@ -2266,22 +2030,9 @@ textarea {
 }
 
 @media (max-width: 1023px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
+  
 
-  .mobile-topbar {
-    align-items: center;
-    background: var(--surface-card);
-    border-bottom: 1px solid var(--line);
-    display: flex;
-    gap: 10px;
-    min-height: 56px;
-    padding: 8px 12px;
-    position: sticky;
-    top: 0;
-    z-index: 40;
-  }
+  
 
   .source-split {
     grid-template-columns: 1fr;
@@ -2290,66 +2041,15 @@ textarea {
   /* Off-canvas drawer toggled by the top bar; closed by default so the page
      content is visible. (A plain `position: static` left the sidebar filling
      100dvh with the content stuck entirely below the fold.) */
-  .sidebar {
-    bottom: 0;
-    box-shadow: var(--shadow-modal);
-    left: 0;
-    position: fixed;
-    top: 0;
-    transform: translateX(-100%);
-    /* Two layers, on purpose. `inert` on the element (AppShell) is what removes the closed
-       drawer from the tab order AND the a11y tree — but it only exists after hydration, and
-       every navigation in this console is a full page load, so that window recurs on every
-       page. `visibility: hidden` is the JS-free baseline covering it. The delay applies only
-       on close, so hiding does not cut the slide-out short; opening is instant (rule below),
-       which matters because focus moves into the drawer the moment it opens. */
-    transition:
-      transform var(--duration-normal) var(--ease-default),
-      visibility 0s linear var(--duration-normal);
-    visibility: hidden;
-    width: min(280px, 84vw);
-    z-index: 50;
-  }
+  
 
-  .app-shell[data-menu-open="true"] .sidebar {
-    transform: translateX(0);
-    transition:
-      transform var(--duration-normal) var(--ease-default),
-      visibility 0s linear 0s;
-    visibility: visible;
-  }
+  
 
-  .sidebar-close {
-    align-items: center;
-    background: transparent;
-    border: 0;
-    border-radius: 8px;
-    color: var(--muted);
-    cursor: pointer;
-    display: inline-grid;
-    height: 36px;
-    justify-items: center;
-    position: absolute;
-    right: 10px;
-    top: 10px;
-    width: 36px;
-    z-index: 1;
-  }
+  
 
-  .app-shell[data-menu-open="true"] .sidebar-backdrop {
-    background: rgb(15 23 42 / 42%);
-    border: 0;
-    display: block;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    position: fixed;
-    z-index: 45;
-  }
+  
 
-  .content {
-    padding: 18px 16px 40px;
-  }
+  
 
   .grid.two,
   .grid.three,
@@ -2480,167 +2180,6 @@ textarea {
 
 /* Hallmark Workbench override — 기존 라우트와 컴포넌트 계약은 보존하고, 공통 작업
    캔버스의 위계·밀도·상태만 다시 설계한다. */
-.app-shell {
-  grid-template-columns: 16rem minmax(0, 1fr);
-  background: var(--surface-page);
-  min-height: 100dvh;
-}
-
-.sidebar {
-  background: var(--surface-subtle);
-  border-inline-end: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-md) var(--space-sm) var(--space-sm);
-}
-
-.brand {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: var(--space-xs);
-  grid-template-columns: 2.35rem minmax(0, 1fr);
-  padding: var(--space-2xs) var(--space-2xs) var(--space-md);
-}
-
-.brand-mark {
-  align-items: center;
-  background: var(--surface-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  color: var(--brand);
-  display: inline-grid;
-  height: 2.35rem;
-  justify-content: center;
-  width: 2.35rem;
-}
-
-.brand-copy {
-  display: grid;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.brand strong,
-.mobile-topbar-title {
-  color: var(--text-strong);
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 760;
-  letter-spacing: -0.025em;
-  overflow-wrap: anywhere;
-}
-
-.brand span {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
-.nav-group {
-  margin-top: var(--space-xs);
-}
-
-.nav-title {
-  color: var(--text-tertiary);
-  font-size: 0.6875rem;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  margin: 0 var(--space-2xs) var(--space-2xs);
-}
-
-.nav-link {
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  font-weight: 560;
-  gap: var(--space-xs);
-  min-height: 2.75rem;
-  padding: 0.625rem var(--space-xs);
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default),
-    transform var(--duration-fast) var(--ease-default);
-  white-space: nowrap;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .nav-link:hover {
-    background: var(--surface-card);
-    border-color: var(--line);
-    color: var(--text-strong);
-    transform: translateX(1px);
-  }
-}
-
-.nav-link[aria-current="page"] {
-  background: var(--surface-card);
-  border-color: var(--color-rule-strong);
-  color: var(--brand-ink);
-  font-weight: 720;
-}
-
-.nav-link[aria-current="page"] svg {
-  color: var(--brand);
-}
-
-.nav-link:focus-visible,
-.nav-button:focus-visible,
-.mobile-menu-toggle:focus-visible,
-.sidebar-close:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 36%, transparent);
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-
-.sidebar-footer {
-  border-top: 1px solid var(--line);
-  margin-top: auto;
-  padding-top: var(--space-xs);
-}
-
-.content {
-  background: var(--surface-page);
-  padding: clamp(1.25rem, 2.4vw, 2.75rem) clamp(1rem, 3vw, 3.75rem) var(--space-2xl);
-}
-
-.page-head {
-  align-items: end;
-  border-bottom: 1px solid var(--line);
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-  padding-bottom: var(--space-md);
-}
-
-.page-title {
-  gap: var(--space-2xs);
-  min-width: 0;
-}
-
-.page-title h1 {
-  color: var(--text-strong);
-  font-family: var(--font-display);
-  font-size: clamp(1.625rem, 1.4rem + 0.8vw, 2.25rem);
-  font-weight: 760;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.page-title p {
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-  line-height: 1.55;
-  max-width: 68ch;
-}
-
-.page-actions {
-  flex: 0 0 auto;
-}
 
 .grid:not([class*="gap-"]),
 .debug-map-layout,
@@ -2896,12 +2435,10 @@ textarea {
   }
 }
 
-.login-shell,
 .app-error-shell {
   background: var(--surface-page);
 }
 
-.login-panel,
 .app-error-panel {
   background: var(--surface-card);
   border-color: var(--color-rule-strong);
@@ -2909,50 +2446,22 @@ textarea {
   box-shadow: var(--shadow-modal);
 }
 
-.login-icon {
-  border-radius: var(--radius-control);
-}
-
 @media (max-width: 1023px) {
-  .app-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  
 
-  .mobile-topbar {
-    background: var(--surface-card);
-    border-bottom-color: var(--line);
-    z-index: var(--z-sticky);
-  }
+  
 
-  .mobile-menu-toggle {
-    background: var(--surface-card);
-    border-color: var(--color-rule-strong);
-    border-radius: var(--radius-control);
-  }
+  
 
-  .sidebar {
-    box-shadow: var(--shadow-modal);
-    width: min(18.5rem, 88vw);
-    z-index: var(--z-modal);
-  }
+  
 
-  .app-shell[data-menu-open="true"] .sidebar-backdrop {
-    background: var(--color-overlay);
-    z-index: var(--z-raised);
-  }
+  
 
-  .content {
-    padding: var(--space-md) var(--space-sm) var(--space-xl);
-  }
+  
 
-  .page-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+  
 
-  .page-actions {
-    width: 100%;
-  }
+  
 
   .admin-status-strip,
   .grid.two,
@@ -2964,288 +2473,6 @@ textarea {
 /* Hallmark Workbench parity — latest kor-travel-map의 Rail-Workbench 구조를 geo 도메인에
    적용한다. 색상은 위 토큰 블록의 현재 blue 팔레트를 그대로 사용하고, 라우트·기능 계약은
    변경하지 않는다. */
-.app-shell {
-  grid-template-columns: 16rem minmax(0, 1fr);
-  min-height: 100dvh;
-}
-
-.sidebar {
-  background: var(--surface-card);
-  display: block;
-  padding: 0;
-}
-
-.rail-inner {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-  min-width: 0;
-}
-
-.rail-header {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: var(--space-2xs);
-  justify-content: space-between;
-  min-height: 3.5rem;
-  padding: var(--space-2xs) var(--space-sm);
-}
-
-.rail-brand {
-  align-items: baseline;
-  border-radius: var(--radius-control);
-  color: var(--text-strong);
-  display: flex;
-  gap: 0.375rem;
-  min-width: 0;
-  outline-offset: 2px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.rail-brand-name {
-  font-family: var(--font-display);
-  font-size: 0.875rem;
-  font-weight: 760;
-  letter-spacing: -0.025em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rail-brand-suffix {
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
-  font-weight: 560;
-}
-
-.rail-brand-compact {
-  display: none;
-  font-family: var(--font-display);
-  font-size: 0.75rem;
-  font-weight: 760;
-  letter-spacing: -0.025em;
-}
-
-.rail-actions {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 0.25rem;
-}
-
-.sidebar-collapse,
-.sidebar-close {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: inline-grid;
-  height: 2rem;
-  justify-items: center;
-  width: 2rem;
-}
-
-.sidebar-collapse:hover,
-.sidebar-close:hover {
-  background: var(--surface-subtle);
-  color: var(--text-primary);
-}
-
-.sidebar-close {
-  display: none;
-}
-
-.rail-nav {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.125rem;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--space-xs) var(--space-2xs);
-}
-
-.rail-nav > .nav-group,
-.rail-nav > nav {
-  margin-top: var(--space-xs);
-}
-
-.rail-nav > .nav-group:first-child,
-.rail-nav > nav:first-child {
-  margin-top: 0;
-}
-
-.nav-group {
-  min-width: 0;
-}
-
-.nav-title {
-  align-items: center;
-  color: var(--text-secondary);
-  display: flex;
-  font-size: 0.75rem;
-  font-weight: 560;
-  gap: var(--space-2xs);
-  letter-spacing: 0;
-  margin: var(--space-xs) var(--space-2xs) var(--space-2xs);
-  text-transform: none;
-  white-space: nowrap;
-}
-
-.nav-title::after {
-  background: var(--line);
-  content: "";
-  flex: 1;
-  height: 1px;
-}
-
-.nav-link {
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 560;
-  gap: 0.625rem;
-  min-height: 1.875rem;
-  padding: 0.375rem var(--space-xs);
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
-}
-
-.nav-link .nav-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nav-link[aria-current="page"] {
-  background: var(--brand-tint);
-  border-color: transparent;
-  color: var(--text-primary);
-  font-weight: 700;
-  position: relative;
-}
-
-.nav-link[aria-current="page"]::before {
-  background: var(--brand);
-  border-radius: 999px;
-  bottom: 0.375rem;
-  content: "";
-  left: 0;
-  position: absolute;
-  top: 0.375rem;
-  width: 2px;
-}
-
-.nav-link[aria-current="page"] svg {
-  color: var(--brand);
-}
-
-.sidebar-footer {
-  border-top: 1px solid var(--line);
-  margin-top: auto;
-  padding: var(--space-2xs);
-}
-
-.sidebar-footer .nav-link {
-  width: 100%;
-}
-
-.content {
-  --content-inline: 1.5rem;
-  background: var(--surface-page);
-  padding: 0 var(--content-inline) var(--space-2xl);
-}
-
-.page-head {
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
-  display: block;
-  margin-bottom: var(--space-md);
-  margin-inline: calc(-1 * var(--content-inline));
-  padding: 1.25rem var(--content-inline) 1rem;
-}
-
-.page-head-inner {
-  min-width: 0;
-}
-
-.page-section {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 560;
-  line-height: 1.5;
-  margin: 0 0 var(--space-2xs);
-}
-
-.page-head-row {
-  align-items: center;
-  display: flex;
-  gap: var(--space-md);
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.page-title {
-  display: flex;
-  min-width: 0;
-}
-
-.page-title h1 {
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 760;
-  letter-spacing: -0.035em;
-  line-height: 1.25;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.page-actions {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-  justify-content: flex-end;
-}
-
-.page-meta,
-.page-description {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  margin: var(--space-2xs) 0 0;
-}
-
-.page-description {
-  max-width: 68ch;
-}
-
-.skip-link {
-  background: var(--surface-card);
-  border: 1px solid var(--color-rule-strong);
-  border-radius: var(--radius-control);
-  color: var(--text-primary);
-  left: var(--space-sm);
-  padding: var(--space-2xs) var(--space-xs);
-  position: fixed;
-  top: var(--space-sm);
-  transform: translateY(-160%);
-  transition: transform var(--duration-fast) var(--ease-default);
-  z-index: var(--z-modal);
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-}
 
 .panel {
   background: var(--surface-card);
@@ -3312,137 +2539,36 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-.app-shell[data-sidebar-collapsed="true"] {
-  grid-template-columns: 4rem minmax(0, 1fr);
-}
-
-@media (min-width: 1024px) {
-  .app-shell[data-sidebar-collapsed="true"] .rail-header {
-    flex-direction: column;
-    gap: 0.25rem;
-    justify-content: center;
-    padding-inline: 0;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand {
-    justify-content: center;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-name,
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-suffix {
-    display: none;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-compact {
-    display: inline;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .rail-nav {
-    align-items: center;
-    padding-inline: var(--space-2xs);
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .nav-group,
-  .app-shell[data-sidebar-collapsed="true"] .rail-nav > nav {
-    width: 100%;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .nav-title {
-    display: none;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .nav-link {
-    justify-content: center;
-    padding-inline: 0;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .nav-label {
-    display: none;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .sidebar-footer {
-    display: flex;
-    justify-content: center;
-  }
-
-  .app-shell[data-sidebar-collapsed="true"] .sidebar-footer .nav-link {
-    width: 2.75rem;
-  }
-}
-
 @media (max-width: 1023px) {
-  .app-shell,
-  .app-shell[data-sidebar-collapsed="true"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  
 
-  .mobile-topbar {
-    background: var(--surface-card);
-    border-bottom-color: var(--line);
-  }
+  
 
-  .sidebar {
-    background: var(--surface-card);
-    box-shadow: var(--shadow-modal);
-    padding: 0;
-    width: min(18.5rem, 88vw);
-  }
+  
 
-  .sidebar-close {
-    display: inline-grid;
-    position: static;
-  }
+  
 
-  .sidebar-collapse {
-    display: none;
-  }
+  
 
-  .rail-header {
-    min-height: 3.5rem;
-    padding-inline: var(--space-sm);
-  }
+  
 
-  .rail-nav {
-    padding: var(--space-sm) var(--space-2xs);
-  }
+  
 
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-name,
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-suffix {
-    display: inline;
-  }
+  
 
-  .app-shell[data-sidebar-collapsed="true"] .rail-brand-compact {
-    display: none;
-  }
+  
 
-  .app-shell[data-sidebar-collapsed="true"] .nav-title,
-  .app-shell[data-sidebar-collapsed="true"] .nav-label {
-    display: flex;
-  }
+  
 
-  .app-shell[data-sidebar-collapsed="true"] .nav-link {
-    justify-content: flex-start;
-    padding-inline: var(--space-xs);
-  }
+  
 
-  .content {
-    --content-inline: var(--space-sm);
-  }
+  
 
-  .page-head {
-    padding-top: var(--space-md);
-  }
+  
 
-  .page-head-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--space-xs);
-  }
+  
 
-  .page-actions {
-    justify-content: flex-start;
-    width: 100%;
-  }
+  
 
   .admin-status-strip {
     grid-template-columns: minmax(0, 1fr);
@@ -3460,10 +2586,7 @@ textarea {
     padding-top: var(--space-sm);
   }
 
-  .app-shell[data-menu-open="true"] .sidebar-backdrop {
-    background: var(--color-overlay);
-    z-index: 399;
-  }
+  
 }
 
 /* T-303 main content parity — 최신 kor-travel-map의 실제 Workbench 스케일을 공통
@@ -3472,33 +2595,6 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-}
-
-.content {
-  --content-inline: var(--space-md);
-  font-size: 0.9375rem;
-  line-height: 1.5;
-}
-
-.page-section {
-  margin-bottom: var(--space-3xs);
-}
-
-.page-head-row {
-  gap: var(--space-xs);
-}
-
-.page-title h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-}
-
-.page-meta,
-.page-description {
-  font-size: 0.84375rem;
-  line-height: 1.5;
 }
 
 .panel {
@@ -3527,24 +2623,24 @@ body {
   padding: 0;
 }
 
-.content .table,
-.content .vtable,
-.content .vtable-static,
-.content .vtable-grid,
-.content .vtable-toolbar {
+[data-slot="admin-shell-main"] .table,
+[data-slot="admin-shell-main"] .vtable,
+[data-slot="admin-shell-main"] .vtable-static,
+[data-slot="admin-shell-main"] .vtable-grid,
+[data-slot="admin-shell-main"] .vtable-toolbar {
   font-size: 0.9375rem;
   line-height: 1.5;
 }
 
-.content .table td,
-.content .vtable-td {
+[data-slot="admin-shell-main"] .table td,
+[data-slot="admin-shell-main"] .vtable-td {
   font-size: 0.9375rem;
   line-height: 1.5;
 }
 
-.content .table th,
-.content .vtable-th,
-.content .vtable-th-sort {
+[data-slot="admin-shell-main"] .table th,
+[data-slot="admin-shell-main"] .vtable-th,
+[data-slot="admin-shell-main"] .vtable-th-sort {
   font-size: 0.75rem;
   line-height: 1.25;
 }
@@ -3566,10 +2662,6 @@ body {
 
 /* T-300: color-mix glow만 남아 있던 공통 조작 요소에 opaque outline을 보장한다. map의
    단일 focus recipe와 동일하게 대비 가능한 선만 즉시 표시한다. */
-.nav-link:focus-visible,
-.nav-button:focus-visible,
-.mobile-menu-toggle:focus-visible,
-.sidebar-close:focus-visible,
 .button:focus-visible,
 [data-slot="button"]:focus-visible,
 .link-button:focus-visible,
@@ -3579,12 +2671,6 @@ body {
   box-shadow: none;
   outline: 2px solid var(--brand);
   outline-offset: 2px;
-}
-
-@media (min-width: 768px) {
-  .page-head-row {
-    gap: var(--space-md);
-  }
 }
 
 /* T-303 shared primitive parity — forms, actions, tabs and table chrome use the same
@@ -3669,13 +2755,13 @@ body {
   text-transform: none;
 }
 
-.content .table th {
+[data-slot="admin-shell-main"] .table th {
   height: 2.25rem;
   padding: 0 0.75rem;
   background: var(--surface-subtle);
 }
 
-.content .table td {
+[data-slot="admin-shell-main"] .table td {
   padding: 0.5rem 0.75rem;
   white-space: nowrap;
 }
@@ -3766,14 +2852,13 @@ body {
   --kt-success: var(--ok); --kt-warning: var(--warn); --kt-destructive: var(--danger);
   --kt-radius-control: var(--radius-control); --kt-radius-panel: var(--radius-panel);
 }
-.rail-nav [data-slot="app-menu"] { display: flex; flex-direction: column; overflow: visible; padding: 0; }
-.rail-nav [data-slot="app-menu"] ul { flex-direction: column; }
-.rail-nav [data-slot="app-menu-group"] { min-width: 0; }
-.rail-nav [data-slot="app-menu-group-label"] { padding: 0; }
+/* map admin-shell과 같은 공통 메뉴 표면. --kt-* 연결은 위 :root가 이미 하므로 접힘 규칙만 둔다. */
 @media (min-width: 1024px) {
-  .app-shell[data-sidebar-collapsed="true"] [data-slot="app-menu-group-label"],
-  .app-shell[data-sidebar-collapsed="true"] [data-slot="app-menu-link"] > span:last-child { display: none; }
+  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-group-label"],
+  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] > span:not([aria-hidden]) { display: none; }
+  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] { padding-inline: 0; justify-content: center; }
 }
+
 .kt-dagster-operations .dagster-run-detail > section { border: 0; }
 .dagster-op-log { max-height: 24rem; overflow: auto; }
 .dagster-op-log-table { min-width: 48rem; }

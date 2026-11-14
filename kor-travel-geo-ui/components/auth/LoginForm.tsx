@@ -21,9 +21,12 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
     const payload = await response.json() as { next?: string };
     window.location.assign(sanitizeLocalPath(payload.next ?? safeNext));
   }
-  return <section className="login-shell"><div className="login-panel">
-    <CommonLoginForm brand="Geocoder Admin UI" description="관리자 계정으로 로그인해 주세요."
+  // map LoginForm과 같은 레이아웃: 카드 프레임 없는 가운데 단일 열, 워드마크, 폼, hairline 위 footer 한 줄.
+  return <main className="geo-common-surface flex min-h-dvh flex-col justify-center bg-surface-page text-text-primary">
+    <h1 className="sr-only">관리자 로그인</h1>
+    <CommonLoginForm brand="Geocoder Admin UI" description="내부 전용 관리 콘솔"
       defaultUsername="admin" nextPath={nextPath} onSubmit={submit} error={error}
-      onClearError={() => setError(null)} />
-  </div></section>;
+      onClearError={() => setError(null)} testId="geo-common-login"
+      footer={<p>Geocoder Admin UI · 내부 전용 콘솔</p>} />
+  </main>;
 }

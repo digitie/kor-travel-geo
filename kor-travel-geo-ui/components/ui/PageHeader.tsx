@@ -25,17 +25,24 @@ export function PageHeader({ title, description, actions, section, meta }: PageH
   const sectionLabel = section ?? sectionForPath(pathname);
 
   return (
-    <header className="page-head" data-slot="admin-shell-header">
-      <div className="page-head-inner">
-        {sectionLabel ? <p className="page-section">{sectionLabel}</p> : null}
-        <div className="page-head-row">
-          <div className="page-title">
-            <h1>{title}</h1>
+    // map AdminShell의 flush header band: section → h1 + actions 한 baseline → meta → description, 아래 hairline.
+    // <main>의 좌우 여백(px-6)을 음수 margin으로 상쇄해 hairline이 본문 폭 전체에 닿게 한다.
+    <header
+      className="-mx-6 mb-6 border-b border-border px-6 pt-5 pb-4"
+      data-slot="admin-shell-header"
+    >
+      <div className="flex min-w-0 flex-col gap-1">
+        {sectionLabel ? <p className="text-2xs font-medium text-text-secondary">{sectionLabel}</p> : null}
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="text-xl leading-tight font-bold tracking-tight text-text-primary">{title}</h1>
           </div>
-          {actions ? <div className="page-actions">{actions}</div> : null}
+          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
-        {meta ? <div className="page-meta">{meta}</div> : null}
-        {description ? <p className="page-description">{description}</p> : null}
+        {meta ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">{meta}</div>
+        ) : null}
+        {description ? <p className="max-w-3xl text-xs text-text-secondary">{description}</p> : null}
       </div>
     </header>
   );

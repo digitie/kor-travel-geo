@@ -69,8 +69,8 @@ test.describe("최신 map Workbench 시각 계약", () => {
       const panelHeader = firstPanel?.querySelector<HTMLElement>(".panel-header");
       const panelTitle = panelHeader?.querySelector<HTMLElement>("h2");
       const body = document.body;
-      const heading = document.querySelector<HTMLElement>(".page-title h1");
-      const description = document.querySelector<HTMLElement>(".page-description");
+      const heading = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] h1');
+      const description = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] p.max-w-3xl');
       const panelStyle = firstPanel ? getComputedStyle(firstPanel) : null;
       const headerStyle = panelHeader ? getComputedStyle(panelHeader) : null;
       const titleStyle = panelTitle ? getComputedStyle(panelTitle) : null;
@@ -144,35 +144,39 @@ test.describe("최신 map Workbench 시각 계약", () => {
     }
   });
 
-  test("모바일 메뉴가 실제 overlay와 focus 복귀를 유지한다", async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 900 });
+  // map admin-shell과 같은 rail: 데스크톱은 세로 rail + 접기 버튼, 태블릿·모바일은 상단 가로 메뉴(접기 없음).
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 800, vertical: true },
+    { name: "tablet", width: 768, height: 1024, vertical: false },
+    { name: "mobile", width: 390, height: 844, vertical: false }
+  ] as const) {
+    test(`${viewport.name}: map과 같은 rail 메뉴 배치를 유지한다`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto("/admin", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { level: 1, name: "관리 홈" })).toBeVisible();
+
+      const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
+      await expect(navigation.getByRole("link")).toHaveCount(navLinks.length);
+      const direction = await navigation.evaluate((element) => getComputedStyle(element).flexDirection);
+      expect(direction).toBe(viewport.vertical ? "column" : "row");
+
+      const toggle = page.getByRole("button", { name: "좌측 메뉴 접기" });
+      if (viewport.vertical) await expect(toggle).toBeVisible();
+      else await expect(toggle).toBeHidden();
+
+      const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(documentWidth).toBeLessThanOrEqual(viewport.width);
+    });
+  }
+
+  test("좌측 메뉴 접기 상태가 새로고침 뒤에도 유지된다", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/admin", { waitUntil: "domcontentloaded" });
-
-    const menuToggle = page.getByRole("button", { name: "메뉴 열기" });
-    await menuToggle.click();
-    await expect(page.getByRole("dialog", { name: "내비게이션 메뉴" })).toBeVisible();
-
-    const drawerMetrics = await page.evaluate(() => {
-      const backdrop = document.querySelector<HTMLElement>(".sidebar-backdrop");
-      const main = document.querySelector("main");
-      if (!backdrop) throw new Error("sidebar backdrop is missing");
-      const style = getComputedStyle(backdrop);
-      return {
-        background: style.backgroundColor,
-        display: style.display,
-        zIndex: style.zIndex,
-        mainAriaHidden: main?.getAttribute("aria-hidden")
-      };
-    });
-
-    expect(drawerMetrics).toMatchObject({
-      display: "block",
-      zIndex: "399",
-      mainAriaHidden: "true"
-    });
-    expect(drawerMetrics.background).not.toBe("rgba(0, 0, 0, 0)");
-
-    await page.keyboard.press("Escape");
-    await expect(menuToggle).toBeFocused();
+    await page.getByRole("button", { name: "좌측 메뉴 접기" }).click();
+    await expect(page.getByRole("button", { name: "좌측 메뉴 펼치기" })).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("button", { name: "좌측 메뉴 펼치기" })).toBeVisible();
+    const railWidth = await page.locator('[data-slot="admin-shell-rail"]').evaluate((el) => el.getBoundingClientRect().width);
+    expect(railWidth).toBeLessThanOrEqual(64);
   });
 });
