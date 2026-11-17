@@ -1,3 +1,13 @@
+## 2026-11-17 — 공통 후보12 재vendor(ui 0.2.1·tokens 0.1.2·toast 0.1.1·vworld-map-web 1.0.4)
+
+- common main(#57 `938d1db`, #58 `97f8ed98`)이 정본을 올려, common main의 `versions.json`·`frontend-dependencies.json`·
+  `frontend-artifacts.json`을 읽는 소비자 guard가 "산출물 원장 버전 불일치"로 실패하던 상태를 푼다. 배포물 영향 없음.
+- vendor tgz 4개 교체(sha512를 common `frontend-artifacts.json`과 대조), `common-artifacts.json`은 common 97f8ed9 정본
+  사본, `package.json` file spec, lock은 npm 12.0.1 `--package-lock-only`로 재생성(네 패키지 항목만 변경),
+  CI guard `uses`/`common-ref` → `97f8ed98`. `vendor/PROVENANCE.md`에 현재 정본 표를 더했다.
+- 로컬에서 중앙 checker(`--policy`/`--canonical` = common main)와 toolchain 검사 PASS. 앱 소스 변경 0 — geo UI는
+  `fitBounds` padding·`VWorldMapHandle`을 쓰지 않는다. n150 작업·배포 없음.
+
 ## 2026-11-13 — B-GEOBUILD-P2-01의 lint warning0 연결
 
 - 실제 lint에 --max-warnings 0만 추가했다. 기존 설정 진단7개와 rules/severity/ignore는 그대로다.
