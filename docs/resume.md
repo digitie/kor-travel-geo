@@ -1,3 +1,8 @@
+## 2026-11-17 — 공통 후보12 재vendor
+
+common #58 정본(ui 0.2.1·tokens 0.1.2·toast 0.1.1·vworld-map-web 1.0.4)으로 vendor·원장·lock·guard ref(`97f8ed98`)를
+맞췄다. 기계적 재vendor이며 앱 소스·배포 변경 없음. 운영 UI 이미지는 다음 정규 배포 때 새 tgz로 빌드된다.
+
 ## 2026-11-14 — 관리 UI 로그인·메뉴·look and feel을 최신 map admin과 정렬(#637) + odroid 배포
 
 - #637(`120d564`): AppShell을 map AdminShell 구조(16rem/4rem rail, 타이포 워드마크, 단일 AppMenu 그룹, 접기 유지,
