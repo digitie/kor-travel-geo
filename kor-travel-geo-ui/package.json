@@ -77,6 +77,8 @@
   },
   "overrides": {
     "lightningcss": "$lightningcss",
-    "@radix-ui/react-focus-scope": "$@radix-ui/react-focus-scope"
+    "@radix-ui/react-focus-scope": "$@radix-ui/react-focus-scope",
+    "postcss": "8.5.32",
+    "@maplibre/geojson-vt": "6.3.1"
   }
 }
