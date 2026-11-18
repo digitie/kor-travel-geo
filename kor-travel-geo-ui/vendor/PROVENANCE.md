@@ -1,3 +1,5 @@
+> Common 패키지의 최신 정본·출처는 [COMMON-RELEASE.md](COMMON-RELEASE.md)를 따른다. 아래 내용은 이전 채택 시점의 출처 기록이다.
+
 # 공통 UI vendor 출처
 
 ## 현재 정본 — integration-12-review (2026-11-17)
