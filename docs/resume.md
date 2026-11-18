@@ -1,3 +1,8 @@
+## 2026-11-18 — Node 26.13.1 전환
+
+common T-029(`0dec9543`)에 맞춰 `.nvmrc`·engines·CI setup-node·lock·guard ref·UI Dockerfile(Alpine, Node 26.13.1 digest,
+npm 12.0.1 유지)을 올렸다. 배포 없음. 운영 UI 이미지는 다음 정규 배포 때 새 base로 빌드된다.
+
 ## 2026-11-17 — 공통 후보12 재vendor
 
 common #58 정본(ui 0.2.1·tokens 0.1.2·toast 0.1.1·vworld-map-web 1.0.4)으로 vendor·원장·lock·guard ref(`97f8ed98`)를

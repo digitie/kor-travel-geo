@@ -1,3 +1,14 @@
+## 2026-11-18 — Node 26.13.1 전환(common T-029)
+
+- 소유자 결정(2026-11-17)에 따라 프론트 toolchain을 Node 26.13.1(최신 LTS)/npm 12.0.1로 올렸다. common T-029 채택 커밋
+  `0dec9543`(kor-travel-common #65)을 따른다.
+- `.nvmrc`, `kor-travel-geo-ui/package.json` `engines.node`, CI `setup-node`를 26.13.1로, lock은 npm 12.0.1/Node 26.13.1로
+  `--package-lock-only` 재생성(root engines 한 줄만 변경). CI guard `uses`/`common-ref` → `0dec9543`.
+- UI Dockerfile 3개 stage는 기존 Alpine 변형을 유지해 `node:26.13.1-alpine@sha256:6bd9ab43…`(공식 multi-arch index,
+  amd64·arm64)로 바꾸고 stage마다 npm 12.0.1 설치를 그대로 둔다(Node 26 번들 npm은 11.20.0).
+- 과거 기록(journal·보고서·리뷰 원문)의 Node 22 표기는 역사로 남긴다. 배포 없음 — 운영 UI 이미지(odroid)는 다음 정규
+  배포 때 새 base로 빌드된다.
+
 ## 2026-11-17 — 공통 후보12 재vendor(ui 0.2.1·tokens 0.1.2·toast 0.1.1·vworld-map-web 1.0.4)
 
 - common main(#57 `938d1db`, #58 `97f8ed98`)이 정본을 올려, common main의 `versions.json`·`frontend-dependencies.json`·
