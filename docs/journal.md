@@ -1,3 +1,12 @@
+## 2026-11-18 — Common 표 너비 수정 정본 채택과 빌드 캐시 후속
+
+- [Common PR68](https://github.com/digitie/kor-travel-common/pull/68)의 모바일 표 min-width 수정이 포함된 UI0.2.2·tokens0.1.3을 채택한다. Geo는 toast0.1.2도 같은 producer 산출물로 맞춘다. 각 앱이 기존에 쓰던 Common 패키지를 갱신했다.
+- 실제 main-push producer `706aaa7821588dfca72f660c9161f56be2d0445f` / [CI44313659808](https://github.com/digitie/kor-travel-common/actions/runs/44313659808)의 artifact14430019630 원본을 사용했다. ZIP SHA256 `f6f8d7832426a6b5a76c6a300583550fe56fb6be7d8d6738397c4fbf29322700`, SOURCE_SHA·각 pack SHA256/SRI·내장 policy를 대조했다. vendor 출처는 각 `vendor/COMMON-RELEASE.md`와 `common-artifacts.json`에 연결한다.
+- guard/catalog는 불변 candidate `5c1b3857e9af060d30ec776157760fb9e9c13ded`로 맞췄다. 이 catalog의 main 편입 확인 전에는 소비자 merge·배포를 진행하지 않는다. package/lock은 Node26.13.1/npm12.0.1로 갱신했고 실제 canonical dependency guard가 통과했다. lock-only 작업의 ignore-scripts는 설치·실행 검증을 대신하지 않는다.
+- Geo는 실제 eebafbe9 UI 이미지에서 Node 26.13.1·지도 타일 디코드·로그아웃 후 보호 API 401 검증을 완료했다. 모바일 표 너비 수용은 새 Common 이미지 배포 뒤 다시 검증한다.
+- npm 다운로드 캐시 `kor-travel-web-npm-v2`와 앱별 Next 캐시 mount를 정상 Dockerfile build RUN에 추가했다. `--prefer-offline`·engine-strict를 사용하고 설치 lifecycle을 실행한다. Geo의 실제 ARM 무네트워크509개 설치·495개 해시·전용 Next24개 검증은 완료됐고, 이 소비자 커밋의 실제 이미지/native 검증은 다음 단계다. 다른 앱의 빈 Next 캐시는 첫 빌드부터 자체 결과를 축적한다.
+- 다음 검증: 정확한 PR CI, 정상 캐시 이미지 빌드·native 검사, SDK 배포, 실제 모바일/PC 표 너비·수평 스크롤·지도·인증 수용. 이번 소스 채택만으로 새 이미지 적용 완료를 표시하지 않는다.
+
 ## 2026-11-18 — Node 26.13.1 전환(common T-029)
 
 - 소유자 결정(2026-11-17)에 따라 프론트 toolchain을 Node 26.13.1(최신 LTS)/npm 12.0.1로 올렸다. common T-029 채택 커밋

@@ -4,7 +4,8 @@ RUN npm install --global npm@12.0.1
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 COPY vendor ./vendor
-RUN npm ci --engine-strict
+RUN --mount=type=cache,id=kor-travel-web-npm-v2,target=/root/.npm,sharing=locked \
+    npm ci --engine-strict --prefer-offline --no-audit --no-fund
 
 FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 RUN npm install --global npm@12.0.1
@@ -13,7 +14,8 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN --mount=type=cache,id=kor-travel-geo-next-v2,target=/app/.next/cache,sharing=locked \
+    npm run build
 # 이 앱은 tracked public/이 없으므로 runtime static 디렉터리를 명시한다.
 RUN mkdir -p /app/public
 
