@@ -1,3 +1,7 @@
+## 2026-11-19 — 호환 lock 정렬 후보
+
+- PostCSS override를 8.5.32로 고정해 Next 중첩 8.5.23을 제거했다; MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. Common/RN exact pin은 유지하며 canonical guard 통과, 실제 빌드·운영 수용은 후속 PR CI/소유자 단계다.
+
 ## 2026-11-18 — 공통 표 수정 산출물 채택 후속
 
 Common main `706aaa7821588dfca72f660c9161f56be2d0445f`의 UI0.2.2·tokens0.1.3(Geo toast0.1.2)을 vendor·원장·npm lock에 맞추고 canonical guard를 통과했다. 출처·검증 경계는 [최신 journal](journal.md)에 기록했다. catalog `5c1b3857e9af060d30ec776157760fb9e9c13ded`의 main 편입 확인, PR CI, 정상 캐시/native 이미지와 실제 화면 수용을 이어간다. Geo는 실제 eebafbe9 UI 이미지에서 Node 26.13.1·지도 타일 디코드·로그아웃 후 보호 API 401 검증을 완료했다. 모바일 표 너비 수용은 새 Common 이미지 배포 뒤 다시 검증한다.
