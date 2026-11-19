@@ -28,7 +28,7 @@ RUN apt-get update \
 
 # 프로젝트 파일보다 앞에 설치하여 의존성 pin 변경에도 GDAL 컴파일 레이어를 재사용한다.
 # 같은 BuildKit builder의 두 역할은 GDAL wheel cache를 공유한다.
-# pip는 off 값도 cache를 끄므로 GDAL 명령에서만 NO_CACHE 변수를 제거한다.
+# pip는 off 값도 cache를 끄므로 cache를 연결한 빌드 명령에서만 NO_CACHE 변수를 제거한다.
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
@@ -46,7 +46,13 @@ COPY alembic ./alembic
 COPY sql ./sql
 COPY src ./src
 
-RUN python -m pip install -e ".[api,loaders]" \
+# 소스 변경 뒤에도 앱 wheel을 재사용하되 native ABI·libc·libgdal별로 분리한다.
+RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
+    GDAL_VERSION="$(gdal-config --version)" \
+    && WHEEL_CACHE_ABI="$(python -I -c 'import os, sysconfig; abi=sysconfig.get_config_var("SOABI"); libc=os.confstr("CS_GNU_LIBC_VERSION"); assert abi and libc; print(abi+"-"+libc.replace(" ", "-"))')" \
+    && env -u PIP_NO_CACHE_DIR \
+         PIP_CACHE_DIR="/root/.cache/pip/${WHEEL_CACHE_ABI}-gdal-${GDAL_VERSION}" \
+         python -m pip install -e ".[api,loaders]" \
     && python - <<'PY'
 import subprocess
 from osgeo import gdal

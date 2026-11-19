@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import unittest
 from pathlib import Path
@@ -62,7 +63,7 @@ class GdalCacheBoundaryTests(unittest.TestCase):
         self.assertIn("-c ./kor-travel-geo-dagster/docker/constraints-dagster.txt", install)
         self.assertIn('"gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster', install)
 
-    def test_same_locked_mount_only_on_gdal_build_commands(self) -> None:
+    def test_same_locked_mount_on_gdal_and_application_build_commands(self) -> None:
         mount = "--mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked"
         for path in (_API, _CS):
             with self.subTest(path=path):
@@ -73,7 +74,9 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                     "PIP_CACHE_DIR=/root/.cache/pip python -m pip",
                     re.sub(r"\s+", " ", command),
                 )
-                self.assertEqual((_ROOT / path).read_text().count(mount), 1)
+                self.assertEqual((_ROOT / path).read_text().count(mount), 2)
+                app = self._application_command(path)
+                self.assertTrue(app.startswith(mount + " "))
                 self.assertIn("PIP_NO_CACHE_DIR=1", (_ROOT / path).read_text())
                 # 정확한 libgdal pin과 최종 binding/lib 버전 비교를 유지한다.
                 self.assertIn('"gdal==${GDAL_VERSION}"', command)
@@ -81,7 +84,20 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                 bases = [value for kind, value in instructions(path) if kind == "FROM"]
                 self.assertTrue(all(value.startswith("python:3.12") for value in bases))
 
-    def test_actual_shell_cache_environment_is_gdal_only(self) -> None:
+    @staticmethod
+    def _application_command(path: str) -> str:
+        return next(
+            value for kind, value in instructions(path)
+            if kind == "RUN" and (
+                'pip install -e ".[api,loaders]"' in value
+                or "pip install --prefix=/install" in value
+            )
+        )
+
+    def test_actual_shell_cache_environment_is_scoped_to_native_builds(self) -> None:
+        abi = sysconfig.get_config_var("SOABI")
+        libc = os.confstr("CS_GNU_LIBC_VERSION").replace(" ", "-")
+        suffix = f"/{abi}-{libc}-gdal-3.10.3"
         for path in (_API, _CS):
             with self.subTest(path=path):
                 calls, _ = self._shell(path)
@@ -89,13 +105,47 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                 self.assertEqual(len(gdal), 1)
                 self.assertIsNone(gdal[0]["noCache"])
                 self.assertTrue(gdal[0]["cacheDir"].endswith("/pip-cache"))
-                other = [row for row in calls if not row["parallelOne"]]
-                self.assertGreaterEqual(len(other), 2)  # pip 자체 갱신과 앱 설치.
-                for row in other:
-                    self.assertEqual(row["noCache"], "1")
-                    self.assertIsNone(row["cacheDir"])
+                app = [row for row in calls if self._is_application(row)]
+                self.assertEqual(len(app), 1)
+                self.assertIsNone(app[0]["noCache"])
+                self.assertTrue(app[0]["cacheDir"].endswith(suffix))
+                self.assertNotIn("--no-cache-dir", app[0]["args"])
+                self.assertFalse(app[0]["parallelOne"])
+                bootstrap = [row for row in calls if "--upgrade" in row["args"]]
+                self.assertEqual(len(bootstrap), 1)
+                self.assertEqual(bootstrap[0]["noCache"], "1")
+                self.assertIsNone(bootstrap[0]["cacheDir"])
 
-    def _shell(self, path: str, fail_build: bool = False) -> tuple[list[dict], int]:
+    @staticmethod
+    def _is_application(row: dict) -> bool:
+        return ".[api,loaders]" in row["args"] or "--prefix=/install" in row["args"]
+
+    def test_application_cache_is_shared_by_roles_and_separated_by_libgdal(self) -> None:
+        directories = {}
+        for version in ("3.10.3", "3.11.0"):
+            keys = []
+            for path in (_API, _CS):
+                calls, _ = self._shell(path, gdal_version=version)
+                app = next(row for row in calls if self._is_application(row))
+                self.assertIsNotNone(app["cacheDir"])
+                key = Path(app["cacheDir"]).name
+                self.assertTrue(key.endswith("-gdal-" + version))
+                keys.append(key)
+            self.assertEqual(keys[0], keys[1])
+            directories[version] = keys[0]
+        self.assertNotEqual(directories["3.10.3"], directories["3.11.0"])
+
+    def test_unknown_native_cache_context_stops_before_application_install(self) -> None:
+        for path in (_API, _CS):
+            with self.subTest(path=path):
+                calls, code = self._shell(path, fail_context=True)
+                self.assertEqual(code, 8)
+                self.assertFalse(any(self._is_application(row) for row in calls))
+
+    def _shell(
+        self, path: str, fail_build: bool = False, *,
+        gdal_version: str = "3.10.3", fail_context: bool = False,
+    ) -> tuple[list[dict], int]:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             bindir = root / "bin"
@@ -109,6 +159,9 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                 + r"""import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
+if args[:2]==["-I","-c"]:
+    if os.environ.get("FAIL_CONTEXT")=="1":sys.exit(8)
+    os.execv(sys.executable,[sys.executable,*args])
 config=Path(os.environ.get("HOME", "/"))/".pydistutils.cfg"
 build=any(x.startswith("gdal==") for x in args) and "--prefix=/install" not in args
 row={"args":args,"parallelOne":config.exists() and config.read_text()=="[build_ext]\nparallel=1\n",
@@ -119,7 +172,9 @@ if build:
     if os.environ.get("FAIL_GDAL")=="1":sys.exit(7)
 if "wheel" in args:
     wheel=next(x.split("=",1)[1] for x in args if x.startswith("--wheel-dir="))
-    p=Path(wheel);p.mkdir(parents=True);(p/"gdal-3.10.3-cp312-cp312-linux_aarch64.whl").write_bytes(b"local-wheel-stub")
+    p=Path(wheel);p.mkdir(parents=True)
+    version=next(x.split("==",1)[1] for x in args if x.startswith("gdal=="))
+    (p/("gdal-"+version+"-cp312-cp312-linux_aarch64.whl")).write_bytes(b"local-wheel-stub")
 if "--prefix=/install" in args:
     assert "--only-binary=gdal" in args
     wheels=[Path(x) for x in args if x.endswith(".whl")]
@@ -128,7 +183,7 @@ if "--prefix=/install" in args:
             )
             probe.chmod(0o700)
             gdal = bindir / "gdal-config"
-            gdal.write_text("#!/bin/sh\nprintf '3.10.3\\n'\n")
+            gdal.write_text("#!/bin/sh\nprintf '" + gdal_version + "\\n'\n")
             gdal.chmod(0o700)
             _, command = gdal_build(path)
             # Docker의 mount 선언만 제거하고 실제 shell 부분과 환경 범위는 실행한다.
@@ -150,7 +205,9 @@ if "--prefix=/install" in args:
                         if kind == "RUN" and 'pip install -e ".[api,loaders]"' in value
                     ).split("&& python - <<", 1)[0]
                 )
-            script = " && ".join(commands).replace("/tmp/ktg-gdal-build-home", str(root / "home"))
+            script = " && ".join(
+                re.sub(r"^--mount=\S+\s+", "", value) for value in commands
+            ).replace("/tmp/ktg-gdal-build-home", str(root / "home"))
             script = script.replace("/opt/ktg-gdal-wheels", str(root / "wheels"))
             script = script.replace("/root/.cache/pip", str(root / "pip-cache"))
             result = subprocess.run(
@@ -163,13 +220,14 @@ if "--prefix=/install" in args:
                     "PROBE_LOG": str(log),
                     "PIP_NO_CACHE_DIR": "1",
                     "FAIL_GDAL": "1" if fail_build else "0",
+                    "FAIL_CONTEXT": "1" if fail_context else "0",
                 },
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
             calls = [json.loads(line) for line in log.read_text().splitlines()]
-            if not fail_build:
+            if not fail_build and not fail_context:
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertFalse((root / "home").exists())
             return calls, result.returncode
