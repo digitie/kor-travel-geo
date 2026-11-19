@@ -1,3 +1,19 @@
+## 2026-11-20 — GDAL 캐시 경계 후속 후보
+
+두 GDAL RUN의 BuildKit pip cache ID/path/lock을 맞추고 GDAL 명령에서만 NO_CACHE 변수를 제거했다. HOME redirect와 명시 PIP_CACHE_DIR를 함께 유지하며 앱 설치에는 공유 cache를 적용하지 않는다. 새 최종 집중16건·6subtest/Ruff와5추가 변이 거부·실제 bundled pip 옵션 검사가 통과했다. 같은 builder의 호환 wheel 재사용은 이후 정상 로그/native 검사로 확인하며 실측 재사용을 아직 주장하지 않는다.
+
+정상 API/CS Dockerfile의 GDAL 컴파일을 프로젝트 COPY 이전으로 분리했다. CS는 자체 동일 환경에서 만든 wheel을 기존 constraints·prefix resolve에 공급한다. 집중14건·2subtest/Ruff와 새 회귀의 RED/GREEN·3변이 거부를 확인했다. 기존 API pip cache는 없었고 CS 전체 builder cache는 미조사다. 첫 새 레이어의 실제 컴파일 필요 여부·ARM 이미지/native·빌드 시간은 다음 정상 소유자 작업에서 확인한다. 새 빌드·런타임/SDK 변경은 하지 않았으며 Weather339 배포 준비와 Manager adapter 소스는 별개다.
+
+## 2026-11-20 — psycopg 3.3.9 소스 정렬 후보
+
+root 선언과 Dagster image constraints의 psycopg/core·binary만3.3.9로 고정했고 pool3.3.3은 유지했다. 기존 집중 시험106건과 격리된 binary 구현 확인이 통과했다. 전체 CI·실제 ARM API/CS 이미지·정상 SDK 적용은 아직 후속이며, UI 입력은 동일하므로 불필요하게 재빌드하거나 source label을 바꾸지 않는다. Common selected-driver guard는 별도 producer의 frozen SHA 이후 연결한다. 보고서644는 별도 HOLD다.
+
+Common73의 고정 후보 e2899128f78c9622ec3ef79674cff8d1c3aec6f9를 별도 필수 psycopg-policy job에 연결한다. consumer/Common을 형제 checkout으로 분리하고 root discovery·명시 Dagster constraints로 정확 선언을 검사한다. frontend guard/catalogd644·producer0e2·정본 UI pack은 유지한다. Common73 실제 병합·후보의 main ancestor 확인 전에는 이 소비자를 병합하지 않는다.
+
+## 2026-11-19 — Common AdminShell 소비자 후속 후보
+
+UI0.2.3·tokens0.1.4·toast0.1.3을 실제 producer0e2/canonical catalogd644 pack으로 맞추고 설치129개 바이트를 검증했다. Common AdminShell/AdminPageTitle로 데스크톱 rail·모바일 drawer·상단 바를 연결하되 경로·전체 문서 이동·인증 처리를 유지한다. 회귀3 RED→9 GREEN, 전체 unit298·lint·type·Doctor272파일0진단·두 의존성 guard가 통과했다. 다음은 두 focused 독립 검토·정확 CI/브라우저와 현재 Transport/Weather 조용한 슬롯 확인 후 정상 native 이미지·운영 수용이다. source 병합만으로 전체 소비자 정렬 완료를 주장하지 않으며 최종 보고서644는 HOLD다.
+
 ## 2026-11-19 — 호환 lock 정렬 후보
 
 - PostCSS override를 8.5.32로 고정해 Next 중첩 8.5.23을 제거했다; MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. Common/RN exact pin은 유지하며 canonical guard 통과, 실제 빌드·운영 수용은 후속 PR CI/소유자 단계다.

@@ -1,3 +1,28 @@
+## 2026-11-20 — GDAL 컴파일 캐시 경계 분리
+
+- 후속으로 두 GDAL RUN에 동일한 BuildKit cache mount `geo-gdal-py312`(`/root/.cache/pip`, `sharing=locked`)를 연결했다. 같은 builder 안에서 pip의 버전·Python ABI·플랫폼 tag가 맞는 wheel을 역할 간 재사용할 수 있다. GDAL 명령에만 `env -u PIP_NO_CACHE_DIR`와 명시 `PIP_CACHE_DIR`를 적용하고 직렬 컴파일용 HOME을 유지한다. pip 자체 갱신·앱 의존성 설치는 기존 cache 비활성 상태다. pip는 `PIP_NO_CACHE_DIR=off`도 cache를 끄므로 사용하지 않았다(공식 pip 구현과 로컬 bundled pip26.1.2의 무설치·무네트워크 설정 검사로 확인).
+- 후속 집중16건·6subtest/Ruff가 통과했고 cache mount만 추가/false 값 사용/명시 cache 경로 누락/lock 누락/ID 불일치 변이5건을 거부했다. 서로 다른 builder의 cache 공유나 첫 컴파일 횟수는 보장하지 않는다. 실제 정상 빌드의 `CACHED` 또는 `Using cached`와 ARM native 버전 검증 전에는 재사용을 수용하지 않는다.
+- root pyproject나 앱 소스 변경이 GDAL 재컴파일까지 무효화하던 두 정상 Dockerfile을 분리했다. API는 기존 GDAL 설치를 모든 프로젝트 COPY 앞으로 옮겼다. CS는 같은 Python·libgdal에서 정확한 GDAL wheel 하나를 먼저 만들고, 프로젝트 COPY 뒤 기존 constraints·prefix 설치에 그 로컬 wheel과 정확한 libgdal pin을 함께 전달한다. `--only-binary=gdal`로 이 앱 설치 단계의 sdist 재컴파일을 막는다.
+- 기존 직렬 컴파일 설정·임시 설정 제거·GDAL 버전 일치 검사·base·런타임 명령은 유지했다. 다른 앱의 uv cache나 기존 이미지의 설치 파일을 새 이미지에 덧씌우지 않는다.
+- 기존 Geo API의 한 번뿐인 읽기 전용 메타데이터 확인에서 Python3.12.16/aarch64·GDAL/libgdal3.10.3이 일치했지만 pip cache 경로와 재사용 wheel은 없었다. CS builder 전체 cache는 조사하지 않았으므로 부재를 단정하지 않는다. 이 변경 후 첫 정상 빌드가 새 GDAL 레이어를 컴파일할 수 있으며, 기존 컴파일 산출물 재사용이나 빌드 시간 개선은 아직 증명하지 않았다.
+- 새 집중 시험5건은 기존 Dockerfile에서 실패하고 수정 후 통과했다. 실제 shell 명령을 대역 pip로 실행해 직렬 설정·wheel 전달·정리·실패 전파를 확인했다. 기존 이미지 계약을 포함한14건·2subtest, wheel 누락/병렬 설정 변경/COPY 선행 변이3건의 거부, Ruff·diff 검사가 통과했다. 실제 Docker build·GDAL 컴파일·운영 변경은 실행하지 않았다.
+
+## 2026-11-20 — psycopg core·binary 3.3.9 정렬
+
+- root의 `psycopg[binary,pool]`을3.3.9로 정확 고정하고 Dagster image constraints의 core·binary도3.3.9로 맞췄다. pool3.3.3·다른 패키지·Dockerfile·UI 입력은 바꾸지 않았다.
+- 공식 PyPI 최신3.3.9·11/12 배포·비철회와 테스트용 wheel SHA256을 확인했다. 공유 venv를 수정하지 않는 Linux x86_64/Python3.13 overlay에서 core/binary3.3.9·pool3.3.3·pq 구현 binary를 확인했다.
+- 기존 이미지 제약5건·선택 driver 설치 버전3건·DB 단위98건이 통과했다. 실제 DB 접속·ARM 정상/native 이미지·SDK 적용·운영 성능 검증은 하지 않았고 CI/배포는 후속이다. 기존 Geo644 단일 보고서의 미커밋 HOLD와 CI-LAST 미시작은 유지한다.
+
+Common73의 고정 후보 e2899128f78c9622ec3ef79674cff8d1c3aec6f9를 별도 필수 psycopg-policy job에 연결한다. consumer/Common을 형제 checkout으로 분리하고 root discovery·명시 Dagster constraints로 정확 선언을 검사한다. frontend guard/catalogd644·producer0e2·정본 UI pack은 유지한다. Common73 실제 병합·후보의 main ancestor 확인 전에는 이 소비자를 병합하지 않는다.
+
+## 2026-11-19 — Common AdminShell과 정본 세 패키지 채택
+
+- Common main producer `0e2a3f5aa16323df0d009360802661c9bc496dc6`의 실제 artifact14500111373을 사용해 UI0.2.3·tokens0.1.4·실제 소비 toast0.1.3을 함께 갱신했다. catalog/policy와 모든 frontend guard 호출·입력은 `d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4`다. ZIP·SOURCE_SHA·SRI·내장 정책과 fresh npm ci 설치 파일129개(UI96/tokens25/toast8)의 실제 바이트를 대조했다.
+- 자체 rail·모바일 가로 메뉴를 Common AdminShell의 데스크톱 세로 rail·모바일 drawer로 교체했다. 기존 경로·전체 문서 이동·로그인 제외·로그아웃 처리·접힘 저장 키를 유지한다. PageHeader의 제목·설명·동작은 Common AdminPageTitle에 연결하고 본문 메타는 유지한다.
+- 같은 새 회귀는 이전 Geo 셸에서3 FAIL/6 PASS, 새 연결에서9 PASS였다. 전체 unit298 PASS, lint·type-check PASS, React Doctor272파일0진단과 bundled/canonical guard를 확인했다. lock 변경은 세 Common 패키지와 루트 선언뿐이다.
+- 브라우저 회귀는 공통 단일 상단 바·모바일 drawer·문서 이동·Escape/포커스·1024px 포함 너비를 검사하도록 갱신했다. 실제 브라우저·정확 CI·새 native 이미지/운영 수용은 아직 후속이며 이전 UI 수용을 재사용하지 않는다. 다른 앱의 SDK/성능 작업과 운영 버전은 바꾸지 않았다.
+- 최종 통합 보고서는 기존 [단일 보고서](kor-travel-common-library-review.md)를 유지한다. 그 보고서 PR644와 CI 순서 감사는 아직 최종 대기다.
+
 ## 2026-11-19 — 호환 전이 의존성 정렬
 
 - PostCSS override를 8.5.32로 고정해 Next 중첩 8.5.23을 제거했다; MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. 직접 라이브러리 버전·Common 산출물·RN exact style-spec은 유지한다.

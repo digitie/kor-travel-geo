@@ -26,21 +26,27 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client-18 zstd \
     && rm -rf /var/lib/apt/lists/*
 
+# 프로젝트 파일보다 앞에 설치하여 의존성 pin 변경에도 GDAL 컴파일 레이어를 재사용한다.
+# 같은 BuildKit builder의 두 역할은 GDAL wheel cache를 공유한다.
+# pip는 off 값도 cache를 끄므로 GDAL 명령에서만 NO_CACHE 변수를 제거한다.
+# GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
+# 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
+RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
+    python -m pip install --upgrade pip \
+    && GDAL_VERSION="$(gdal-config --version)" \
+    && mkdir /tmp/ktg-gdal-build-home \
+    && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
+    && env -u PIP_NO_CACHE_DIR HOME=/tmp/ktg-gdal-build-home PIP_CACHE_DIR=/root/.cache/pip \
+         python -m pip install "gdal==${GDAL_VERSION}" \
+    && rm /tmp/ktg-gdal-build-home/.pydistutils.cfg \
+    && rmdir /tmp/ktg-gdal-build-home
+
 COPY pyproject.toml README.md alembic.ini openapi.json ./
 COPY alembic ./alembic
 COPY sql ./sql
 COPY src ./src
 
-# GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
-# 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
-RUN python -m pip install --upgrade pip \
-    && GDAL_VERSION="$(gdal-config --version)" \
-    && mkdir /tmp/ktg-gdal-build-home \
-    && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
-    && HOME=/tmp/ktg-gdal-build-home python -m pip install "gdal==${GDAL_VERSION}" \
-    && rm /tmp/ktg-gdal-build-home/.pydistutils.cfg \
-    && rmdir /tmp/ktg-gdal-build-home \
-    && python -m pip install -e ".[api,loaders]" \
+RUN python -m pip install -e ".[api,loaders]" \
     && python - <<'PY'
 import subprocess
 from osgeo import gdal
