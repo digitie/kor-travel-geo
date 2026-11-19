@@ -308,16 +308,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: digitie/kor-travel-common
-          ref: e2899128f78c9622ec3ef79674cff8d1c3aec6f9
+          ref: b566840cb111fa8b1184498aa892b0fd5ce7e5c6
           path: common-policy
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Check exact psycopg binary declarations and Dagster constraints
+      - name: Check exact used Python application versions and Dagster constraints
         shell: bash
         run: |
           set -euo pipefail
           python -B "$GITHUB_WORKSPACE/common-policy/tools/check_versions.py" \
-            "$GITHUB_WORKSPACE/consumer" --repo kor-travel-geo --strict-psycopg \
+            "$GITHUB_WORKSPACE/consumer" --repo kor-travel-geo --strict-python-application \
             --constraints kor-travel-geo-dagster/docker/constraints-dagster.txt

@@ -1,3 +1,7 @@
+## 2026-11-20 — 실제 사용 앱 백엔드 선택 버전 정렬 후보
+
+root/API·CS의 SQLAlchemy2.1.9·Pydantic2.14.4/core2.50.5/settings2.16.3·FastAPI0.165.0(API만)·Alembic1.20.1·httpx0.28.1·uvicorn0.54.0을 맞춘다. psycopg339·Dagster/psycopg2와 외부 daemon pool은 유지하고 Common Python은 실제 병합67efe의 같은 package tree를 사용한다. 앱/쿼리/DTO/migration/GDAL/UI 입력은 동일하다. [범위·검증·한계](shared-backend-application-alignment.md)에 source와 실제 설치/운영 증거를 구분했다. 최종 Common profile guard의 실제 병합 SHA·정확 CI·ARM/native/운영 수용은 후속이며 보고서644와 활성 배포 source를 편집하지 않았다.
+
 ## 2026-11-20 — GDAL 캐시 경계 후속 후보
 
 두 GDAL RUN의 BuildKit pip cache ID/path/lock을 맞추고 GDAL 명령에서만 NO_CACHE 변수를 제거했다. HOME redirect와 명시 PIP_CACHE_DIR를 함께 유지하며 앱 설치에는 공유 cache를 적용하지 않는다. 새 최종 집중16건·6subtest/Ruff와5추가 변이 거부·실제 bundled pip 옵션 검사가 통과했다. 같은 builder의 호환 wheel 재사용은 이후 정상 로그/native 검사로 확인하며 실측 재사용을 아직 주장하지 않는다.

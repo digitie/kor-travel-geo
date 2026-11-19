@@ -338,9 +338,8 @@ def test_restore_drill_schedule_skips_the_tick_on_an_unsupported_instance() -> N
     """T-321: enabling the daily drill on the shared instance must not pile up Failure runs."""
     client = _FakeClient(lifecycle_error=_SHARED_INSTANCE_REFUSAL)
 
-    result = backup_maintenance.restore_drill_schedule(
-        build_schedule_context(resources={"client": client})
-    )
+    with build_schedule_context(resources={"client": client}) as context:
+        result = backup_maintenance.restore_drill_schedule(context)
 
     assert isinstance(result, SkipReason)
     assert result.skip_message == (
@@ -354,9 +353,8 @@ def test_restore_drill_schedule_tick_evaluation_yields_no_run_when_unsupported()
     """Through Dagster's own tick evaluation (the daemon path), not just a direct call."""
     client = _FakeClient(lifecycle_error=_SHARED_INSTANCE_REFUSAL)
 
-    data = backup_maintenance.restore_drill_schedule.evaluate_tick(
-        build_schedule_context(resources={"client": client})
-    )
+    with build_schedule_context(resources={"client": client}) as context:
+        data = backup_maintenance.restore_drill_schedule.evaluate_tick(context)
 
     assert data.run_requests == []
     assert data.skip_message is not None
@@ -367,14 +365,15 @@ def test_restore_drill_schedule_requests_a_run_on_a_supported_instance() -> None
     client = _FakeClient()
     scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
 
-    with DagsterInstance.local_temp() as instance:
-        result = backup_maintenance.restore_drill_schedule(
-            build_schedule_context(
-                instance=instance,
-                resources={"client": client},
-                scheduled_execution_time=scheduled_at,
-            )
-        )
+    with (
+        DagsterInstance.local_temp() as instance,
+        build_schedule_context(
+            instance=instance,
+            resources={"client": client},
+            scheduled_execution_time=scheduled_at,
+        ) as context,
+    ):
+        result = backup_maintenance.restore_drill_schedule(context)
     assert isinstance(result, RunRequest)
     assert result.run_key == scheduled_at.isoformat()
     assert result.tags["kor_travel_geo.schedule"] == "backup_restore_drill_daily"
@@ -388,14 +387,15 @@ def test_restore_drill_schedule_still_launches_when_the_capability_check_errors(
     client = _FakeClient(lifecycle_error=RuntimeError("connection refused"))
     scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
 
-    with DagsterInstance.local_temp() as instance:
-        result = backup_maintenance.restore_drill_schedule(
-            build_schedule_context(
-                instance=instance,
-                resources={"client": client},
-                scheduled_execution_time=scheduled_at,
-            )
-        )
+    with (
+        DagsterInstance.local_temp() as instance,
+        build_schedule_context(
+            instance=instance,
+            resources={"client": client},
+            scheduled_execution_time=scheduled_at,
+        ) as context,
+    ):
+        result = backup_maintenance.restore_drill_schedule(context)
     assert isinstance(result, RunRequest)
     assert result.run_key == scheduled_at.isoformat()
 
