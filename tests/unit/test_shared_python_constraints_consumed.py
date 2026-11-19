@@ -65,6 +65,21 @@ class SharedPythonConsumptionTests(unittest.TestCase):
         self.assertIn("--python-version 3.12", text)
         self.assertIn("--strict-python-application --python-build-tools", text)
 
+    def test_gdal_bootstrap_pip_uses_the_same_approved_tool_pin(self):
+        pin = next(
+            line for line in SHARED.read_text().splitlines() if line.startswith("pip==")
+        )
+        for path in (
+            "docker/api.Dockerfile",
+            "kor-travel-geo-dagster/docker/dagster.Dockerfile",
+        ):
+            command = next(
+                value
+                for kind, value in instructions(path)
+                if kind == "RUN" and "pip install --upgrade pip" in value
+            )
+            self.assertIn("pip install --upgrade " + pin, command)
+
     def test_build_backends_use_the_same_approved_tool_pins(self):
         pins = dict(
             line.split("==", 1)

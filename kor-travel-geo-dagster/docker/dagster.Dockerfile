@@ -55,7 +55,7 @@ RUN apt-get update \
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
-    python -m pip install --upgrade pip \
+    python -m pip install --upgrade pip==26.3 \
     && GDAL_VERSION="$(gdal-config --version)" \
     && mkdir /tmp/ktg-gdal-build-home \
     && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
