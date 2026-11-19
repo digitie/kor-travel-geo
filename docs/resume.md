@@ -1,3 +1,7 @@
+## 2026-11-20 — psycopg 3.3.9 소스 정렬 후보
+
+root 선언과 Dagster image constraints의 psycopg/core·binary만3.3.9로 고정했고 pool3.3.3은 유지했다. 기존 집중 시험106건과 격리된 binary 구현 확인이 통과했다. 전체 CI·실제 ARM API/CS 이미지·정상 SDK 적용은 아직 후속이며, UI 입력은 동일하므로 불필요하게 재빌드하거나 source label을 바꾸지 않는다. Common selected-driver guard는 별도 producer의 frozen SHA 이후 연결한다. 보고서644는 별도 HOLD다.
+
 ## 2026-11-19 — Common AdminShell 소비자 후속 후보
 
 UI0.2.3·tokens0.1.4·toast0.1.3을 실제 producer0e2/canonical catalogd644 pack으로 맞추고 설치129개 바이트를 검증했다. Common AdminShell/AdminPageTitle로 데스크톱 rail·모바일 drawer·상단 바를 연결하되 경로·전체 문서 이동·인증 처리를 유지한다. 회귀3 RED→9 GREEN, 전체 unit298·lint·type·Doctor272파일0진단·두 의존성 guard가 통과했다. 다음은 두 focused 독립 검토·정확 CI/브라우저와 현재 Transport/Weather 조용한 슬롯 확인 후 정상 native 이미지·운영 수용이다. source 병합만으로 전체 소비자 정렬 완료를 주장하지 않으며 최종 보고서644는 HOLD다.
