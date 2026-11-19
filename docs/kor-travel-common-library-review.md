@@ -1,5 +1,320 @@
 # 공통 라이브러리 비교·구현·검증 통합 보고서
 
+> **2026-11-19 작업 중 정산.** 이 앞부분이 이번 후속 작업의 판정 기준이다. 소스·CI 통과, 정상 이미지 빌드, 실제 적용, 화면 검증, 성능 목표 달성을 따로 구분한다. 아래 접힌 이전 보고서의 “최종”, Node22 통일, CI-LAST 완료는 각각 당시 작업의 기록이다. 이번 후속 작업의 전체 완료를 뜻하지 않는다.
+
+## 결정과 범위
+
+`kor-travel-common`으로 공통 컴포넌트·디자인 토큰·의존성 검사·배포 산출물을 관리한다. 실제로 같은 패키지를 쓰는 앱은 버전과 산출물 bytes를 맞춘다. 사용하지 않는 지도·DOM UI·Toast까지 모든 앱에 설치하지 않는다. 웹 UI는 shadcn/ui 방식의 Radix 조합을 공유하고, native 모바일은 플랫폼에 맞는 컴포넌트와 공통 tokens를 사용한다.
+
+이번 직접 처리 범위는 Geo, Weather, Transport 공개/관리자, Pinvi 웹/모바일, Concierge와 Manager 양 호스트다. Map은 사용자 분담에 따라 Claude 담당이며 읽기 전용 현황 확인 외 source·빌드·배포를 변경하지 않는다. 모바일 native 실기기·EAS·스토어 배포는 Docker 웹 이미지 수용과 별개다.
+
+### 장점과 비용
+
+| 영역 | 얻는 점 | 비용·주의점과 적용 방식 |
+| --- | --- | --- |
+| 표·overlay 공통화 | 정렬·필터·가상화·포커스·접근성·가로 스크롤을 한 구현에서 수정하고 앱에 전파한다 | 공통 회귀의 영향 범위가 커진다. 공통 패키지의 재현 시험과 각 앱의 실제 화면 수용을 모두 확인한다 |
+| 버전·산출물 정본 | 같은 semver인데 파일이 다른 문제와 소비 앱별 임의 재빌드를 막는다 | 패키지 원장·SRI·GitHub producer 출처를 함께 갱신해야 한다. catalog commit과 pack 생성 commit은 별도로 기록한다 |
+| 폼·상태·폰트 | RHF/Zod/Zustand/Pretendard의 반복 구현과 동작 차이를 줄인다 | 도메인 스키마·인가·API 오류·상태 수명은 앱이 소유한다. 설치 사실을 실제 사용 증거로 대신하지 않는다 |
+| 지도 어댑터 | VWorld/MapLibre 연결·worker·플랫폼 처리를 GitHub 상류 소스 기준으로 재사용한다 | 웹과 RN의 native SDK·style-spec 요구는 다르다. 플랫폼별 정확 요구를 무시한 전이 override는 하지 않는다 |
+| 운영 라이브러리 | Docker Manager의 기존 G·lease·공식 적용·상태 보존·검증 경로를 재사용한다 | 실제 CURRENT와 실행 이미지가 다르면 먼저 관측·정산한다. 이미지·정상 빌드·적용 영수증을 꾸미지 않는다 |
+| 빌드 캐시 | 공개 npm tarball·앱별 Next cache·기존 native/GDAL 레이어와 변경 없는 Python 이미지를 재사용한다 | 캐시 명령의 exit0만 믿지 않고 실제 key/content/SRI를 확인한다. 다른 앱의 Next cache를 공유하지 않는다 |
+| 업그레이드 | 같은 웹 toolchain으로 lint·build·doctor 결과를 비교할 수 있다 | NativeWind5는 RC다. 웹 build 성공으로 native 기기 수용까지 완료 처리하지 않는다 |
+
+## 소스와 실제 운영의 분리
+
+다음은 마지막 실측/배포와 이후 작업을 구분한 체크포인트다. 이미지 label이 다르더라도 재사용하는 Python 입력이 모두 byte 동일한 경우 원래 provenance를 보존하며 재태깅하지 않는다.
+
+| 대상 | 마지막 실제 확인 | 이후 목표·남은 작업 |
+| --- | --- | --- |
+| Geo UI | [643](https://github.com/digitie/kor-travel-geo/pull/643) / `96ff8b4c` / image `23ddae72…`: Node26.13.1/npm12.0.1, Common127파일 정본 일치, 내부 PostCSS8.5.32/geojson-vt6.3.1. 정상 빌드26분13초·native·공식 SDK healthy, 5개 폭·지도9타일 decode·로그아웃/복사쿠키401·PC/모바일 표/지도4장 직접 확인 | 새 UI 적용·화면 검증 완료. 기존 API/수집 이미지와 schema0032 보존 |
+| Weather | [261](https://github.com/digitie/kor-travel-weather/pull/261) / `aa56ae6b`: frontend `5ae63c24…`, API `6e5614ef…`, 수집 `22c5db36…` 정상 캐시 빌드·ARM/native·Common119 및 공식 SDK 배포 healthy. 원래24실행/3정지·schema43·타 대상 보존, 취소0·DDL0. 최신5폭·실제 지도/마커·인증/로그아웃 QA와 부모 PC/모바일 표/지도4장 직접 확인 완료 | 일별 묶음·같은 RR의 중복 조회 제거·요청별7단계 계측을 반영했다. 새6프로필 측정은183.991초에 완료했고 첫200·조건부304 모두 확인했다. 첫 응답은5.173~39.485초로1초 목표 미달이며 아래 요청별 비용에 근거해 추가 개선한다. source_status=stale을 유지한다. 단기 예보503 과거 원인은 로그 부족으로 미확정이고 최근 Map3회 성공·최신 수집 자연 성공·일부 게시 실패는 아래에서 분리한다 |
+| Transport | `c43bd633` / backend·CS·migration `3a5c4068…`, 공개 UI `880db900…`, 관리자 UI `c10c857d…` 정상 캐시 빌드9분3초·native·양 UI Common119 통과. schema0044→0045·공식 SDK·원래 설정 복원·타 대상 보존·관리자/공개/지도 QA 완료. 부모가 최신 PC/모바일 관리자·지도4장을 직접 확인 | places HTTP200 3회 중앙값395.746ms로1초 목표 충족(SQL1·page-build0·fingerprint0). 최신 rail 별도 측정에서 첫200은4,416.771ms였고 warm 뒤304×5는 p95 116.076ms로300ms 목표를 충족했다(0B·page-build0·fingerprint0). 앞선 client15초 timeout/server18.728초200 기록도 보존한다. TRN04는 정상 기준선 입증 부족으로 INCONCLUSIVE |
+| Pinvi | `227cfe87` web / image `6e48525b…` 공식 SDK UI 배포 healthy. Common119·UID1000 native, 정적/워크스페이스143파일 읽기·23디렉터리 통과. 5폭·실제 사용자4·지도4타일 decode·로그아웃204·보호/복사쿠키401·화면4장 확인. API/CS·Map·pair는 보존 | 초기 빌드의 root0600 권한 오류는 Git2188파일/258디렉터리 권한 정규화 뒤 정상 재빌드로 해결했다. 첫 QA envelope 파서 실패와 이후 실제503 관측은 보존하고 마지막 독립 QA의200·decode 성공과 구분했다. 모바일 native기기/스토어 수용은 별개 |
+| Concierge | UI `0c85ad14` / image `71d12579…`, BUILD_ID `KnUhCcc9gXSaYtmCB7Gny` 정상/native/Common119 통과 후 공식4역할 활성화 완료. 변경 없는 Python9입력의 API/MCP/CS 이미지는 재사용했다. 실제 BFF200·지도6타일 decode·5폭·로그인/로그아웃·복사쿠키401·화면 확인 | Manager[616](https://github.com/digitie/kor-travel-docker-manager/pull/616)의 공식 prebuilt-start를 적용해 시작 시 중복 컴파일을 없앴다. N150 Manager도 최신 `efda42f8`로 한 번 정상 설치했고 수용된617 UI·비밀번호·Map/Pinvi 상태를 보존했다 |
+| Manager 보조/기본 | 두 호스트 모두 [617](https://github.com/digitie/kor-travel-docker-manager/pull/617)의 `efda42f8`와 frontend payload가 같은 검토 head `1a6b7422`로 정상 빌드·실제 적용했다. Node26.13.1/npm12.0.1, GNU SWC, CSS 변환, Common119·SRI·root/Next PostCSS8.5.32, 5폭·1024폭 마지막 열 접근·로그인/조회/로그아웃200·이후/복사쿠키401·오류0 PASS. PC·모바일 화면 직접 확인 | 양 호스트 backend도 최신 `efda42f8`로 정상 설치를 완료했다. 보조는 설치1회·실제 Python75모듈 일치·새 PID의 health200·기존31컨테이너/현재 배포/수용된617 UI 보존을 확인했고, 설치 후 실제 로그인·조회·로그아웃200/보호·복사쿠키401/오류0을 통과했다. 보조에 원래 없는 Map/Pinvi 실행 registry는 적용 대상이 아니어서 새로 만들지 않았다. 기존 비밀번호·인증/세션 환경은 유지했다 |
+
+Map의 읽기 전용 main `68f04e81`은 Node26.13.1/npm12.0.1·주요 웹 라이브러리는 같지만 Common UI0.2.1/tokens0.1.2/ref `0dec9543`/geojson-vt6.3.0이 남았다. 담당 분담에 따라 이번 작업에서 수정·배포하지 않았고 UI의 실제 라이브러리 정렬도 확인하지 않았다. 후속 Weather503 조사에서만 Map 코드 서버의 소스 바이트와 한정된 수집 실행 기록을 읽었으며, 이를 Map 전체 runtime 정렬 검증으로 확대하지 않는다. 따라서 Map까지 최신 공통 산출물 정렬 완료라고 보고하지 않는다.
+
+Geo API/수집 및 변경 없는 Concierge Python 역할은 프런트엔드 변경만으로 다시 컴파일하지 않는다. source label을 최신 SHA로 바꿔 동일 이미지를 새 정상 빌드라고 표시하지 않는다.
+
+## 의존성 정렬값과 실제 사용 범위
+
+아래 값은 목표 source/lock의 비교다. 위 운영 표의 완료 여부를 대신하지 않는다. D는 직접 선언, T는 해당 표면의 잠금 그래프에서 도달, L은 공유 lock에만 존재, —는 부재다. G/W/Tp/Ta/Pw/Pm/M/C는 각각 Geo/Weather/Transport공개/Transport관리자/Pinvi웹/Pinvi모바일/Manager/Concierge다. Node/npm 목표는 여덟 표면 모두26.13.1/12.0.1이다. Manager 양 호스트 UI도 이 값으로 실제 교체·화면 수용을 완료했다.
+
+PostCSS는 Geo·Manager의 Next 내부8.5.23을 루트8.5.32로 정렬한다. geojson-vt는 이미6.3.1인 Concierge를 기준으로 다른 실제 지도 소비자의 허용 범위 내6.3.1을 고정한다. 두 변경 모두 root override와 lock을 함께 고정해 이후 npm update의 우연한 재선택을 막는다. Common tgz bytes·다른 패키지 버전은 바꾸지 않는다. RN11.5.1이 정확히 요구하는 style-spec26.4.4와 JS GL의26.6.0 공존은 호환성에 따른 구분이다.
+
+### 목표 소스의 주요 버전 행렬
+
+| 라이브러리 | G | W | Tp | Ta | Pw | Pm | M | C |
+|---|---|---|---|---|---|---|---|---|
+| `react` | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 |
+| `react-dom` | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 | D 19.3.1 |
+| `next` | D 16.4.6 | D 16.4.6 | D 16.4.6 | D 16.4.6 | D 16.4.6 | L | D 16.4.6 | D 16.4.6 |
+| `tailwindcss` | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 |
+| `@tailwindcss/postcss` | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 | D 4.3.5 |
+| `eslint` | D 10.14.0 | D 10.14.0 | D 10.14.0 | D 10.14.0 | D 10.14.0 | D 10.14.0 | D 10.14.0 | D 10.14.0 |
+| `react-doctor` | D 0.9.22 | D 0.9.22 | D 0.9.22 | D 0.9.22 | D 0.9.22 | D 0.9.22 | D 0.9.22 | D 0.9.22 |
+| `@tanstack/react-table` | D 9.3.1 | T 9.3.1 | T 9.3.1 | T 9.3.1 | D 9.3.1 | L | T 9.3.1 | T 9.3.1 |
+| `@tanstack/react-virtual` | D 3.14.26 | T 3.14.26 | T 3.14.26 | T 3.14.26 | D 3.14.26 | L | T 3.14.26 | T 3.14.26 |
+| `@tanstack/react-query` | D 5.107.1 | D 5.107.1 | — | — | D 5.107.1 | D 5.107.1 | D 5.107.1 | D 5.107.1 |
+| `radix-ui` | D 1.8.1 | T 1.8.1 | T 1.8.1 | T 1.8.1 | T 1.8.1 | L | T 1.8.1 | T 1.8.1 |
+| `@radix-ui/react-focus-scope` | D 1.3.1+kortravel.fix.2 | D 1.3.1+kortravel.fix.2 | D 1.3.1+kortravel.fix.2 | D 1.3.1+kortravel.fix.2 | D 1.3.1+kortravel.fix.2 | L | D 1.3.1+kortravel.fix.2 | D 1.3.1+kortravel.fix.2 |
+| `zod` | D 4.6.7 | D 4.6.7 | D 4.6.7 | D 4.6.7 | D 4.6.7 | D 4.6.7 | D 4.6.7 | D 4.6.7 |
+| `react-hook-form` | D 7.92.0 | D 7.92.0 | D 7.92.0 | D 7.92.0 | D 7.92.0 | D 7.92.0 | D 7.92.0 | D 7.92.0 |
+| `@hookform/resolvers` | D 7.0.5 | D 7.0.5 | T 7.0.5 | T 7.0.5 | D 7.0.5 | L | T 7.0.5 | D 7.0.5 |
+| `pretendard` | D 1.3.9 | D 1.3.9 | D 1.3.9 | D 1.3.9 | D 1.3.9 | D 1.3.9 | D 1.3.9 | D 1.3.9 |
+| `zustand` | D 5.1.0 | D 5.1.0 | D 5.1.0 | D 5.1.0 | D 5.1.0 | D 5.1.0 | D 5.1.0 | D 5.1.0 |
+| `@kor-travel/ui` | D 0.2.2 | D 0.2.2 | D 0.2.2 | D 0.2.2 | D 0.2.2 | L | D 0.2.2 | D 0.2.2 |
+| `@kor-travel/tokens` | D 0.1.3 | D 0.1.3 | D 0.1.3 | D 0.1.3 | D 0.1.3 | D 0.1.3 | D 0.1.3 | D 0.1.3 |
+| `@kor-travel/toast` | D 0.1.2 | — | — | — | — | — | — | — |
+| `typescript` | D 5.9.3 | D 5.9.3 | D 5.9.3 | D 5.9.3 | D 5.9.3 | D 5.9.3 | D 5.9.3 | D 5.9.3 |
+| `postcss` | D 8.5.32 | D 8.5.32 | D 8.5.32 | T 8.5.32 | D 8.5.32 | D 8.5.32 | D 8.5.32 | D 8.5.32 |
+| `tailwind-merge` | D 3.7.0 | D 3.7.0 | T 3.7.0 | D 3.7.0 | D 3.7.0 | L | T 3.7.0 | D 3.7.0 |
+| `lightningcss` | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 | D 1.33.0+nativecss.fix.4 |
+
+7개 웹 표면에서 Next16.4.6, Tailwind4.3.5, ESLint10.14.0, ReactDoctor0.9.22 및 실제 사용 Common UI0.2.2가 일치한다. React/ReactDOM19.3.1·tokens0.1.3은 모바일까지 일치한다. Table9.3.1·Virtual3.14.26·Query5.107.1·Zod4.6.7·RHF7.92.0·resolver7.0.5·Pretendard1.3.9·Zustand5.1.0도 사용되는 표면 사이에서 버전이 같다. 직접 선언과 전이 도입 여부는 다르다.
+
+### Floating·Radix
+
+| 라이브러리 | G | W | Tp | Ta | Pw | Pm | M | C |
+|---|---|---|---|---|---|---|---|---|
+| `@floating-ui/react` | — | — | — | — | — | — | — | — |
+| `@floating-ui/react-dom` | T 2.1.9 | T 2.1.9 | T 2.1.9 | T 2.1.9 | T 2.1.9 | L | T 2.1.9 | T 2.1.9 |
+| `@floating-ui/dom` | T 1.8.0 | T 1.8.0 | T 1.8.0 | T 1.8.0 | T 1.8.0 | L | T 1.8.0 | T 1.8.0 |
+| `@floating-ui/core` | T 1.8.0 | T 1.8.0 | T 1.8.0 | T 1.8.0 | T 1.8.0 | L | T 1.8.0 | T 1.8.0 |
+| `@floating-ui/utils` | T 0.2.12 | T 0.2.12 | T 0.2.12 | T 0.2.12 | T 0.2.12 | L | T 0.2.12 | T 0.2.12 |
+| `@radix-ui/react-dialog` | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | L | T 1.3.1 | T 1.3.1 |
+| `@radix-ui/react-dropdown-menu` | T 2.2.1 | T 2.2.1 | T 2.2.1 | T 2.2.1 | T 2.2.1 | L | T 2.2.1 | T 2.2.1 |
+| `@radix-ui/react-popover` | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | L | T 1.3.1 | T 1.3.1 |
+| `@radix-ui/react-select` | T 2.4.1 | T 2.4.1 | T 2.4.1 | T 2.4.1 | T 2.4.1 | L | T 2.4.1 | T 2.4.1 |
+| `@radix-ui/react-toast` | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | L | T 1.3.1 | T 1.3.1 |
+| `@radix-ui/react-tooltip` | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | L | T 1.4.1 | T 1.4.1 |
+
+Floating의 서로 다른 패키지를 같은 버전 번호로 맞추지 않는다. 현재 웹의 react-dom2.1.9·dom/core1.8.0·utils0.2.12는 동일한 조합이고 `@floating-ui/react`는 전부 없다. Radix 개별60종의 전체 버전 벡터는 모든 실제 사용 표면에서 일치하며 아래 추가 표까지 이 문서에 모두 담았다. 패치 FocusScope는 1.3.1+kortravel.fix.2다.
+
+### 모바일·지도
+
+| 라이브러리 | G | W | Tp | Ta | Pw | Pm | M | C |
+|---|---|---|---|---|---|---|---|---|
+| `nativewind` | — | — | — | — | L | D 5.0.0-rc.1 | — | — |
+| `react-native` | — | — | — | — | L | D 0.88.1 | — | — |
+| `expo` | — | — | — | — | L | D 58.0.26 | — | — |
+| `expo-router` | — | — | — | — | L | D 58.0.32 | — | — |
+| `react-native-css` | — | — | — | — | L | D 3.1.0-rc.1 | — | — |
+| `react-native-reanimated` | — | — | — | — | L | D 4.7.1 | — | — |
+| `react-native-worklets` | — | — | — | — | L | D 0.13.1 | — | — |
+| `maplibre-gl` | D 6.17.0 | D 6.17.0 | — | D 6.17.0 | D 6.17.0 | T 6.17.0 | — | D 6.17.0 |
+| `@maplibre/maplibre-react-native` | — | — | — | — | L | D 11.5.1 | — | — |
+| `vworld-map-core` | D 1.0.1 | D 1.0.1 | — | D 1.0.1 | D 1.0.1 | D 1.0.1 | — | D 1.0.1 |
+| `vworld-map-web` | D 1.0.4 | D 1.0.4 | — | D 1.0.4 | D 1.0.4 | D 1.0.4 | — | D 1.0.4 |
+| `vworld-map-rn` | — | — | — | — | L | D 1.0.2 | — | — |
+| `maplibre-vworld-react` | — | — | — | — | — | — | — | — |
+| `@maplibre/geojson-vt` | T 6.3.1 | T 6.3.1 | — | T 6.3.1 | T 6.3.1 | T 6.3.1 | — | T 6.3.1 |
+| `@maplibre/maplibre-gl-style-spec` | T 26.6.0 | T 26.6.0 | — | T 26.6.0 | T 26.6.0 | T 26.4.4/26.6.0 | — | T 26.6.0 |
+
+Pinvi 모바일의 NativeWind **5.0.0-rc.1**, RN0.88.1, Expo58.0.26, Expo Router58.0.32는 현재 소스의 확정 값이다. RC라는 표기를 유지하며 registry 최신·안정 버전이라는 판단은 하지 않는다. 모바일에는 Common tokens만 직접 선언되고 웹 UI·Radix·Floating·Table/Virtual은 공유 lock의 L이다. 모바일 manifest는 vworld-map-web도 직접 선언하므로 MapLibre GL JS가 T로 도달하지만 이것만으로 네이티브 실행 시 JS 지도가 로드된다고 단정하지 않는다.
+
+
+
+### 나머지 비교 패키지
+
+아래는 앞 표에 중복하지 않은 55개다. 앞 표와 합쳐 비교 대상으로 지정한105개 이름의 source/lock 결과를 이 단일 문서에 모두 기록한다. 이는 npm 전체 전이 그래프의 모든 이름이나 registry 최신성 검증을 뜻하지 않는다. D/T/L 구분과 실제 적용 여부는 앞의 정의를 따른다.
+
+| 라이브러리 | G | W | Tp | Ta | Pw | Pm | M | C |
+|---|---|---|---|---|---|---|---|---|
+| `@maplibre/mlt` | T 1.3.0 | T 1.3.0 | — | T 1.3.0 | T 1.3.0 | T 1.3.0 | — | T 1.3.0 |
+| `@maplibre/vt-pbf` | T 4.3.3 | T 4.3.3 | — | T 4.3.3 | T 4.3.3 | T 4.3.3 | — | T 4.3.3 |
+| `@radix-ui/number` | T 1.1.3 | T 1.1.3 | T 1.1.3 | T 1.1.3 | T 1.1.3 | L 1.1.3 | T 1.1.3 | T 1.1.3 |
+| `@radix-ui/primitive` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-accessible-icon` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | L 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-accordion` | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | L 1.3.1 | T 1.3.1 | T 1.3.1 |
+| `@radix-ui/react-alert-dialog` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-arrow` | T 1.1.17 | T 1.1.17 | T 1.1.17 | T 1.1.17 | T 1.1.17 | L 1.1.17 | T 1.1.17 | T 1.1.17 |
+| `@radix-ui/react-aspect-ratio` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | L 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-avatar` | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | T 1.3.1 | L 1.3.1 | T 1.3.1 | T 1.3.1 |
+| `@radix-ui/react-checkbox` | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | L 1.4.1 | T 1.4.1 | T 1.4.1 |
+| `@radix-ui/react-collapsible` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-collection` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-compose-refs` | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 |
+| `@radix-ui/react-context` | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 |
+| `@radix-ui/react-context-menu` | T 2.4.1 | T 2.4.1 | T 2.4.1 | T 2.4.1 | T 2.4.1 | L 2.4.1 | T 2.4.1 | T 2.4.1 |
+| `@radix-ui/react-direction` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-dismissable-layer` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-focus-guards` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | L 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-form` | T 0.3.0 | T 0.3.0 | T 0.3.0 | T 0.3.0 | T 0.3.0 | L 0.3.0 | T 0.3.0 | T 0.3.0 |
+| `@radix-ui/react-hover-card` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-id` | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 |
+| `@radix-ui/react-label` | T 2.1.17 | T 2.1.17 | T 2.1.17 | T 2.1.17 | T 2.1.17 | L 2.1.17 | T 2.1.17 | T 2.1.17 |
+| `@radix-ui/react-menu` | T 2.2.1 | T 2.2.1 | T 2.2.1 | T 2.2.1 | T 2.2.1 | L 2.2.1 | T 2.2.1 | T 2.2.1 |
+| `@radix-ui/react-menubar` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-navigation-menu` | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | L 1.4.1 | T 1.4.1 | T 1.4.1 |
+| `@radix-ui/react-one-time-password-field` | T 0.2.1 | T 0.2.1 | T 0.2.1 | T 0.2.1 | T 0.2.1 | L 0.2.1 | T 0.2.1 | T 0.2.1 |
+| `@radix-ui/react-password-toggle-field` | T 0.2.1 | T 0.2.1 | T 0.2.1 | T 0.2.1 | T 0.2.1 | L 0.2.1 | T 0.2.1 | T 0.2.1 |
+| `@radix-ui/react-popper` | T 1.4.0 | T 1.4.0 | T 1.4.0 | T 1.4.0 | T 1.4.0 | L 1.4.0 | T 1.4.0 | T 1.4.0 |
+| `@radix-ui/react-portal` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | L 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-presence` | T 1.1.11 | T 1.1.11 | T 1.1.11 | T 1.1.11 | T 1.1.11 | T 1.1.11 | T 1.1.11 | T 1.1.11 |
+| `@radix-ui/react-primitive` | T 2.2.0 | T 2.2.0 | T 2.2.0 | T 2.2.0 | T 2.2.0 | T 2.2.0 | T 2.2.0 | T 2.2.0 |
+| `@radix-ui/react-progress` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-radio-group` | T 1.5.1 | T 1.5.1 | T 1.5.1 | T 1.5.1 | T 1.5.1 | L 1.5.1 | T 1.5.1 | T 1.5.1 |
+| `@radix-ui/react-roving-focus` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-scroll-area` | T 1.4.0 | T 1.4.0 | T 1.4.0 | T 1.4.0 | T 1.4.0 | L 1.4.0 | T 1.4.0 | T 1.4.0 |
+| `@radix-ui/react-separator` | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | T 1.2.0 | L 1.2.0 | T 1.2.0 | T 1.2.0 |
+| `@radix-ui/react-slider` | T 1.6.1 | T 1.6.1 | T 1.6.1 | T 1.6.1 | T 1.6.1 | L 1.6.1 | T 1.6.1 | T 1.6.1 |
+| `@radix-ui/react-slot` | T 1.5.0 | T 1.5.0 | T 1.5.0 | T 1.5.0 | T 1.5.0 | T 1.5.0 | T 1.5.0 | T 1.5.0 |
+| `@radix-ui/react-switch` | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | T 1.4.1 | L 1.4.1 | T 1.4.1 | T 1.4.1 |
+| `@radix-ui/react-tabs` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-toggle` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-toggle-group` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-toolbar` | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | T 1.2.1 | L 1.2.1 | T 1.2.1 | T 1.2.1 |
+| `@radix-ui/react-use-callback-ref` | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 |
+| `@radix-ui/react-use-controllable-state` | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 | T 1.3.0 |
+| `@radix-ui/react-use-effect-event` | T 0.0.5 | T 0.0.5 | T 0.0.5 | T 0.0.5 | T 0.0.5 | T 0.0.5 | T 0.0.5 | T 0.0.5 |
+| `@radix-ui/react-use-escape-keydown` | T 1.1.6 | T 1.1.6 | T 1.1.6 | T 1.1.6 | T 1.1.6 | L 1.1.6 | T 1.1.6 | T 1.1.6 |
+| `@radix-ui/react-use-is-hydrated` | T 0.1.3 | T 0.1.3 | T 0.1.3 | T 0.1.3 | T 0.1.3 | T 0.1.3 | T 0.1.3 | T 0.1.3 |
+| `@radix-ui/react-use-layout-effect` | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 |
+| `@radix-ui/react-use-previous` | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | L 1.1.4 | T 1.1.4 | T 1.1.4 |
+| `@radix-ui/react-use-rect` | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | T 1.1.4 | L 1.1.4 | T 1.1.4 | T 1.1.4 |
+| `@radix-ui/react-use-size` | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | T 1.1.5 | L 1.1.5 | T 1.1.5 | T 1.1.5 |
+| `@radix-ui/react-visually-hidden` | T 1.2.13 | T 1.2.13 | T 1.2.13 | T 1.2.13 | T 1.2.13 | L 1.2.13 | T 1.2.13 | T 1.2.13 |
+| `@radix-ui/rect` | T 1.1.3 | T 1.1.3 | T 1.1.3 | T 1.1.3 | T 1.1.3 | L 1.1.3 | T 1.1.3 | T 1.1.3 |
+
+## 공통 패키지·상류 출처
+
+소비 정본은 [Common68 producer R706aaa](https://github.com/digitie/kor-travel-common/commit/706aaa7821588dfca72f660c9161f56be2d0445f)의 main-push 산출물이다. 정책/catalog는 [C5c1b3857](https://github.com/digitie/kor-travel-common/commit/5c1b3857e9af060d30ec776157760fb9e9c13ded)이며 [Common69의 P2b0c02a2](https://github.com/digitie/kor-travel-common/commit/2b0c02a2018c2c8c791bc6d6c7b5a2290579e09e)의 main ancestor다. R/P의3개 pack bytes가 실제 동일함을 확인했다. catalog ref를 producer source로 혼동하지 않는다.
+
+| 패키지 | 정렬 버전 | tgz SHA256 |
+| --- | --- | --- |
+| @kor-travel/ui | 0.2.2 | `76ecace688c061b2dd8dc49b5a18b7acf37e7e4c6bbdec71fe863187483c7033` |
+| @kor-travel/tokens | 0.1.3 | `e6a0eca29bb1568bc7b858dc15cb1d41ea6c264c0e02be3209db094b08e8f464` |
+| @kor-travel/toast | 0.1.2 | `133e2815053544997197e65a201a65c688bc0ae0a57fe604569bc720831da36f` |
+| vworld-map-core | 1.0.1 | `36d3ba16a3ba65f7a460db6027c07e29821f2795b15a526413949210f0ce92b6` |
+| vworld-map-web | 1.0.4 | `aa6a24de87676643eff5a6e8ccc4c8a3a1421cdd0bd462c5a23432c5f51d6970` |
+| @radix-ui/react-focus-scope | 1.3.1+kortravel.fix.2 | `1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a` |
+| vworld-map-rn | 1.0.2 | `70a7434814ed824695c5ee442be34c70f5322e0e7453f100daed07fb0e725fce` |
+| lightningcss | 1.33.0+nativecss.fix.4 | `12c8326428a56e38231f7b5b376df0c6882e3492da794f3499269628edcaccf0` |
+
+사용 표면마다 같은 tgz SHA512 SRI와 원장을 대조한다. 실제 설치 파일은 UI94/tokens25/toast8개이며 Geo127개, UI+tokens 소비 앱119개다. 운영 확인 완료와 새 이미지에서 검사할 대기 항목은 위 표로 구분한다. tokens/toast의 이번 버전 상승에는 내장 정책·패키지 정합성 갱신이 포함되며, 토큰 CSS나 Toast 런타임을 새로 바꿨다는 뜻은 아니다.
+
+VWorld core1.0.1/web1.0.4/rn1.0.2는 [GitHub 상류79b70997](https://github.com/digitie/maplibre-vworld-react/commit/79b70997de8dd4a6bcc9630233f14f273cb27991)의 산출물이다. 2026-11-19 이번 정산 중 GitHub main ref를 다시 조회해 같은 SHA임을 확인했다. 옛 `maplibre-vworld-react` npm 이름의 패키지를 설치한 상태로 표현하지 않는다. MapLibre GL6.17.0/RN11.5.1은 별도의 패키지 버전이다.
+
+Radix FocusScope는 [상류 fork1752a539](https://github.com/digitie/radix-primitives/commit/1752a539c8d5ae57961a0fa2702d2573d48fefe7)의 `1.3.1+kortravel.fix.2`, lightningcss는 `1.33.0+nativecss.fix.4` 정본을 소비한다. 원 문제를 앱 CSS·별도 자체 layer로 반복 우회하지 않는다. ARM musl·GNU x64/ARM native 산출물은 플랫폼별 패키지/ABI로 검증하며 다른 아키텍처의 바이너리를 같은 파일로 취급하지 않는다.
+
+lightningcss는 [라이브러리 원본 PR1](https://github.com/digitie/lightningcss/pull/1)의 fix.4 source `1e94372a6da4a55eac4a6dc3ff9cdeec103e8ac1`에서 Rust/serde-content AST 역직렬화의 null·숫자 coercion을 직접 수정했다. consumer catalog ref `748651cbd845971e65c411166ddee101745dab21`와 구현 commit을 구분한다. 수정 엔진의 WASM·JS adapter를 artifact에 동봉하며 ARM Manager는 해당 WASM backend의19파일을 검증했다. Linux x64/glibc≥2.35의 GNU ELF 분기와 ARM의 WASM 분기를 같은 native 바이너리라고 쓰지 않는다. [Common provenance](https://github.com/digitie/kor-travel-common/blob/5c1b3857e9af060d30ec776157760fb9e9c13ded/vendor/lightningcss-provenance-fix4.json)에 source archive·WASM·adapter의 SHA를 고정했고 실제 bytes 일치도 확인했다.
+
+## 실제 개선과 검증
+
+### 공통 표·메뉴·overlay
+
+모든 웹 표의 공통 조합은 TanStack Table9.3.1 + Virtual3.14.26과 Radix 기반 제어다. 도메인 API·컬럼 내용·서버 정렬은 앱이 소유한다. Geo 모바일 표가 페이지 밖으로 넘어가던 문제는 앱별 CSS가 아니라 Common VirtualTable root의 `min-w-0` 누락을 수정했다. 실제 브라우저 RED2실패→GREEN4통과와 Common238개 guard, 독립 두 리뷰를 거쳐 정본을 발행했다.
+
+Geo의 새 공통 표는 320/375/414/768/1280에서 root/body/main이 viewport 안에 있고 작은 화면에서는 표 내부 가로 스크롤이 실제 이동했다. PC는 세로 메뉴, 모바일은 앱의 반응형 탐색 형태를 유지한다. Transport 관리자도 Geo형 PC 세로 메뉴와 모바일 탐색을 실제 화면으로 비교한다. 공개 사용자용 하단 탭은 관리자 메뉴와 다른 기능이다.
+
+Floating의 앱 직접 `@floating-ui/react` 구현은 제거하고 공통 Radix overlay 경로를 쓴다. Radix가 사용하는 react-dom2.1.9/dom·core1.8.0/utils0.2.12 조합은 남는다. 이를 Floating 전체 제거 또는 서로 다른 패키지의 버전 숫자까지 같게 한 것으로 보고하지 않는다.
+
+### 캐시·빌드 시간
+
+기존 BusyBox `cp -a -n`은 목적 디렉터리가 이미 있을 때 재귀 복사를 생략해 exit0인데495개 npm 항목이 채워지지 않았다. 실제 source1/destination0을 재현하고 npm12의 cacache API로 교체했다. key/info/content/streamed SHA512를 전후495개 모두 검사하고 CLI verify 뒤에도 유지되는 것을 확인했다.
+
+별도 고정 Geo snapshot의 정확 source/lock/vendor에서 네트워크 없는 `npm ci --offline`509개를 검증했다. 이후976 정상 빌드에서는 npm381.9초·Next compile2.1분·전체36분54초, 최신96ff 정상 빌드는26분13초를 관측했다. 이전 냉시작 npm1181.7초·compile10.2분과는 입력·환경이 달라 반복 통계나 인과적 개선율로 세지 않는다. 이 offline 시험을 최신 모든 앱의 전체 offline 설치 보장으로 확대하지 않는다.
+
+Weather의 기존 별도 builder와 Transport의 기존 ARM builder에도 같은 공개 npm tarball495개를 검산해 seed했다. 이는 아키텍처 중립 tarball 재사용이며 각 앱 전체 offline 설치를 했다는 뜻은 아니다. Transport3c20 정상 빌드에서는 GDAL을 포함한8개 기존 레이어 cache hit를 실제 확인했다. 새 입력에서도 CACHED 여부를 로그로 확인하며 완료 전에 재사용 성공을 먼저 선언하지 않는다. 앱별 Next cache를 서로 섞지 않는다.
+
+Transport defc의 실제 정상 빌드110분에서 Next2개46.1분·export3개31.4분·npm2개16.7분·node_modules 복사4.9분이99.1분을 차지했다. export 내부의 tar/import를 중복 합산하지 않았다. 실제14단계가 CACHED였고 GDAL 시스템 패키지와 Python 바인딩도 재컴파일하지 않았다. 검증 도구의 Common 검사 변수 shadowing 오류는 같은 완성 이미지에서 native만49.9초에 재실행해 통과했다. Pinvi는 source600 권한 오류로 한 번 정상 재빌드했고, N150의 실제 SSD 쓰기/저널 대기도 관측했다. 이를 모두 GDAL 재빌드 시간으로 설명하지 않는다.
+
+### Weather DB 전환·성능
+
+기존 파일은 DB artifact backfill·coverage 검증 후 정리했다. DB 경로의 새 배포에서는 legacy 파일 재읽기·backfill·같은 schema DDL을 반복하지 않는다. 캐시·원본 artifact의 SHA/byte/point count·cursor·freshness 검증은 유지한다.
+
+7e 새 이미지의6프로필 측정은369.921초에 모두 끝났고 timeout0/남은 in-flight 없음, API ID/image/PID/restart 전후 동일이었다. 모든 첫 응답은200이나 source_status=STALE이므로 데이터 최신성 목표 달성으로 세지 않는다.
+
+| 리소스/limit | 첫 응답ms | 조건부 HTTP / ms | cursor ms | 실제 한계 |
+| --- | ---: | --- | ---: | --- |
+| current/200 | 18620.036 | 304 /77.810 | 3646.985 | 해당304 artifact0·global payload0 |
+| current/2000 | 25747.260 | 304 /201.435 | 13178.111 | 해당304 artifact0·global payload0 |
+| forecasts/200 | 43568.015 | 200 /18744.862 | 40736.823 | 실제 ETag 변경,304 검증 미확정 |
+| forecasts/2000 | 37098.413 | 200 /36634.223 | 56253.663 | 실제 ETag 변경,304 검증 미확정 |
+| daily/200 | 8479.965 | 304 /194.834 | 3099.303 | 해당304 artifact0; global counter에 동시 요청 기여 |
+| daily/2000 | 8333.176 | 304 /216.436 | 9948.690 | 해당304 artifact0·global payload0 |
+
+예보 첫 페이지는 약0.8MB를 응답하면서128개 chunk·약125MB global payload 증가와 요청 artifact 호출17회를 관측했다. 해당 artifact stage26~30초가 큰 비용이다. 각 stage는 중첩·aggregate이므로 합쳐 전체 시간이나 요청 단독 byte로 승격하지 않는다. projected decode cache는 이 DB 전송량을 없애지 않았다.
+
+예보의 ETag 원인을 단순 시각 필드로 단정하지 않는다. generated_at/as_of는 hash에서 제외되며, 승인 publication·watermark·snapshot/업무 시간 경계의 실제 차이 증거가 필요하다. 올바르게 달라진200을304로 강제하지 않는다. [260](https://github.com/digitie/kor-travel-weather/pull/260)에서 prefetch·fallback을 포함한 페이지 누적 입력8MiB 상한과 읽지 않은 ref 이전 cursor를 적용했다. 기존 단일 artifact 안전 상한·무결성 검증을 유지하며 전체 walk SHA 동등성·7개 RED 회귀·독립2리뷰·exact-head CI를 통과해 `a26f63a9`에 병합했다. 요청별 DB 검증 bytes/refs/budget 헤더를 추가했으며, 실제 새 배포의 측정은 다음 a26 표에 정리했다. 입력 상한은 충족했지만 첫1초 목표는 미달이다.
+
+daily generated-first의 artifact0은 SQL 직접 경로에서 정상이다. 첫 요청의 양수 artifact 호출을 필수로 둔 기존 측정기는 이 경로를 인정하지 못했다. 요청별0 증거·positive control·global 동시 counter를 분리하도록 측정기를 고쳤고 기존 NOT_AVAILABLE/exit1 원본은 보존했다. 조건부200에304 label의 stage만 조회해0으로 보인 것도 보완한 실제6프로필 결과가 다음 표다. 모든 성능 목표를 충족했다는 뜻은 아니다.
+
+### a26 실제 측정과 추가 개선
+
+새 a26의6프로필은191.379초에 완료됐고 timeout/in-flight0, API container/PID/restart는 유지됐다. 실제 예보 요청6건 모두 DB 검증 입력 상한을 통과했다. first/조건부는8,304,076B·9refs, cursor는7,350,191B·8refs로8,388,608B보다 작았고 oversized-first 예외는 없었다. 첫 응답은 모두 STALE이며 첫1초 목표는 미달이다.
+
+| 리소스/limit | 첫 응답ms | 실제 items | 조건부 HTTP / ms | cursor ms |
+| --- | ---: | ---: | --- | ---: |
+| current/200 | 33565.745 | 200 | 304 / 107.479 | 8402.464 |
+| forecasts/200 | 11372.017 | 10 | 200 / 11118.37 | 3618.66 |
+| daily-summaries/200 | 6320.624 | 200 | 304 / 101.692 | 4343.415 |
+| current/2000 | 22182.104 | 1154 | 304 / 169.847 | 5056.716 |
+| forecasts/2000 | 5827.2 | 10 | 200 / 8459.751 | 3522.489 |
+| daily-summaries/2000 | 14989.797 | 2000 | 304 / 152.107 | 9616.581 |
+
+current/daily의 실제304는101.692~169.847ms이며 요청별 artifact 호출0을 확인했다. 예보 조건부는 두 limit 모두 표현이 바뀐200이어서304 재사용은 NOT_AVAILABLE다. 오프라인 응답 비교와 정확 source 경로에서 전역 publication clock의 published_at이 meta.next_since와 manifest digest를 바꾸고 새 snapshot UUID 및 ETag를 만드는 충분한 원인을 확인했다. limit200의 watermark는20:19:00.641947→20:19:14.857305Z, limit2000은20:20:15.306538→20:20:16.977629Z였다. 어느 publication이 발생했는지·선택 ref까지 동일했는지는 이 증거로 단정하지 않으며, 같은 items만 보고304를 강제하지 않는다. 7e와 데이터·페이지 item 수·상태가 달라 단순 전후 속도비를 계산하지 않는다. 입력량 제한 성공을 첫 응답 목표 달성으로 바꾸지 않으며, 실제 freeze/query 및 DTO 경로의 추가 최적화를 진행한다.
+
+### aa56 실제 운영 측정과 남은 병목
+
+새 API `6e5614ef…`와 검토한5모듈 SHA를 실제 대조한 후6프로필을183.991초 동안 측정했다. client timeout0·잔여 요청0이며, 모두 첫200·조건부304였다. 전체 source_status는stale이므로 속도 계측 완료를 데이터 신선도 수용 완료로 바꾸지 않는다.
+
+| 자원/limit | 첫200 ms | SQL 회/ms | freeze ms | 조건부304 ms | 후속200 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| current/200 | 39484.613 | 93/19797.938 | 35005.621 | 72.696 | 9281.696 |
+| forecasts/200 | 8460.028 | 48/3518.308 | 4487.291 | 2075.241 | 4407.964 |
+| daily-summaries/200 | 5857.468 | 24/1949.717 | 5450.966 | 48.063 | 3530.327 |
+| current/2000 | 27598.156 | 134/13060.146 | 21485.972 | 285.846 | 12843.747 |
+| forecasts/2000 | 5172.881 | 49/1939.584 | 2839.442 | 2161.753 | 3020.095 |
+| daily-summaries/2000 | 10419.167 | 32/3696.305 | 7470.036 | 242.898 | 5238.551 |
+
+7단계 Server-Timing은 모든 first/conditional/continuation에서 완전했고 같은 요청의 count·duration을 보존했다. 중첩 단계이므로 위 SQL과freeze를 합산하지 않는다. 단기 예보 입력은 first7,687,270B/8refs, 후속7,440,778B/7refs로8MiB 안에 들었고304는 검증 입력0B·artifact 호출0이다. 그럼에도 예보304는30/32 SQL·freeze1.831/1.939초를 수행해2.075/2.162초였다. current의 첫 응답은 artifact0.314/1.372초보다freeze35.006/21.486초가 크다. 따라서 다음 개선은 결과 고정·승인/lineage 검증 경로의 반복 조회를 줄이며, 신선도·권한·cursor·publication clock 계약은 유지한다. 원천/페이지 크기가 달라a26 대비 단순 속도비로 발표하지 않는다. SQL count에는 데이터 SELECT 외 SET LOCAL·참조 저장·잠금 획득 재시도가 포함된다. 정적 점검에서 ref별 SELECT N+1은 확인되지 않았다. 로컬 API에서0.6초 배타 잠금을 제어해 주자 current의 전체 SQL은35→83, 이 중 공유 잠금 시도는2→50이 됐다. forecast도43→92(잠금3→52)였다. 이는 카운터 해석의 대조 증거이며 운영39초 지연의 원인 확정은 아니다. 작은22위치 재현의 freeze는 약95ms였다. 추가로1,536위치의 참조·불변성 제약을 만족하는 작은3점 artifact 자료에서 계측 listener 없이 첫200 응답638.295ms/freeze488.782ms, limit2000 응답395.802ms/freeze223.505ms를 기록했다. 이는 원천 payload·원천 종류·서버가 다른 로컬 진단으로 운영39초 재현이나 목표 수용 증거가 아니다. 실제 서버의 읽기 전용 승인 메타데이터 경로를 한 차례 분리 측정해 다음 수정 대상을 확정한다. 단기200의 원천 최소 수집은11:27:14.886564Z로 이전05:30 Map 기록보다 진전됐지만6시간 상한을 넘었으므로stale이다.
+
+### 단기 예보 503 별도 장애 조사
+
+사용자가 Odroid Weather 예보 내보내기503으로 Map 단기 예보 적재가3시간마다 실패한다고 보고해 별도 우선 조사한다. 최신a26 API는 healthy/restart0이고20:30UTC N150의 style=short·limit200 요청5건 및20:48UTC ultra_short 요청9건은200이었다. 이 일부 성공을 반복 장애 해결로 간주하지 않는다. Map의 정확 style/since/cursor·마지막 실패 시각과 Weather 실패 위치 로그를 대조하며, Map 코드는 기존 담당 분담대로 변경하지 않는다. 후속 실제 Dagster 조회에서11/19 05:30KST(bb09b7aa…)와02:30KST(f9b1de96…)가 모두SUCCESS임을 확인했다. 최신은 증분5페이지/5요청으로1,353곳의 새 generation을 기록했으며 delta_unavailable 보존 분기가 아니다. 확정된 과거503은11/18 03:17UTC 종료로 a26 시작 전이고, 최근 별도 실패는 code-server 재시작에 따른 worker 유실이다. 따라서 현재3시간 적재가 계속503으로 실패한다는 상태는 최신 실측과 다르다. 다만 source_status=stale·원천수집2026-11-17T20:43:57Z 문제는 별도로 남아 Weather 수집/승격 상태를 조사한다. 과거503의 정확 Weather 내부 실패 위치는 보존 로그 부재로 미확정이며, 현재 회복을 특정 수정의 인과 효과로 단정하지 않는다. 05:30 freeze의 승인 short 자료에서24시간 창의 최소 원천수집 시각이 위 값과 일치했고, short 신선도 상한6시간을 넘었다. 정상 단기 수집은22:40UTC 자연 성공했다(300요청·400,894값). 게시 상태는22:52UTC 120개 published·178개 preparing·2개 CAPTURE_FAILED로, 전체 신선도 복구 완료는 아니다. 실패2격자55:81/86:94의 같은 수집 원본은 각각907행이며 현재의 순수 정규화·직렬화는5위치 모두 통과했다. 원래 capture 예외가 저장되지 않아 당시 실패 원인은 미확정이고, 현재 원본 replay 성공을 당시 capture 전체 재현 성공으로 보지 않는다. 후속 Weather 배포는 단기와 weatherapi 수집의 자연 종료 후 강제 취소0으로 quiet를 확인해 `aa56ae6b`로 공식 적용·화면 검증·24개 설정 복원을 완료했다.23:14UTC의123개 published·175개 preparing·2개 failed는 설정 복원 전 상태이므로, 이를 배포 후 게시 정지로 오해하지 않는다.23:28UTC에는 publisher RUNNING·142개 published·156개 preparing·2개 failed로19개 추가 게시를 확인했다. 전체 신선도 복구 완료는 아니다. Map 코드·배포는 변경하지 않았다.
+
+새aa56 적용 후 실제08:30KST 정기 Map 단기 적재(`cc72a87f-6387-44a4-83cb-2b5af0117837`)는08:33:27KST SUCCESS로 끝났다.23페이지·23개 상류 요청을 완료하고1,402위치·226개 delta row의 새 generation `20261118T233326Z-eb514132`를 발행했다. 확인한 실행 기록에는503/재시도가 없고 source_status는stale이다. 정상 스케줄 관찰만 했으며 Map 코드·트리거·배포나 추가 Weather HTTP를 수행하지 않았다. 6프로필 측정은23:26:31UTC 종료되어 이 Map 실행과 겹치지 않았다. 이 관찰은 운영 정기 실행이므로 격리 성능 실험으로 사용하지 않는다. 과거503 내부 원인은 여전히 로그 부족으로 미확정이다.
+
+### Transport 인덱스·운영
+
+실제3c20 places3표본 중앙값2633.468ms는1초 목표 미달이다. rail304는5개 빈 응답/p95 120.999ms로300ms 목표 충족이며 요청별 page-build/fingerprint-build0을 확인했다. 수집 지연 TRN04는 재구축 외 정상 기준선이 입증되지 않아 INCONCLUSIVE다.
+
+214는 fuel 최신순 복합 인덱스와 highway 최근 수집 covering 인덱스를 추가한다. schema0044는 lock2초/각 statement120초이며 두 번째 생성 실패의 원자적 rollback·metadata/Alembic 정합 시험 및 exact-head CI·두 독립 리뷰를 통과했다. 실제0043→0044는 exit0/terminal/0044 재조회와 정상 배포를 완료했다. 새 defc의 places3표본은2544.420/2550.867/1960.280ms, 중앙값2544.420ms로1초 목표 미달이다. 각6SQL·SQL871.198~1179.898ms였다. rail304는5회 모두 빈 본문·page-build/fingerprint0이며 양수 첫200 대조를 갖춘 p95 106.896ms로300ms 목표를 충족했다. TRN04는 재구축 밖 baseline을 입증하지 못해 INCONCLUSIVE다. 이 단계의 추가 소스 개선은 아래PR217에서 캐시 hit 조기 확인으로 반영·실제 수용했다. 로컬 EXPLAIN이나 서로 다른 데이터의 전후값을 운영 개선율로 제시하지 않는다.
+
+### 추가 최적화의 검토·실측 구분
+
+| 후속 | 검토·테스트·CI | 운영 적용·수용 |
+| --- | --- | --- |
+| [Transport217](https://github.com/digitie/kor-travel-transport/pull/217), `b51afb25` | 장소 입력10표의 테이블별 revision vector와 같은 RR에서 실제 시간 경계 전만 검증 bytes를 조기 재사용한다. 원래 단일 counter가 독립 writer를 막는 현상을 로컬 재현해 분리했고, 제한된 trigger 정의를 trusted로 오인하는 문제도 negative/positive control로 고쳤다.166개 로컬 테스트·Alembic/OpenAPI 통과, 검토한9파일과 최종 head bytes 일치. exact CI44398755485의 backend/UI2종/Common guard2종 통과 후 `c43bd633`에 병합했다. live-e2e는 기존 조건대로 SKIP이며 실운영 수용은 별도다 | `c43bd633` 정상 빌드·native/Common119·0045·공식 SDK·최신 UI/지도 수용 완료. 실제 backend8개 CACHED에 GDAL 시스템·Python 바인딩이, UI 각각18개에 npm ci/Next build가 포함됐다. 운영 places 3회395.746/427.066/251.698ms, 중앙395.746ms로1초 충족(SQL1/page-build0/fingerprint0). rail 양성 요청은 client15.015초 timeout이었으나 서버는18.728초 뒤200(SQL39·10.561초)을 기록했고 같은 시점에1,466행·1.49MB 새 artifact가 생성됐다. 이는503 관측이 아니다. 후속 quiet의 해당 경로만 측정해 첫200 4,416.771ms(SQL19), warm 뒤304×5 p95 116.076ms·본문0B·page-build0·fingerprint0을 확인했다.300ms 반복 조회 목표는 충족했고, 첫 요청4.4초는 별도로 남긴다. rail 관련8파일은 이전 배포와 같고 입력 revision은 rail4종만 걸러 쓰므로 places10종의 전역 invalidation 탓으로 단정하지 않는다 |
+| [Weather261](https://github.com/digitie/kor-travel-weather/pull/261), `64d73442` | 일별8위치 묶음·같은 RR의 catalog/progress 중복 조회 제거·기존 array bind 및 요청별7단계 Server-Timing을 추가했다.171개 로컬 테스트·ruff 통과, 최종 검토8파일 bytes 일치. 첫 CI의2건은 실제 예보 target 경계가 TTL보다 빨리 끝나는 시간 의존 fixture였고, 운영 경계를 유지한 고정 입력으로 RED/GREEN 검증했다. exact CI44401203382의 Python/frontend/Common guard 모두 통과해 `aa56ae6b`에 병합했다 | 최신 `aa56ae6b` 3역할을 공식 적용하고 원래24실행/3정지·타 대상·schema43을 보존했다. 최신 화면·5폭·인증/로그아웃 QA 및 부모의 PC/모바일 표·지도4장 직접 확인을 완료했다. 요청별 SQL/freeze 헤더를 사용한6프로필은183.991초에 완료했다. 모두 첫200·조건부304·계측 완전, timeout0이지만 source_status=stale이며 첫 응답1초 목표는 미달이다. source·frontend 입력이 같아도 후보 SDK의 동일 SHA 계약에 따라 정상 새 이미지를 만들었다. 실제 aa56 frontend 로그에서14개 CACHED에 npm ci/Next build가 포함되고, API·CS는 각각8개 CACHED에 uv sync가 포함됨을 확인했다. 새3역할의 ARM/native/Common119는 실제 통과했다. 정상 단기 수집300요청·400,894값이22:40UTC 자연 성공했고 이어 남은 weatherapi 예보 수집150요청·52,050값도22:59UTC 성공했다. 강제 취소0으로 quiet를 확인한 뒤23:17UTC 공식 적용·원래 설정 복원·최신 화면 수용을 마쳤다.6프로필 운영 속도는 위 표와 같이 실제 측정했으며 첫 응답1초 목표 미달로 결과 고정·검증 단계의 추가 개선을 진행한다 |
+
+### 품질·운영 경계
+
+Common 두 독립 리뷰와 실제 브라우저 회귀, 소비 exact-head CI, Pinvi 패키지 설치 경로 P1의 두 원 리뷰어 FIXED를 확인했다. Pinvi는 root/nested 실제 npm fixture와 옛 코드 negative control로 checker·Tailwind 탐지·runtime package 계층을 검증했다. fixture 성공을 운영 native/browser 성공으로 대신하지 않는다.
+
+Manager의 최초 loopback 브라우저 TimeoutError는 잘못된 origin 허용 범위 때문이었다. 실제 운영 HTTPS origin으로 로그인200/조회200/로그아웃200/이후401/쿠키재사용401을 확인했다. 앱 CORS·비밀번호를 바꿔 검증 도구를 통과시키지 않았다. 이번617의 N150 로그인 응답 timeout도 원본을 보존했으며 최종 검증은 같은 backend706/PID·기존 환경에서 로그인/로그아웃/복사쿠키401까지 통과했다. 실제 SSD/저널 대기는 별도 관측했지만 이를 해당 timeout의 확정 원인으로 확대하지 않는다.
+
+## 앞으로 차이가 생기지 않게 하는 조치와 남은 순서
+
+- 공통 버전 정책·dependency/source guard·정본 tgz 원장·lock SRI·workflow의 `uses`와 `common-ref`를 함께 검사한다. Weather/Transport 실제 PR workflow에 옛 pin이 남았던 오류는 guard가 실제로 실패시켰고 두 호출 위치 모두 고쳤다.
+- 새 호환 전이 override를 실제 설치 root에 정확히 고정하고, 공통 원본 pack을 앱에서 임의 재생성하지 않는다. 캐시는 설치를 대신하는 출처가 아니라 검증한 같은 바이트의 재사용이다.
+- 정상 이미지의 source/tree/플랫폼/Native load/Common 실제 파일을 확인한 뒤 공식 SDK로 적용한다. metadata·현재 실행·DB schema가 다르면 그 사실을 먼저 해결한다. 같은 DB의 백업/마이그레이션/원천 재수집을 반복하지 않는다.
+- 완료 순서는 최종 source CI/병합→정상 cached build/native→공식 적용·원상 복원→실제 화면/지도/로그아웃→성능·스냅샷 관측이다. 기능 PASS로 미달 성능·STALE·TRN04 미확정을 덮지 않는다.
+- **이번 후속의 CI 순서·needs·fail-fast 최적화는 사용자 지시대로 마지막 업무다.** 현재 빌드·배포·화면/성능 검증을 끝낸 뒤 저비용 오류 검사를 비싼 install/build/test보다 앞에 배치하고 프로젝트별 형식을 정산한다. 과거 phase의 CI-LAST 완료를 이번 완료로 재사용하지 않는다.
+- 최종 소비 source/pin·배포 산출물 문서는 실제 완료 영수증을 반영해 Common과 이 단일 Geo 보고서에서 갱신한다. 지금 진행 중인 항목을 완료로 미리 표시하지 않는다.
+
+<details>
+<summary>2026-11-18 이전 비교·구현·검증의 날짜별 원본 이력</summary>
+
+
+> **2026-11-18 현재 보강:** 현행 W/T/Geo의 source·lock·정책/산출물과 운영/대기 구분은
+> [현재 확인](#2026-11-18-현재-확인)을 따른다. 이하2026-11-13의 “최종/현재”와
+> Node22 통일 서술은 당시의 날짜별 역사이며 오늘 세 앱의 상태로 확대하지 않는다.
+
+
 > **2026-11-13 최종 정산 — 이번 대상 소스·runtime·정상 QA·CI-LAST 완료.** 아래 표가 최종 확인 상태이며 뒤의 phase1·초기 phase2 표와 FAIL은 해당 시점의 역사다. 최종 PR CI와 실제 merged 소스의 동일 payload를 근거로 판정했다. 병합으로 자동 시작하는 main push CI는 별도 실행이며 그 중복 전체 suite 완료를 기다리거나 모두 PASS라고 선언하지 않는다. 문서 때문에 새 빌드·로그인·runtime 검사를 반복하지 않았다.
 
 ### 현재 실제 상태
@@ -1396,3 +1711,134 @@ DataTable 전체 이관, 여섯 앱 확대, React/Next 업그레이드, Python �
 - [E8] [GNU 라이선스 FAQ](https://www.gnu.org/licenses/gpl-faq.en.html): 라이브러리 결합·배포와 권리자의 라이선스 선택.
 
 외부 문서는 2026-09-05 확인 기준이며, 실제 패키지 구현 시 지원 버전·registry 정책을 다시 확인한다. 위 기술 문서는 본 보고서의 패키징 권고를 뒷받침하며 특정 앱의 현재 운영 안전성을 보증하지 않는다.
+
+## 2026-11-18 현재 확인
+
+### 운영과 source/CI 후보의 구분
+
+지정된 로컬 source·manifest·lock·tgz·공통 원장과 이미 확보된 부모 영수증만 대조했다.
+인터넷의 최신 버전 조사는 하지 않았다. 아래 의존성은 네 frontend의 고정 source/lock
+기준이며 이미지 안의 npm 파일 전체를 새로 감사했다는 뜻이 아니다. Pinvi·Concierge·Map·
+Manager의 현재 버전은 미조사다. 위2026-11-13의 날짜별 상태를 현행으로 확대하지 않는다.
+
+| 대상 | 현재 부모 확인 운영 | source/CI와 남은 단계 |
+| --- | --- | --- |
+| Weather | [43507989](https://github.com/digitie/kor-travel-weather/commit/4350798949a5649eb92ff6c382ef2f8650474eb3), Node26.13.1, healthy·브라우저132값 PASS. 6프로필 첫200/304 재사용·빈 body·요청별artifact0·global payload0이지만 모두 STALE. forecast304는45SQL/6~9초, 첫 요청52초·128chunk/약123MB | [0ff1b158](https://github.com/digitie/kor-travel-weather/commit/0ff1b15885c7c7ad9d8d01c04edf200559579299)는 [PR256](https://github.com/digitie/kor-travel-weather/pull/256) 정확 후보d7e5d25a의 [CI44288056333](https://github.com/digitie/kor-travel-weather/actions/runs/44288056333) PASS 후 병합. 0ff의 [main CI44291211659](https://github.com/digitie/kor-travel-weather/actions/runs/44291211659)도 SUCCESS. 새 normal/native 이미지·SDK 적용·실제 지연 수용은 대기 |
+| Transport | [4584ee95](https://github.com/digitie/kor-travel-transport/commit/4584ee95291d6e34a90b2c65de090d9737decbb0), Node26.13.1, SDK5단계/4역할 healthy·PNG4개 PASS. rail304 p95 약89ms로300ms 목표 MET. places2.6~4.8초/SQL6은1초 목표 UNMET. marker0의 TRN04는 INCONCLUSIVE | [3c20ab35](https://github.com/digitie/kor-travel-transport/commit/3c20ab3507c18308f7f21f37cfee7e86f4f17707)는 [PR213](https://github.com/digitie/kor-travel-transport/pull/213) CI PASS 후 병합(부모 확인). [main CI44287058875](https://github.com/digitie/kor-travel-transport/actions/runs/44287058875) SUCCESS. normal 시도는 PREBUILD의 DockerClient context helper 오류로 멈췄으며 image 변경0; Kepler가 close 처리를 수정 중. 새 이미지·적용·동일 데이터 HTTP 수용은 대기 |
+| Geo UI | [eebafbe9](https://github.com/digitie/kor-travel-geo/commit/eebafbe90b034e797a674406aac16ebf277d7bae)의 ARM64 normal/native 이미지 적용 완료. Node26.13.1/npm12.0.1, SDK 실제 성공·healthy 및 별도 post-verify PASS. 아래 실제 증거와 화면 한계 참조 | [CI44223607786 재실행2](https://github.com/digitie/kor-travel-geo/actions/runs/44223607786) PASS. 기본 브라우저 QA PASS이나 모바일 표 full-page PNG853px/viewport375px의 원인은 조사 중이므로 전체 responsive visual PASS는 보류 |
+
+Weather435와0ff의 frontend manifest/lock/.nvmrc는 로컬 bytes가 동일하다. Transport4584의
+normal receipt에 고정된 공개/관리자 manifest·lock SHA256도3c20의 파일과 일치했다.
+새 backend source가 이미 운영 중이라는 증거로 해석하지 않는다.
+
+### Geo 실제 적용과 남은 화면 판정
+
+부모 최종 결과에 따르면 eeb의 normal/native ARM64 이미지는
+sha256:53e72783dcefcbf872652c52bddad080feccc6919827f80a5a35e529ba4c655c이며
+Node26.13.1/npm12.0.1·sharp/worker/css/oxide/swc 검사가 PASS다. 2026-11-18 부모 결과 표기
+11:36:58의 실제 SDK 적용은 성공·healthy이고 새 container prefix는10ba17ce다.
+이후 옛 helper의 DockerClient context 사용에서 TypeError가 났지만 성공한 적용을 실패로
+되돌려 세거나 두 번째 적용을 실행하지 않았다. 명시적 finally/close로 교정한 별도
+post-verify-geo.py가11:38:17 PASS였고 전체 ENV·API/CS·비선택 보존을 확인했다.
+
+11:39 기본 브라우저 QA는 로그인·표·geocode200·로그아웃 뒤 복사 인증401·38개 rendered row,
+유효 decode tile9개·HTTP/decode 실패0을 확인했다. root의5폭은 viewport 이하이며 PNG4개를
+부모가 열어 봤다. 다만 모바일 표 full-page PNG는853px로 viewport375px보다 넓고 지도
+모바일 PNG는375px다. Banach가 capture resize 현상과 실제 overflow를 구분 중이다.
+따라서 기본 QA PASS를 모든 responsive/시각 수용 PASS로 확대하지 않는다.
+
+### 직접 선언과 lock 도달 버전
+
+D는 해당 manifest의 dependencies 또는 devDependencies 직접 선언, T는 직접 선언 없이
+lock에 도달한 전이 의존성, —는 둘 다 없는 경우다. Node/npm 행은 engines·packageManager다.
+source/lock 선언과 실제 runtime은 위 수용 표로 구분한다. Geo Node22는 이번 교체 전 기준선이다.
+
+| 항목 | Geo UI | Weather 관리자 | Transport 공개 | Transport 관리자 |
+| --- | --- | --- | --- | --- |
+| Node / npm | 26.13.1 / 12.0.1 | 26.13.1 / 12.0.1 | 26.13.1 / 12.0.1 | 26.13.1 / 12.0.1 |
+| React / DOM | 19.3.1 D | 19.3.1 D | 19.3.1 D | 19.3.1 D |
+| Next.js | 16.4.6 D | 16.4.6 D | 16.4.6 D | 16.4.6 D |
+| Tailwind / PostCSS 플러그인 | 4.3.5 D | 4.3.5 D | 4.3.5 D | 4.3.5 D |
+| ESLint | 10.14.0 D | 10.14.0 D | 10.14.0 D | 10.14.0 D |
+| TanStack Query | 5.107.1 D | 5.107.1 D | — | — |
+| TanStack Table | 9.3.1 D | 9.3.1 T | 9.3.1 T | 9.3.1 T |
+| TanStack Virtual | 3.14.26 D | 3.14.26 T | 3.14.26 T | 3.14.26 T |
+| Radix umbrella | 1.8.1 D | 1.8.1 T | 1.8.1 T | 1.8.1 T |
+| FocusScope 보정 | 1.3.1+kortravel.fix.2 D | 1.3.1+kortravel.fix.2 D | 1.3.1+kortravel.fix.2 D | 1.3.1+kortravel.fix.2 D |
+| Zod | 4.6.7 D | 4.6.7 D | 4.6.7 D | 4.6.7 D |
+| React Hook Form | 7.92.0 D | 7.92.0 D | 7.92.0 D | 7.92.0 D |
+| RHF resolver | 7.0.5 D | 7.0.5 D | 7.0.5 T | 7.0.5 T |
+| Pretendard | 1.3.9 D | 1.3.9 D | 1.3.9 D | 1.3.9 D |
+| Zustand | 5.1.0 D | 5.1.0 D | 5.1.0 D | 5.1.0 D |
+| MapLibre GL JS | 6.17.0 D | 6.17.0 D | — | 6.17.0 D |
+| VWorld core | 1.0.1 D | 1.0.1 D | — | 1.0.1 D |
+| VWorld web | 1.0.4 D | 1.0.4 D | — | 1.0.4 D |
+| 옛 maplibre-vworld-react 패키지명 | — | — | — | — |
+| Floating React | — | — | — | — |
+| Floating React DOM | 2.1.9 T | 2.1.9 T | 2.1.9 T | 2.1.9 T |
+| Floating DOM | 1.8.0 T | 1.8.0 T | 1.8.0 T | 1.8.0 T |
+| 공통 UI(shadcn/Radix) | 0.2.1 D | 0.2.1 D | 0.2.1 D | 0.2.1 D |
+| 공통 tokens | 0.1.2 D | 0.1.2 D | 0.1.2 D | 0.1.2 D |
+| 공통 Toast | 0.1.1 D | — | — | — |
+
+shadcn/ui는 여기서 공통 @kor-travel/ui의 Radix primitive를 뜻하며 별도 같은 이름의
+runtime 패키지로 세지 않는다. @floating-ui/react 직접 이관 뒤에도 Radix 경유 react-dom/
+dom은 남으므로 “Floating 전체 제거”가 아니다. maplibre-vworld-react는 현재 npm package명이
+아니라 아래 VWorld 산출물의 상류 저장소다. Weather vendor의 RN1.0.2 tgz는 웹 lock에 없으며
+Pinvi의 현재 설치 증거가 아니다.
+
+고정 source와 파일/행 근거:
+
+- Geo: [eebafbe90b03](https://github.com/digitie/kor-travel-geo/commit/eebafbe90b034e797a674406aac16ebf277d7bae) — [package.json:6](https://github.com/digitie/kor-travel-geo/blob/eebafbe90b034e797a674406aac16ebf277d7bae/kor-travel-geo-ui/package.json#L6) · [package-lock.json:6](https://github.com/digitie/kor-travel-geo/blob/eebafbe90b034e797a674406aac16ebf277d7bae/kor-travel-geo-ui/package-lock.json#L6)；lock SHA256 9616f0db22e3b63e2f185e360212d0c46838790d16c4b61c2f2e014dc09e8a99。
+- Weather: [0ff1b15885c7](https://github.com/digitie/kor-travel-weather/commit/0ff1b15885c7c7ad9d8d01c04edf200559579299) — [package.json:6](https://github.com/digitie/kor-travel-weather/blob/0ff1b15885c7c7ad9d8d01c04edf200559579299/packages/kor-travel-weather-admin/frontend/package.json#L6) · [package-lock.json:6](https://github.com/digitie/kor-travel-weather/blob/0ff1b15885c7c7ad9d8d01c04edf200559579299/packages/kor-travel-weather-admin/frontend/package-lock.json#L6)；lock SHA256 12eee55520194ae0af69d47f35eef5a2a16a00634ad9368cc3062d57e9aebdbb。
+- Transport 공개: [3c20ab3507c1](https://github.com/digitie/kor-travel-transport/commit/3c20ab3507c18308f7f21f37cfee7e86f4f17707) — [package.json:68](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/frontend/package.json#L68) · [package-lock.json:6](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/frontend/package-lock.json#L6)；lock SHA256 bc6f2cf79f7e11c0af41cdd9e3143b7f48a2820296c9628d9625313dc3f6da54。
+- Transport 관리자: [3c20ab3507c1](https://github.com/digitie/kor-travel-transport/commit/3c20ab3507c18308f7f21f37cfee7e86f4f17707) — [package.json:74](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/packages/kor-travel-transport-admin/frontend/package.json#L74) · [package-lock.json:6](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/packages/kor-travel-transport-admin/frontend/package-lock.json#L6)；lock SHA256 752db15b8a3ac06119046bff1f2852d01a460e476833b3c1e5feb902a471ac0b。
+
+전이 도달의 예: [Weather TanStack Table](https://github.com/digitie/kor-travel-weather/blob/0ff1b15885c7c7ad9d8d01c04edf200559579299/packages/kor-travel-weather-admin/frontend/package-lock.json#L5437),
+[Transport Floating React DOM](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/frontend/package-lock.json#L557).
+
+### 공통 정책과 artifact provenance
+
+소비 정책은 [T-029 0dec9543](https://github.com/digitie/kor-travel-common/commit/0dec9543c8c8730ce7b05837f2fbe6c31d4ede65)이다.
+[Geo uses/common-ref](https://github.com/digitie/kor-travel-geo/blob/eebafbe90b034e797a674406aac16ebf277d7bae/.github/workflows/ci.yml#L13) · [Weather uses/common-ref](https://github.com/digitie/kor-travel-weather/blob/0ff1b15885c7c7ad9d8d01c04edf200559579299/.github/workflows/ci.yml#L13) · [Transport 공개 uses/common-ref](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/.github/workflows/ci.yml#L23)의 uses/common-ref가 같다.
+Weather/Transport의 별도 common-frontend-policy.yml도 같은 ref다. 정책 ref와 산출물 생성
+source/CI artifact SHA를 혼동하지 않는다.
+
+UI/tokens 제품 source는 [938d1db7](https://github.com/digitie/kor-travel-common/commit/938d1db701286414113324da714132db62e3311e), 소비 정본은
+[Common58 97f8ed98](https://github.com/digitie/kor-travel-common/commit/97f8ed98360518e7afc96e89a5b45a6a478ac955) main push의
+common-release-packs-97f8ed98360518e7afc96e89a5b45a6a478ac955다.
+VWorld web1.0.4는 [상류79b70997](https://github.com/digitie/maplibre-vworld-react/commit/79b70997de8dd4a6bcc9630233f14f273cb27991)에서 온다.
+[Geo 출처:5](https://github.com/digitie/kor-travel-geo/blob/eebafbe90b034e797a674406aac16ebf277d7bae/kor-travel-geo-ui/vendor/PROVENANCE.md#L5)와
+[Transport 출처:5](https://github.com/digitie/kor-travel-transport/blob/3c20ab3507c18308f7f21f37cfee7e86f4f17707/frontend/vendor/README.md#L5)에 연결된다.
+
+SHA256은 해당 tgz bytes를 로컬 계산했고 소비하는 각 lock의 SHA512 SRI도 일치한다.
+G/W/T는 Geo/Weather/Transport이며 미소비 표면까지 동일하다고 주장하지 않는다.
+
+| 산출물 | 버전 | lock 소비 표면 | tgz SHA256 |
+| --- | --- | --- | --- |
+| @kor-travel/ui | 0.2.1 | G/W/T공개/T관리 | f1a8212bef2b171c0f7a209d2ee893750cb74f6cb8a89766bd6a62c73d62de6c |
+| @kor-travel/tokens | 0.1.2 | G/W/T공개/T관리 | c6e2e27d716d5db7c9157f412cfd28d941536c032ce702a8cceb32f2a0c16253 |
+| @kor-travel/toast | 0.1.1 | G만 | 30a5b2ee7b391791474addda15fe4ce629e820889f02010123273dd4f9cda222 |
+| vworld-map-core | 1.0.1 | G/W/T관리 | 36d3ba16a3ba65f7a460db6027c07e29821f2795b15a526413949210f0ce92b6 |
+| vworld-map-web | 1.0.4 | G/W/T관리 | aa6a24de87676643eff5a6e8ccc4c8a3a1421cdd0bd462c5a23432c5f51d6970 |
+| @radix-ui/react-focus-scope | 1.3.1+kortravel.fix.2 | G/W/T공개/T관리 | 1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a |
+| lightningcss | 1.33.0+nativecss.fix.4 | G/W/T공개/T관리 | 12c8326428a56e38231f7b5b376df0c6882e3492da794f3499269628edcaccf0 |
+
+[Geo 원장:1](https://github.com/digitie/kor-travel-geo/blob/eebafbe90b034e797a674406aac16ebf277d7bae/kor-travel-geo-ui/common-artifacts.json#L1) SHA256은
+dcd5e7562c343e1c3b1e9dab0908a0d3e8d51596f21825577a530ee44e6333ff, W/T 세 표면 원장은
+5b27268d84a5f23ea9a784b00fc330e02fec0fcb2bf0f0ad80370ffe1f6bca94다. 차이는 Geo의 Toast 항목/출처 추가이며
+다른 공통 package/version/SRI는 같다. 원장 전체의 byte 동일성을 주장하지 않는다.
+status=CANDIDATE_NOT_RELEASED도 원문 그대로이며 npm registry의 정식 release 완료로
+바꿔 해석하지 않는다.
+
+### 부모 최종 영수증으로 채울 대기 필드
+
+- Geo: 모바일 표 PNG853px/viewport375px의 capture resize와 실제 overflow 구분 및 최종 시각
+  판정. normal/native·실제 Node26/npm12·SDK 적용·post-verify·기본 QA 완료 사실과 분리한다.
+- Weather0ff/Transport3c20: 역할별 normal/native image 연결·실제 적용/복원·비선택 보존·새
+  UI/성능 결과. STALE·운영45SQL·places1초·TRN04 미완을 먼저 완료로 바꾸지 않는다.
+- 기존 Markdown 한 파일만 보강했다. 의존성 설치·backend 전체 시험·CI 재실행·SSH·운영 probe·
+  build/SDK 적용·commit/push는 하지 않았다. 문서 CI와 runtime 정산은 부모 검토 뒤다.
+
+
+</details>
