@@ -1,7 +1,5 @@
 "use client";
-// Hallmark · genre: editorial-utilitarian · macrostructure: Rail-Workbench · designed-as-app
-// 최신 kor-travel-map admin `AdminShell`(packages/kor-travel-map-admin/frontend/src/components/admin-shell.tsx)의
-// rail·워드마크·메뉴·로그아웃 구조를 그대로 옮겼다. 색은 geo의 blue 토큰을 그대로 쓴다.
+// rail·모바일 drawer·상단 바는 Common AdminShell을 사용한다. Geo 경로·문서 이동·인증은 유지한다.
 
 import {
   Archive,
@@ -15,8 +13,6 @@ import {
   ListChecks,
   LogOut,
   MapPinned,
-  PanelLeftClose,
-  PanelLeftOpen,
   Search,
   Settings,
   ShieldCheck,
@@ -24,9 +20,9 @@ import {
   Workflow
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { AppMenu, type AppMenuLinkProps } from "@kor-travel/ui/app-menu";
-import { buttonVariants } from "@kor-travel/ui/button-variants";
+import { AdminShell } from "@kor-travel/ui/admin-shell";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
 import { cn } from "@/lib/utils";
@@ -105,17 +101,6 @@ const railRowClass =
 
 const railRowCollapsedClass = "lg:size-control lg:justify-center lg:gap-0 lg:px-0";
 
-function subscribeSidebar(listener: () => void) {
-  window.addEventListener("storage", listener);
-  window.addEventListener("geo-sidebar-preference", listener);
-  return () => {
-    window.removeEventListener("storage", listener);
-    window.removeEventListener("geo-sidebar-preference", listener);
-  };
-}
-const readSidebar = () => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
-const serverSidebar = () => false;
-
 /** 전체 문서 이동(geo는 RSC 소프트 이동 대신 문서 이동을 쓴다 — navigation.spec). */
 function GeoMenuLink({ children, className, ...props }: AppMenuLinkProps) {
   return (
@@ -132,134 +117,51 @@ function GeoMenuLink({ children, className, ...props }: AppMenuLinkProps) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const menuContainerRef = useRef<HTMLDivElement | null>(null);
-  const sidebarCollapsed = useSyncExternalStore(subscribeSidebar, readSidebar, serverSidebar);
-  // longest-prefix 일치(예: /admin/consistency/123 → /admin/consistency, /admin 아님).
+  // 가장 긴 경로 일치로 서버 첫 렌더 제목과 현재 메뉴를 함께 정한다.
   const activeHref = navHrefs
     .filter((href) => isActive(pathname, href))
     .reduce<string | undefined>((best, href) => (!best || href.length > best.length ? href : best), undefined);
+  const title = NAV_GROUPS.flatMap((group) => group.items).find((item) => item.href === activeHref)?.label;
 
-  useEffect(() => {
-    if (window.innerWidth >= 1024) return;
-    // reduced-motion 이면 smooth scroll 대신 즉시 이동.
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    menuContainerRef.current?.querySelector("[aria-current=page]")?.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "nearest",
-      inline: "center"
-    });
-  }, [activeHref]);
-
-  // 로그인 화면은 shell 없이 단독으로 렌더된다(map과 동일 — LoginForm이 <main>을 가진다).
+  // 로그인 화면과 인증 처리에는 셸을 추가하지 않는다.
   if (pathname === "/login") return <>{children}</>;
 
-  const toggleSidebar = () => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "0" : "1");
-    window.dispatchEvent(new Event("geo-sidebar-preference"));
-  };
-
   return (
-    <div className="min-h-dvh bg-surface-page text-text-primary">
-      {/* skip link — rail 항목을 건너뛰어 <main> 으로. nav 밖. */}
-      <a
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-control focus:border focus:border-border focus:bg-card focus:px-3 focus:py-2 focus:text-xs focus:font-medium focus:text-text-primary focus:shadow-elevated focus:outline-2 focus:outline-offset-2 focus:outline-focus"
-        href={`#${MAIN_CONTENT_ID}`}
-      >
-        본문으로 건너뛰기
-      </a>
-      <div
-        className={cn(
-          // gap-0: geo의 레거시 `.grid:not([class*="gap-"])` 간격 규칙이 rail과 본문 사이에 틈을 넣지 않게 한다.
-          "grid min-h-dvh min-w-0 gap-0",
-          sidebarCollapsed ? "lg:grid-cols-[4rem_minmax(0,1fr)]" : "lg:grid-cols-[16rem_minmax(0,1fr)]"
-        )}
-        data-sidebar-collapsed={sidebarCollapsed}
-      >
-        {/* Rail: card 표면 위 hairline 분리, rest shadow 없음. lg 에서 sticky 전체 높이. */}
-        <aside
-          className="min-w-0 border-b border-border bg-card lg:sticky lg:top-0 lg:h-dvh lg:self-start lg:border-r lg:border-b-0"
-          data-slot="admin-shell-rail"
+    <AdminShell
+      title={title ?? "Geocoder Admin UI"}
+      navigationKey={pathname}
+      collapsedStorageKey={SIDEBAR_COLLAPSED_KEY}
+      mainId={MAIN_CONTENT_ID}
+      mainClassName="px-4 pt-4 pb-6 sm:px-6"
+      labels={{
+        menu: "주요 메뉴",
+        collapseRail: "좌측 메뉴 접기",
+        expandRail: "좌측 메뉴 펼치기"
+      }}
+      brand={({ collapsed }) => (
+        <DocumentNavLink
+          ariaLabel="Geocoder Admin UI"
+          href={ADMIN_PAGES.home.path}
+          className="flex min-w-0 items-baseline gap-1.5 text-text-primary no-underline"
         >
-          <div className="flex h-full min-w-0 flex-col">
-            <div
-              className={cn(
-                "flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4",
-                sidebarCollapsed && "lg:h-auto lg:flex-col lg:justify-center lg:gap-1 lg:px-0 lg:py-2"
-              )}
-            >
-              {/* 타이포 워드마크 — 아이콘 타일 없음. 접힘 시 축약형 `GA`. */}
-              <DocumentNavLink
-                ariaLabel="Geocoder Admin UI"
-                className={cn(
-                  "flex min-w-0 items-baseline gap-1.5 rounded-control text-text-primary no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-                  sidebarCollapsed && "lg:justify-center"
-                )}
-                href={ADMIN_PAGES.home.path}
-              >
-                <span className={cn("truncate text-sm font-semibold tracking-tight", sidebarCollapsed && "lg:hidden")}>
-                  Geocoder
-                </span>
-                <span className={cn("text-2xs font-medium text-text-tertiary", sidebarCollapsed && "lg:hidden")}>
-                  Admin UI
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={cn("hidden text-xs font-semibold tracking-tight", sidebarCollapsed && "lg:inline")}
-                >
-                  GA
-                </span>
-              </DocumentNavLink>
-              <div className="flex shrink-0 items-center gap-1">
-                <ButtonLogout className="lg:hidden" iconOnly />
-                <button
-                  aria-label={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
-                  className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "hidden lg:inline-flex")}
-                  title={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
-                  type="button"
-                  onClick={toggleSidebar}
-                >
-                  {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-                </button>
-              </div>
-            </div>
-            <div
-              ref={menuContainerRef}
-              data-collapsed={sidebarCollapsed}
-              className="geo-common-menu geo-common-surface min-h-0 max-w-full overflow-x-auto px-2 py-2 lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
-            >
-              <AppMenu
-                groups={COMMON_MENU_GROUPS}
-                activeItemId={activeHref ?? null}
-                pathname={pathname}
-                label="주요 메뉴"
-                linkComponent={GeoMenuLink}
-                testId="geo-common-menu"
-              />
-            </div>
-            {/* 로그아웃 = rail footer 의 plain row. <lg 에서는 상단 워드마크 행의 아이콘 버튼이 대신한다. */}
-            <div
-              className={cn(
-                "hidden shrink-0 border-t border-border p-2 lg:block",
-                sidebarCollapsed && "lg:flex lg:justify-center"
-              )}
-            >
-              <ButtonLogout collapsed={sidebarCollapsed} />
-            </div>
-          </div>
-        </aside>
-        <div className="flex min-w-0 flex-col">
-          {/* <main> 은 children 만 감싼다. skip link 대상. 헤더 밴드는 각 페이지의 PageHeader가 그린다. */}
-          <main
-            className="min-w-0 flex-1 px-6 pb-6 focus-visible:outline-0"
-            data-slot="admin-shell-main"
-            id={MAIN_CONTENT_ID}
-            tabIndex={-1}
-          >
-            {children}
-          </main>
-        </div>
-      </div>
-    </div>
+          <span className="truncate text-sm font-semibold tracking-tight">{collapsed ? "GA" : "Geocoder"}</span>
+          {!collapsed ? <span className="text-2xs font-medium text-text-tertiary">Admin UI</span> : null}
+        </DocumentNavLink>
+      )}
+      menu={
+        <AppMenu
+          groups={COMMON_MENU_GROUPS}
+          activeItemId={activeHref ?? null}
+          pathname={pathname}
+          label="주요 메뉴"
+          linkComponent={GeoMenuLink}
+          testId="geo-common-menu"
+        />
+      }
+      railFooter={({ collapsed }) => <ButtonLogout collapsed={collapsed} />}
+    >
+      {children}
+    </AdminShell>
   );
 }
 

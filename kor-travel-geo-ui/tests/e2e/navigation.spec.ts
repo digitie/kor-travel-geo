@@ -59,7 +59,7 @@ test.describe("좌측 메뉴 이동", () => {
   });
 });
 
-test.describe("최신 map Workbench 시각 계약", () => {
+test.describe("Common AdminShell 시각·이동 계약", () => {
   test("메인 콘텐츠와 공용 컨트롤이 같은 밀도·포커스 레시피를 쓴다", async ({ page }) => {
     await page.goto("/admin", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
@@ -70,11 +70,15 @@ test.describe("최신 map Workbench 시각 계약", () => {
       const panelTitle = panelHeader?.querySelector<HTMLElement>("h2");
       const body = document.body;
       const heading = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] h1');
-      const description = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] p.max-w-3xl');
+      const description = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] p[data-slot="admin-shell-description"]');
+      const shellHeader = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"]');
       const panelStyle = firstPanel ? getComputedStyle(firstPanel) : null;
       const headerStyle = panelHeader ? getComputedStyle(panelHeader) : null;
       const titleStyle = panelTitle ? getComputedStyle(panelTitle) : null;
       return {
+        headerHeight: shellHeader?.getBoundingClientRect().height,
+        shellCount: document.querySelectorAll('[data-slot="admin-shell"]').length,
+        headingCount: document.querySelectorAll("h1").length,
         rootFontSize: getComputedStyle(document.documentElement).fontSize,
         bodyFontSize: getComputedStyle(body).fontSize,
         bodyLineHeight: getComputedStyle(body).lineHeight,
@@ -89,17 +93,22 @@ test.describe("최신 map Workbench 시각 계약", () => {
     });
 
     expect(contentMetrics).toMatchObject({
+      shellCount: 1,
+      headingCount: 1,
       rootFontSize: "16px",
       bodyFontSize: "15px",
       bodyLineHeight: "22.5px",
-      headingFontSize: "24px",
-      descriptionFontSize: "13.5px",
+      headingFontSize: "17px",
+      descriptionFontSize: "12px",
       panelPadding: "16px",
       panelRadius: "8px",
       panelGap: "12px",
       headerGap: "4px",
       titleFontSize: "15px",
     });
+
+    expect(contentMetrics.headerHeight).toBeGreaterThanOrEqual(48);
+    expect(contentMetrics.headerHeight).toBeLessThanOrEqual(64);
 
     await page.goto("/debug/geocode", { waitUntil: "domcontentloaded" });
     const controlMetrics = await page.evaluate(() => {
@@ -135,7 +144,7 @@ test.describe("최신 map Workbench 시각 계약", () => {
   });
 
   test("메인 콘텐츠가 좁은 화면에서도 가로로 잘리지 않는다", async ({ page }) => {
-    for (const width of [320, 375, 414, 768, 1280]) {
+    for (const width of [320, 375, 414, 768, 1024, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
@@ -144,28 +153,47 @@ test.describe("최신 map Workbench 시각 계약", () => {
     }
   });
 
-  // map admin-shell과 같은 rail: 데스크톱은 세로 rail + 접기 버튼, 태블릿·모바일은 상단 가로 메뉴(접기 없음).
+  // 데스크톱 rail과 작은 화면 drawer 모두 Common의 같은 세로 메뉴를 사용한다.
   for (const viewport of [
     { name: "desktop", width: 1280, height: 800, vertical: true },
     { name: "tablet", width: 768, height: 1024, vertical: false },
     { name: "mobile", width: 390, height: 844, vertical: false }
   ] as const) {
-    test(`${viewport.name}: map과 같은 rail 메뉴 배치를 유지한다`, async ({ page }) => {
+    test(`${viewport.name}: Common rail·drawer 메뉴와 문서 이동을 유지한다`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { level: 1, name: "관리 홈" })).toBeVisible();
 
-      const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
-      await expect(navigation.getByRole("link")).toHaveCount(navLinks.length);
-      const direction = await navigation.evaluate((element) => getComputedStyle(element).flexDirection);
-      expect(direction).toBe(viewport.vertical ? "column" : "row");
-
+      const menuButton = page.getByRole("button", { name: "메뉴 열기", exact: true });
       const toggle = page.getByRole("button", { name: "좌측 메뉴 접기" });
-      if (viewport.vertical) await expect(toggle).toBeVisible();
-      else await expect(toggle).toBeHidden();
+      if (viewport.vertical) {
+        await expect(toggle).toBeVisible();
+        await expect(menuButton).toBeHidden();
+      } else {
+        await expect(page.locator('[data-slot="admin-shell-rail"]')).toBeHidden();
+        await menuButton.click();
+        await expect(page.getByRole("dialog", { name: "주요 메뉴" })).toBeVisible();
+      }
 
+      const navigation = viewport.vertical
+        ? page.getByRole("navigation", { name: "주요 메뉴" })
+        : page.getByRole("dialog", { name: "주요 메뉴" }).getByRole("navigation", { name: "주요 메뉴" });
+      await expect(navigation.getByRole("link")).toHaveCount(navLinks.length);
+      expect(await navigation.evaluate((element) => getComputedStyle(element).flexDirection)).toBe("column");
       const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(documentWidth).toBeLessThanOrEqual(viewport.width);
+
+      if (!viewport.vertical) {
+        await navigation.getByRole("link", { name: "Geocode", exact: true }).click();
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page.getByRole("heading", { name: "Geocode", exact: true })).toBeVisible();
+        await expect(page.getByRole("dialog")).toBeHidden();
+        await menuButton.click();
+        await expect(page.getByRole("dialog")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toBeHidden();
+        await expect(menuButton).toBeFocused();
+      }
     });
   }
 
