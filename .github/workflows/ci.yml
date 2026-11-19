@@ -294,3 +294,30 @@ jobs:
         run: npm run test
       - name: Frontend production build
         run: npm run build
+
+  psycopg-policy:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: consumer
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-common
+          ref: e2899128f78c9622ec3ef79674cff8d1c3aec6f9
+          path: common-policy
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check exact psycopg binary declarations and Dagster constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B "$GITHUB_WORKSPACE/common-policy/tools/check_versions.py" \
+            "$GITHUB_WORKSPACE/consumer" --repo kor-travel-geo --strict-psycopg \
+            --constraints kor-travel-geo-dagster/docker/constraints-dagster.txt
