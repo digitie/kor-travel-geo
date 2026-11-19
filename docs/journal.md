@@ -1,3 +1,12 @@
+## 2026-11-20 — GDAL 컴파일 캐시 경계 분리
+
+- 후속으로 두 GDAL RUN에 동일한 BuildKit cache mount `geo-gdal-py312`(`/root/.cache/pip`, `sharing=locked`)를 연결했다. 같은 builder 안에서 pip의 버전·Python ABI·플랫폼 tag가 맞는 wheel을 역할 간 재사용할 수 있다. GDAL 명령에만 `env -u PIP_NO_CACHE_DIR`와 명시 `PIP_CACHE_DIR`를 적용하고 직렬 컴파일용 HOME을 유지한다. pip 자체 갱신·앱 의존성 설치는 기존 cache 비활성 상태다. pip는 `PIP_NO_CACHE_DIR=off`도 cache를 끄므로 사용하지 않았다(공식 pip 구현과 로컬 bundled pip26.1.2의 무설치·무네트워크 설정 검사로 확인).
+- 후속 집중16건·6subtest/Ruff가 통과했고 cache mount만 추가/false 값 사용/명시 cache 경로 누락/lock 누락/ID 불일치 변이5건을 거부했다. 서로 다른 builder의 cache 공유나 첫 컴파일 횟수는 보장하지 않는다. 실제 정상 빌드의 `CACHED` 또는 `Using cached`와 ARM native 버전 검증 전에는 재사용을 수용하지 않는다.
+- root pyproject나 앱 소스 변경이 GDAL 재컴파일까지 무효화하던 두 정상 Dockerfile을 분리했다. API는 기존 GDAL 설치를 모든 프로젝트 COPY 앞으로 옮겼다. CS는 같은 Python·libgdal에서 정확한 GDAL wheel 하나를 먼저 만들고, 프로젝트 COPY 뒤 기존 constraints·prefix 설치에 그 로컬 wheel과 정확한 libgdal pin을 함께 전달한다. `--only-binary=gdal`로 이 앱 설치 단계의 sdist 재컴파일을 막는다.
+- 기존 직렬 컴파일 설정·임시 설정 제거·GDAL 버전 일치 검사·base·런타임 명령은 유지했다. 다른 앱의 uv cache나 기존 이미지의 설치 파일을 새 이미지에 덧씌우지 않는다.
+- 기존 Geo API의 한 번뿐인 읽기 전용 메타데이터 확인에서 Python3.12.16/aarch64·GDAL/libgdal3.10.3이 일치했지만 pip cache 경로와 재사용 wheel은 없었다. CS builder 전체 cache는 조사하지 않았으므로 부재를 단정하지 않는다. 이 변경 후 첫 정상 빌드가 새 GDAL 레이어를 컴파일할 수 있으며, 기존 컴파일 산출물 재사용이나 빌드 시간 개선은 아직 증명하지 않았다.
+- 새 집중 시험5건은 기존 Dockerfile에서 실패하고 수정 후 통과했다. 실제 shell 명령을 대역 pip로 실행해 직렬 설정·wheel 전달·정리·실패 전파를 확인했다. 기존 이미지 계약을 포함한14건·2subtest, wheel 누락/병렬 설정 변경/COPY 선행 변이3건의 거부, Ruff·diff 검사가 통과했다. 실제 Docker build·GDAL 컴파일·운영 변경은 실행하지 않았다.
+
 ## 2026-11-20 — psycopg core·binary 3.3.9 정렬
 
 - root의 `psycopg[binary,pool]`을3.3.9로 정확 고정하고 Dagster image constraints의 core·binary도3.3.9로 맞췄다. pool3.3.3·다른 패키지·Dockerfile·UI 입력은 바꾸지 않았다.
