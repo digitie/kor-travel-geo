@@ -19,6 +19,6 @@ Common Python은 API와 CS 모두 실제 병합 `67efe2e546ecef41e54a866bf4862d6
 
 격리 CPython 3.13 환경에서 선택 버전과 Common Git 출처를 실제 설치 확인했다. GDAL은 기존 ABI가 맞는 테스트 binding을 읽기 전용으로 참조했으며 새 컴파일은 없다. Root unit 최초 실행은 2086 PASS와 이전 Common SHA 기대값 1 FAIL이었고, 기대값을 갱신한 뒤 최종 전체 2087 PASS(33.98초)를 확인했다. CS 전체도 157 PASS(7.05초)다. 기존 schedule 테스트 네 곳의 build_schedule_context를 명시적인 with 수명으로 닫아, 뒤 Definitions 조회에 종료된 instance의 weakref가 유출되지 않게 했다. 기존 assertion AST는 모두 보존했다. 최초 실패·단독 성공·상태 전이 진단은 작업 영수증에 남긴다.
 
-Mypy 170파일·import-linter·Ruff·설치 의존성 정합 검사와 OpenAPI byte 동일성 검사가 통과했다. 새 source/image pin 계약은 이전 범위 선언과 잘못된 core 짝을 각각 거부하는 RED/GREEN으로 검증했다. Common exact application profile guard는 별도 producer의 실제 병합 SHA가 확정된 뒤 기존 필수 guard job에 연결한다. 미병합 미래 ref는 기록하지 않으며, 이 문단을 guard 도입이나 전체 프로젝트 정렬이 완료됐다는 뜻으로 읽지 않는다.
+Mypy 170파일·import-linter·Ruff·설치 의존성 정합 검사와 OpenAPI byte 동일성 검사가 통과했다. 새 source/image pin 계약은 이전 범위 선언과 잘못된 core 짝을 각각 거부하는 RED/GREEN으로 검증했다. 기존 psycopg-policy job은 frozen Common guard `b566840cb111fa8b1184498aa892b0fd5ce7e5c6`의 `--strict-python-application`과 실제 CS constraints를 사용한다. 이 guard ref는 작성 시점 미병합 후보이며, 소비자 병합 전 producer 실제 병합·main ancestor 확인이 필요하다. Common Python 설치 ref 67efe와 구분한다. CI 순서와 job 이름은 유지한다.
 
 기존 로컬 PG에는 PostGIS가 없었다. 별도 own UUID Geo engine/JSON/rollback/deadline harness는 마지막 DB 정리가 timeout되어 완전한 성공 영수증으로 세지 않았다. 연결 0인 invalid own-test DB만 보존했고 추가 PG 작업은 중단했다. 실제 PostGIS/migration은 기존 CI integration에서 확인한다. 운영 DB DDL·HTTP·SDK·G·수집 제어는 실행하지 않았다. Runtime이 새 source라고 주장하지 않으며 최종 보고서 644는 소유자의 HOLD를 유지한다.
