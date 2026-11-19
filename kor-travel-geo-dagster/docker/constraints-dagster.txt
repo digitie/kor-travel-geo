@@ -1,3 +1,6 @@
+# 공용 선택 버전은 실제 설치가 소비하는 같은 파일로 제한한다.
+-c ../../docker/constraints-shared-python.txt
+
 # Exact versions for the geo Dagster image (dagster-shared plan stage 0, T-324).
 #
 # dagster.Dockerfile installs with `pip install -c <this file>`, so a rebuild cannot drift:
@@ -26,8 +29,8 @@ psycopg==3.3.9
 psycopg-binary==3.3.9
 psycopg-pool==3.3.3
 psycopg2-binary==2.9.13
-grpcio==1.84.0
-grpcio-health-checking==1.81.1
+grpcio==1.85.3
+grpcio-health-checking==1.81.2
 protobuf==6.33.6
 
 # 앱의 실제 사용 축. 공용 host daemon-pool의 SQLAlchemy 2.0.54와 별도다.

@@ -55,7 +55,7 @@ RUN apt-get update \
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
-    python -m pip install --upgrade pip \
+    python -m pip install --upgrade pip==26.3 \
     && GDAL_VERSION="$(gdal-config --version)" \
     && mkdir /tmp/ktg-gdal-build-home \
     && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
@@ -70,6 +70,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY sql ./sql
 COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
+COPY docker/constraints-shared-python.txt ./docker/constraints-shared-python.txt
 
 # --prefix의 GDAL은 설치된 패키지로 인식되지 않으므로 앱과 같은 resolve에 넣는다.
 # 앞 레이어의 정확한 로컬 wheel과 libgdal pin을 함께 전달하고 GDAL sdist 재컴파일을 금지한다.
@@ -133,6 +134,11 @@ RUN apt-get update \
     && chown -R appuser:appuser /app /opt/dagster
 
 COPY --from=builder /install /usr/local
+# 순수 Python pip 도구도 기존 pinned runtime base 위에서 정확 버전으로 설치한다.
+RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR PIP_CACHE_DIR=/root/.cache/pip/pure-python-tools \
+      python -m pip install --only-binary=:all: --upgrade pip==26.3 \
+    && python -m pip check
 # 최종 runtime interpreter/root로 준비한 stdlib cache는 appuser도 읽을 수 있다.
 RUN python -I -m kortravelcommon.build_bytecode --stdlib
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/dagster.yaml /opt/dagster/dagster_home/dagster.yaml

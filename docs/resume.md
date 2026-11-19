@@ -1955,3 +1955,9 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 ## 2026-10-05 공통 Dagster 복구·UI 최종 검증
 
 [최종 리뷰·실행 증거](reviews/2026-10-05-common-dagster.md): 제품4c59efe·공통73e3ff8, 두 독립 최종 PASS·열린0. 전체1787 PASS/111 SKIP·focused153·UI231·PostgreSQL17·Linux Chromium/Firefox각13항목 PASS. 초기 코드에서 재현한 checkpoint·provider·게시 경계 결함을 수정했다. PR570의 문서 포함 최종 checks PASS 후 common26 다음에 merge한다. 기존 사용자 checkout/원천 데이터는 보존하며 운영 배포·worker kill·RSS는 후속이다.
+
+## 2026-11-20 — 실제 사용 Python profile과 앱 wheel cache 결합
+
+- 병합 649 cache를 상속하고 Common76 immutable 694b814 정책의 실제 사용 97개를 API·CS·기존 CI 설치에 같은 constraints로 반영했다. setuptools/wheel 및 최종 pip26.3도 실제 소비 경로로 고정한다.
+- GDAL 단계/native 검사는 보존하며 앱 cache는 SOABI/GNU libc/libgdal 버전으로 분리한다. 이전 후보 거부·실제 pip resolver RED/GREEN과 ARM3.12 metadata-only 호환 해석을 확인했다. 새 운영 이미지/cache hit는 아직 주장하지 않는다.
+- 기존 31ad4 운영 전체 설치 맵(API62/CS103)과 새 정책 차이를 구분했다. 자세한 범위와 한계는 docs/shared-backend-application-alignment.md에 기록했다. UI·앱 소스·schema·수집·CI 순서는 변경하지 않는다. Geo644 최종 보고서 HOLD는 별개다.

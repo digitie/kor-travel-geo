@@ -37,15 +37,24 @@ _DAGSTER_CORE_FAMILY = (
 
 def _constraints() -> dict[str, Version]:
     pins: dict[str, Version] = {}
-    for raw in _CONSTRAINTS.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9][0-9A-Za-z.]*)", line)
-        assert match, f"constraints line must be an exact `name==version` pin: {raw!r}"
-        name = canonicalize_name(match.group(1))
-        assert name not in pins, f"duplicate constraint: {name}"
-        pins[name] = Version(match.group(2))
+    for path in (_CONSTRAINTS, _REPO_ROOT / "docker/constraints-shared-python.txt"):
+        local: set[str] = set()
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            if line == "-c ../../docker/constraints-shared-python.txt":
+                assert path == _CONSTRAINTS
+                continue
+            match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9][0-9A-Za-z.]*)", line)
+            assert match, f"constraints line must be an exact name==version pin: {raw!r}"
+            name = canonicalize_name(match.group(1))
+            assert name not in local, f"duplicate constraint: {name}"
+            local.add(name)
+            value = Version(match.group(2))
+            assert name not in pins or pins[name] == value, f"conflicting shared constraint: {name}"
+            pins[name] = value
+    assert "-c ../../docker/constraints-shared-python.txt" in _CONSTRAINTS.read_text()
     return pins
 
 
