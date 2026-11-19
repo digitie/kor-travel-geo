@@ -107,6 +107,9 @@ def _declared_requirements() -> list[Requirement]:
     for pyproject in (_REPO_ROOT / "pyproject.toml", _PACKAGE_DIR / "pyproject.toml"):
         project = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]
         requirements.extend(Requirement(dep) for dep in project["dependencies"])
+        requirements.extend(
+            Requirement(dep) for dep in project.get("optional-dependencies", {}).get("api", [])
+        )
     return requirements
 
 
@@ -123,6 +126,27 @@ def test_constraints_satisfy_the_declared_floors() -> None:
         assert requirement.specifier.contains(pinned, prereleases=True), (requirement, pinned)
     # The comparison really ran against the declared deps (not an empty intersection).
     assert {"dagster", "dagster-webserver", "dagster-postgres", "sqlalchemy", "psycopg"} <= checked
+
+
+def test_application_selected_pins_match_the_image_constraints() -> None:
+    """API와 CS가 같은 앱 patch를 해석하며 사용하지 않는 asyncpg는 추가하지 않는다."""
+    selected = {"sqlalchemy", "pydantic", "pydantic-settings", "alembic", "httpx", "uvicorn"}
+    pins = _constraints()
+    requirements = _declared_requirements()
+    for name in selected:
+        declarations = [req for req in requirements if canonicalize_name(req.name) == name]
+        assert declarations, name
+        assert all(str(req.specifier) == f"=={pins[name]}" for req in declarations), name
+    assert not any(canonicalize_name(req.name) == "asyncpg" for req in requirements)
+    assert not any(
+        "daemon-pool" in req.extras for req in requirements if req.name == "kor-travel-common"
+    )
+
+
+def test_installed_pydantic_requires_the_selected_core_pair() -> None:
+    requirements = [Requirement(value) for value in importlib.metadata.requires("pydantic") or []]
+    core = next(req for req in requirements if canonicalize_name(req.name) == "pydantic-core")
+    assert str(core.specifier) == f"=={_constraints()['pydantic-core']}"
 
 
 @pytest.mark.parametrize("name", sorted(_constraints()))
