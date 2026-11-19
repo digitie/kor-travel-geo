@@ -2852,12 +2852,6 @@ body {
   --kt-success: var(--ok); --kt-warning: var(--warn); --kt-destructive: var(--danger);
   --kt-radius-control: var(--radius-control); --kt-radius-panel: var(--radius-panel);
 }
-/* map admin-shell과 같은 공통 메뉴 표면. --kt-* 연결은 위 :root가 이미 하므로 접힘 규칙만 둔다. */
-@media (min-width: 1024px) {
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-group-label"],
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] > span:not([aria-hidden]) { display: none; }
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] { padding-inline: 0; justify-content: center; }
-}
 
 .kt-dagster-operations .dagster-run-detail > section { border: 0; }
 .dagster-op-log { max-height: 24rem; overflow: auto; }

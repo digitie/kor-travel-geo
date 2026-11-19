@@ -1,3 +1,11 @@
+## 2026-11-19 — Common AdminShell과 정본 세 패키지 채택
+
+- Common main producer `0e2a3f5aa16323df0d009360802661c9bc496dc6`의 실제 artifact14500111373을 사용해 UI0.2.3·tokens0.1.4·실제 소비 toast0.1.3을 함께 갱신했다. catalog/policy와 모든 frontend guard 호출·입력은 `d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4`다. ZIP·SOURCE_SHA·SRI·내장 정책과 fresh npm ci 설치 파일129개(UI96/tokens25/toast8)의 실제 바이트를 대조했다.
+- 자체 rail·모바일 가로 메뉴를 Common AdminShell의 데스크톱 세로 rail·모바일 drawer로 교체했다. 기존 경로·전체 문서 이동·로그인 제외·로그아웃 처리·접힘 저장 키를 유지한다. PageHeader의 제목·설명·동작은 Common AdminPageTitle에 연결하고 본문 메타는 유지한다.
+- 같은 새 회귀는 이전 Geo 셸에서3 FAIL/6 PASS, 새 연결에서9 PASS였다. 전체 unit298 PASS, lint·type-check PASS, React Doctor272파일0진단과 bundled/canonical guard를 확인했다. lock 변경은 세 Common 패키지와 루트 선언뿐이다.
+- 브라우저 회귀는 공통 단일 상단 바·모바일 drawer·문서 이동·Escape/포커스·1024px 포함 너비를 검사하도록 갱신했다. 실제 브라우저·정확 CI·새 native 이미지/운영 수용은 아직 후속이며 이전 UI 수용을 재사용하지 않는다. 다른 앱의 SDK/성능 작업과 운영 버전은 바꾸지 않았다.
+- 최종 통합 보고서는 기존 [단일 보고서](kor-travel-common-library-review.md)를 유지한다. 그 보고서 PR644와 CI 순서 감사는 아직 최종 대기다.
+
 ## 2026-11-19 — 호환 전이 의존성 정렬
 
 - PostCSS override를 8.5.32로 고정해 Next 중첩 8.5.23을 제거했다; MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. 직접 라이브러리 버전·Common 산출물·RN exact style-spec은 유지한다.

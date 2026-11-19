@@ -1,11 +1,12 @@
 # Common 정본 산출물 채택
 
-Pack source: 706aaa7821588dfca72f660c9161f56be2d0445f
-Catalog/policy: 5c1b3857e9af060d30ec776157760fb9e9c13ded
-Publication: https://github.com/digitie/kor-travel-common/actions/runs/44313659808
+Pack source: 0e2a3f5aa16323df0d009360802661c9bc496dc6
+Catalog/policy: d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4
+Publication: https://github.com/digitie/kor-travel-common/actions/runs/44459847805
+Artifact: 14500111373
 
-- @kor-travel/toast 0.1.2 sha512-pOUwDVZd8Sy2iPrv7uLBdQ5gEHXsA5uRx4IuLgd0KVKoy7WOXCJpCB+NDVplZ8PWWQeQ48Wl0+cr2Y7h+wkI3g==
-- @kor-travel/tokens 0.1.3 sha512-m1WsuJw1DHYxAkPsJpAIrFN5P/Udb+Ln/sZHbrmPJpItQDHx+wuf8QEFgSrBsk5yW+NAX5CQnIQZRkPIFwO97A==
-- @kor-travel/ui 0.2.2 sha512-/odxLZlFlMj0IB8oPMyjE77kj1MtZO46m/lyHiCTW/gYFq7o6XUSrSPOC7rm7cyEpbjD8dAnCqcz7zmE2GWF+Q==
+- @kor-travel/toast 0.1.3 sha512-YziPAKkSfkNs+1aAn02Jf179+4qtAtsJ0QNtSytHpSstzdIhZoAy292c1njRNXMicd9jXfsivyDbhPVLj5aZYA==
+- @kor-travel/tokens 0.1.4 sha512-k6StI02tH/iRxKimczN0btU+MS9AvDZLlR/6Bn6xQHhZ5Mb79pkyIALd4RkoLT2GP3qlwR89YEgOaBiBxACDpA==
+- @kor-travel/ui 0.2.3 sha512-upv+JtiVcF+zg3C/KcZy9UQckx0n3vc0n4ANr3/elWM8PQ4srljxgTQmaBK4IxulEj8pd8gc7mnG3M67oFIQUQ==
 
-기존 의존성만 갱신했다. npm lock 재생성과 소비자 guard 검증은 별도로 수행한다.
+실제 소비하는 세 Common 패키지의 정본 pack을 채택했다. 설치 후에는 tar의 실제 일반 파일 집합과 바이트를 다시 대조한다.
