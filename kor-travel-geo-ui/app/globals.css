@@ -197,11 +197,6 @@ body {
   letter-spacing: 0;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
 .app-error-shell {
   align-items: center;
   display: flex;
@@ -393,53 +388,6 @@ a {
   gap: 8px;
 }
 
-.button {
-  align-items: center;
-  background: var(--brand);
-  border: 1px solid var(--brand);
-  border-radius: 8px;
-  box-shadow: var(--shadow-button);
-  color: #fff;
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 700;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 12px;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default),
-    box-shadow var(--duration-fast) var(--ease-default),
-    transform var(--duration-fast) var(--ease-default);
-}
-
-.button.secondary,
-.button.button-secondary {
-  background: #fff;
-  border-color: var(--line);
-  color: var(--ink);
-}
-
-.button.danger {
-  background: var(--danger);
-  border-color: var(--danger);
-}
-
-.button:hover:not(:disabled),
-.icon-button:hover:not(:disabled) {
-  box-shadow: var(--shadow-card-hover);
-}
-
-.button:active:not(:disabled),
-.icon-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .checkbox-row {
   align-items: center;
   display: inline-flex;
@@ -466,24 +414,6 @@ a {
      global `overflow-x: clip` (issue #514, /admin/source-files 정합성 탭). */
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.icon-button {
-  align-items: center;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  cursor: pointer;
-  display: inline-grid;
-  height: 44px;
-  justify-items: center;
-  text-decoration: none;
-  transition:
-    border-color var(--duration-fast) var(--ease-default),
-    box-shadow var(--duration-fast) var(--ease-default),
-    transform var(--duration-fast) var(--ease-default);
-  width: 44px;
 }
 
 .drop-zone {
@@ -2168,6 +2098,15 @@ a {
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  /* 전역 focus outline은 base 층에만 둔다(FS-7.8 #3). 컴포넌트 utility가 있으면 그것이 이긴다. */
+  :where(a, button, [role="button"]):focus-visible {
+    outline: 2px solid var(--kt-focus);
+    outline-offset: 2px;
+  }
   /* Tailwind v4 changes the default placeholder color to currentColor at 50%
      opacity (darker than v3's gray-400). Restore the prior tone for the raw
      `.field input/textarea`; the shadcn Input sets its own
@@ -2275,83 +2214,6 @@ a {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 24%, transparent);
   outline: 2px solid transparent;
-}
-
-.button,
-[data-slot="button"] {
-  border-radius: var(--radius-control);
-  font-weight: 720;
-  min-height: 2.75rem;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default),
-    transform var(--duration-fast) var(--ease-default);
-  white-space: nowrap;
-}
-
-[data-slot="button"][data-variant="default"],
-.button {
-  color: var(--color-accent-ink);
-}
-
-:where(a, button, input, select, textarea, [role="button"], [role="tab"]):focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-  transition: none !important;
-}
-
-.button {
-  background: var(--brand);
-  border-color: var(--brand);
-  box-shadow: none;
-  color: var(--surface-card);
-}
-
-.button.secondary,
-.button.button-secondary {
-  background: var(--surface-card);
-  border-color: var(--color-rule-strong);
-  color: var(--text-primary);
-}
-
-.button.danger {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: var(--surface-card);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .button:hover:not(:disabled),
-  [data-slot="button"]:hover:not(:disabled) {
-    box-shadow: none;
-    transform: translateY(-1px);
-  }
-
-  .button.secondary:hover:not(:disabled),
-  .button.button-secondary:hover:not(:disabled) {
-    background: var(--surface-muted);
-  }
-}
-
-.button:active:not(:disabled),
-[data-slot="button"]:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.button:focus-visible,
-[data-slot="button"]:focus-visible,
-.link-button:focus-visible,
-.vtable-th-sort:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-
-.button:disabled,
-[data-slot="button"]:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .json-box {
@@ -2662,8 +2524,6 @@ body {
 
 /* T-300: color-mix glow만 남아 있던 공통 조작 요소에 opaque outline을 보장한다. map의
    단일 focus recipe와 동일하게 대비 가능한 선만 즉시 표시한다. */
-.button:focus-visible,
-[data-slot="button"]:focus-visible,
 .link-button:focus-visible,
 .vtable-grid:focus-visible,
 .vtable-scroll:focus-visible,
@@ -2717,28 +2577,6 @@ body {
 .field input[data-size="sm"],
 .field select[data-size="sm"] {
   min-height: var(--control-h-sm);
-}
-
-.button,
-.icon-button {
-  border-radius: var(--radius-control);
-  box-shadow: none;
-  font-weight: 500;
-}
-
-.button {
-  min-height: var(--control-h);
-  padding-block: 0;
-  padding-inline: 0.875rem;
-}
-
-.icon-button {
-  height: var(--control-h);
-  width: var(--control-h);
-}
-
-[data-slot="button"] {
-  min-height: 0;
 }
 
 .vtable-search {
@@ -2831,9 +2669,10 @@ body {
   }
 }
 
-/* 모든 실제 조작 요소가 같은 즉시 opaque focus recipe를 사용하도록 legacy glow cascade를
-   마지막에서 정리한다. */
-:where(a, button, input, select, textarea, [role="button"], [role="tab"]):focus-visible {
+/* 입력·선택·탭 컨트롤의 기존 앱 focus 규칙(@kor-travel/ui 0.2.3에서 미변경, FS-7.8 #6).
+   <button>·<a>는 여기서 빠졌다 — 공통 Button이 자체 outline(2px, offset 2px, --kt-focus)을 갖고,
+   나머지 링크·버튼의 전역 outline은 @layer base에만 둔다(FS-7.8 #3). */
+:where(input, select, textarea, [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"]):focus-visible {
   box-shadow: none !important;
   outline: 2px solid var(--brand);
   outline-offset: 2px;
@@ -2851,12 +2690,6 @@ body {
   --kt-border: var(--line); --kt-control-line: var(--control-line); --kt-focus: var(--focus);
   --kt-success: var(--ok); --kt-warning: var(--warn); --kt-destructive: var(--danger);
   --kt-radius-control: var(--radius-control); --kt-radius-panel: var(--radius-panel);
-}
-/* map admin-shell과 같은 공통 메뉴 표면. --kt-* 연결은 위 :root가 이미 하므로 접힘 규칙만 둔다. */
-@media (min-width: 1024px) {
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-group-label"],
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] > span:not([aria-hidden]) { display: none; }
-  .geo-common-menu[data-collapsed="true"] [data-slot="app-menu-link"] { padding-inline: 0; justify-content: center; }
 }
 
 .kt-dagster-operations .dagster-run-detail > section { border: 0; }

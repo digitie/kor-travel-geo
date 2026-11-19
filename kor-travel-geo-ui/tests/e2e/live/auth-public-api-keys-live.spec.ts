@@ -1,6 +1,6 @@
 import { expect, test, type APIResponse } from "@playwright/test";
 
-import { ADMIN_PAGES } from "../../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../../lib/admin-pages";
 import {
   KNOWN,
   directApiGet,
@@ -64,7 +64,7 @@ test.describe("LIVE admin auth and session security", () => {
     await page.waitForURL("**/admin/settings", { timeout: LIVE_TIMEOUT });
 
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.settings.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.settings.title), exact: true })
     ).toBeVisible({
       timeout: LIVE_TIMEOUT
     });
@@ -92,7 +92,7 @@ test.describe("LIVE admin auth and session security", () => {
 
     await page.goto("/admin/settings");
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.settings.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.settings.title), exact: true })
     ).toBeVisible({
       timeout: LIVE_TIMEOUT
     });

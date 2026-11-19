@@ -1,21 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN_NAV_GROUPS, ADMIN_PAGES } from "../../lib/admin-pages";
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES, DEBUG_PAGES, adminPageHeading } from "../../lib/admin-pages";
 
-// 사이드바 라벨과 페이지 h1은 lib/admin-pages.ts를 단일 소스로 공유한다.
+// 사이드바 라벨과 상단 바 h1("지오 - 페이지")은 lib/admin-pages.ts를 단일 소스로 공유한다.
 const navLinks = [
-  { label: "Geocode", heading: "Geocode" },
-  { label: "Reverse", heading: "Reverse" },
-  { label: "Normalize", heading: "Normalize" },
-  { label: "Explain", heading: "Explain" },
-  { label: ADMIN_PAGES.home.title, heading: ADMIN_PAGES.home.title },
+  ...Object.values(DEBUG_PAGES).map((page) => ({ label: page.title, heading: adminPageHeading(page.title) })),
+  { label: ADMIN_PAGES.home.title, heading: adminPageHeading(ADMIN_PAGES.home.title) },
   ...ADMIN_NAV_GROUPS.flatMap((group) =>
     group.keys.map((key) => ({
       label: ADMIN_PAGES[key].title,
-      heading: ADMIN_PAGES[key].title
+      heading: adminPageHeading(ADMIN_PAGES[key].title)
     }))
   )
 ];
+const homeHeading = adminPageHeading(ADMIN_PAGES.home.title);
 
 test.describe("좌측 메뉴 이동", () => {
   test("메뉴를 반복 클릭해도 Next.js 로드 실패 화면으로 떨어지지 않는다", async ({ page }) => {
@@ -62,7 +60,7 @@ test.describe("좌측 메뉴 이동", () => {
 test.describe("최신 map Workbench 시각 계약", () => {
   test("메인 콘텐츠와 공용 컨트롤이 같은 밀도·포커스 레시피를 쓴다", async ({ page }) => {
     await page.goto("/admin", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
+    await expect(page.getByRole("heading", { exact: true, name: homeHeading })).toBeVisible();
 
     const contentMetrics = await page.evaluate(() => {
       const firstPanel = document.querySelector<HTMLElement>(".panel");
@@ -70,7 +68,7 @@ test.describe("최신 map Workbench 시각 계약", () => {
       const panelTitle = panelHeader?.querySelector<HTMLElement>("h2");
       const body = document.body;
       const heading = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] h1');
-      const description = document.querySelector<HTMLElement>('[data-slot="admin-shell-header"] p.max-w-3xl');
+      const description = document.querySelector<HTMLElement>('[data-slot="admin-shell-description"]');
       const panelStyle = firstPanel ? getComputedStyle(firstPanel) : null;
       const headerStyle = panelHeader ? getComputedStyle(panelHeader) : null;
       const titleStyle = panelTitle ? getComputedStyle(panelTitle) : null;
@@ -92,8 +90,8 @@ test.describe("최신 map Workbench 시각 계약", () => {
       rootFontSize: "16px",
       bodyFontSize: "15px",
       bodyLineHeight: "22.5px",
-      headingFontSize: "24px",
-      descriptionFontSize: "13.5px",
+      headingFontSize: "17px",
+      descriptionFontSize: "12px",
       panelPadding: "16px",
       panelRadius: "8px",
       panelGap: "12px",
@@ -104,7 +102,7 @@ test.describe("최신 map Workbench 시각 계약", () => {
     await page.goto("/debug/geocode", { waitUntil: "domcontentloaded" });
     const controlMetrics = await page.evaluate(() => {
       const input = document.querySelector<HTMLElement>("#address");
-      const button = document.querySelector<HTMLElement>("button.button");
+      const button = document.querySelector<HTMLElement>('form button[type="submit"][data-slot="button"]');
       const inputStyle = input ? getComputedStyle(input) : null;
       const buttonStyle = button ? getComputedStyle(button) : null;
       return {
@@ -119,7 +117,7 @@ test.describe("최신 map Workbench 시각 계약", () => {
       inputHeight: 36,
       inputRadius: "6px",
       buttonHeight: 36,
-      buttonRadius: "6px",
+      buttonRadius: "8px",
     });
 
     const address = page.locator("#address");
@@ -138,31 +136,39 @@ test.describe("최신 map Workbench 시각 계약", () => {
     for (const width of [320, 375, 414, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
+      await expect(page.getByRole("heading", { exact: true, name: homeHeading })).toBeVisible();
       const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(documentWidth, `viewport ${width}px`).toBeLessThanOrEqual(width);
     }
   });
 
-  // map admin-shell과 같은 rail: 데스크톱은 세로 rail + 접기 버튼, 태블릿·모바일은 상단 가로 메뉴(접기 없음).
+  // AdminShell: 데스크톱은 세로 rail + 접기 버튼, 태블릿·모바일은 상단 바 메뉴 버튼 → 좌측 drawer.
   for (const viewport of [
-    { name: "desktop", width: 1280, height: 800, vertical: true },
-    { name: "tablet", width: 768, height: 1024, vertical: false },
-    { name: "mobile", width: 390, height: 844, vertical: false }
+    { name: "desktop", width: 1280, height: 800, rail: true },
+    { name: "tablet", width: 768, height: 1024, rail: false },
+    { name: "mobile", width: 390, height: 844, rail: false }
   ] as const) {
-    test(`${viewport.name}: map과 같은 rail 메뉴 배치를 유지한다`, async ({ page }) => {
+    test(`${viewport.name}: AdminShell 메뉴 배치를 따른다`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { level: 1, name: "관리 홈" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: homeHeading })).toBeVisible();
 
-      const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
-      await expect(navigation.getByRole("link")).toHaveCount(navLinks.length);
-      const direction = await navigation.evaluate((element) => getComputedStyle(element).flexDirection);
-      expect(direction).toBe(viewport.vertical ? "column" : "row");
-
+      const rail = page.locator('[data-slot="admin-shell-rail"]');
+      const menuButton = page.locator('[data-slot="admin-shell-menu-button"]');
       const toggle = page.getByRole("button", { name: "좌측 메뉴 접기" });
-      if (viewport.vertical) await expect(toggle).toBeVisible();
-      else await expect(toggle).toBeHidden();
+      if (viewport.rail) {
+        await expect(rail).toBeVisible();
+        await expect(rail.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link")).toHaveCount(navLinks.length);
+        await expect(toggle).toBeVisible();
+        await expect(menuButton).toBeHidden();
+      } else {
+        await expect(rail).toBeHidden();
+        await expect(toggle).toBeHidden();
+        await expect(menuButton).toBeVisible();
+        await menuButton.click();
+        const drawer = page.getByRole("dialog");
+        await expect(drawer.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link")).toHaveCount(navLinks.length);
+      }
 
       const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(documentWidth).toBeLessThanOrEqual(viewport.width);

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo } from "react";
 import {
   errorRecoveryMessage,
@@ -70,14 +71,14 @@ export function AppErrorPanel({ error, reset, standalone = false }: AppErrorPane
             : "현재 탭의 UI 상태가 서버와 맞지 않거나, 화면 렌더링 중 오류가 발생했습니다."}
         </p>
         <div className="button-row">
-          <button className="button" onClick={retry} type="button">
-            <RefreshCw size={16} />
+          <Button onClick={retry} type="button">
+            <RefreshCw aria-hidden="true" />
             다시 시도
-          </button>
-          <button className="button secondary" onClick={goBack} type="button">
-            <ArrowLeft size={16} />
+          </Button>
+          <Button onClick={goBack} type="button" variant="outline">
+            <ArrowLeft aria-hidden="true" />
             이전 화면
-          </button>
+          </Button>
         </div>
         <details className="app-error-details">
           <summary>오류 정보</summary>
