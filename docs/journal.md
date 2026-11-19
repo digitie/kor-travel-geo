@@ -1,3 +1,7 @@
+## 2026-11-20 — 실제 사용 앱 백엔드 선택 버전 정렬 후보
+
+root/API·CS의 SQLAlchemy2.1.9·Pydantic2.14.4/core2.50.5/settings2.16.3·FastAPI0.165.0(API만)·Alembic1.20.1·httpx0.28.1·uvicorn0.54.0을 맞춘다. psycopg339·Dagster/psycopg2와 외부 daemon pool은 유지하고 Common Python은 실제 병합67efe의 같은 package tree를 사용한다. 앱/쿼리/DTO/migration/GDAL/UI 입력은 동일하다. [범위·검증·한계](shared-backend-application-alignment.md)에 source와 실제 설치/운영 증거를 구분했다. 최종 Common profile guard의 실제 병합 SHA·정확 CI·ARM/native/운영 수용은 후속이며 보고서644와 활성 배포 source를 편집하지 않았다.
+
 ## 2026-11-20 — GDAL 컴파일 캐시 경계 분리
 
 - 후속으로 두 GDAL RUN에 동일한 BuildKit cache mount `geo-gdal-py312`(`/root/.cache/pip`, `sharing=locked`)를 연결했다. 같은 builder 안에서 pip의 버전·Python ABI·플랫폼 tag가 맞는 wheel을 역할 간 재사용할 수 있다. GDAL 명령에만 `env -u PIP_NO_CACHE_DIR`와 명시 `PIP_CACHE_DIR`를 적용하고 직렬 컴파일용 HOME을 유지한다. pip 자체 갱신·앱 의존성 설치는 기존 cache 비활성 상태다. pip는 `PIP_NO_CACHE_DIR=off`도 cache를 끄므로 사용하지 않았다(공식 pip 구현과 로컬 bundled pip26.1.2의 무설치·무네트워크 설정 검사로 확인).

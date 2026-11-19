@@ -20,29 +20,28 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "pydantic>=2.9,<3",
-  "pydantic-settings>=2.5",
-  # <2.2 (T-316): 2.1 is supported — text()-query results need explicit variable annotations
-  # under 2.1's TypeVarTuple Row typing (scalar_one()/scalars() otherwise infer Never). Images
-  # install unlocked from this file, so keep an upper bound and review 2.2 deliberately.
-  "sqlalchemy[asyncio]>=2.0.35,<2.2,!=2.1.0",
+  "pydantic==2.14.4",
+  "pydantic-settings==2.16.3",
+  # 앱의 선택 patch는 Dagster image constraints와 함께 맞춘다.
+  # 호스트 daemon-pool의 SQLAlchemy 2.0 계열은 별도 extra/설치 범위다.
+  "sqlalchemy[asyncio]==2.1.9",
   "geoalchemy2>=0.15",
   "psycopg[binary,pool]==3.3.9",
   "anyio>=4.5",
   "typer>=0.12",
-  "httpx>=0.27",
+  "httpx==0.28.1",
   "tenacity>=9.0",
   "rapidfuzz>=3.10",
   "structlog>=24.4",
   "orjson>=3.10",
-  "alembic>=1.13",
+  "alembic==1.20.1",
 ]
 
 [project.optional-dependencies]
 api = [
-  "kor-travel-common @ git+https://github.com/digitie/kor-travel-common.git@344d91c0eec4b605e007e61ce248693a729d692d#subdirectory=packages/py/kor-travel-common",
-  "fastapi>=0.115",
-  "uvicorn[standard]>=0.32",
+  "kor-travel-common @ git+https://github.com/digitie/kor-travel-common.git@67efe2e546ecef41e54a866bf4862d608ace343d#subdirectory=packages/py/kor-travel-common",
+  "fastapi==0.165.0",
+  "uvicorn[standard]==0.54.0",
   "prometheus-client>=0.21",
   "maxminddb>=2.6,<3",
 ]
