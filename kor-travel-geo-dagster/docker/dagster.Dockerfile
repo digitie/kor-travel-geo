@@ -51,7 +51,7 @@ RUN apt-get update \
 
 # 프로젝트 파일과 독립된 레이어에서 같은 Python·libgdal용 wheel만 만든다.
 # 같은 BuildKit builder의 두 역할은 GDAL wheel cache를 공유한다.
-# pip는 off 값도 cache를 끄므로 GDAL 명령에서만 NO_CACHE 변수를 제거한다.
+# pip는 off 값도 cache를 끄므로 cache를 연결한 빌드 명령에서만 NO_CACHE 변수를 제거한다.
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
@@ -74,8 +74,13 @@ COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
 # --prefix의 GDAL은 설치된 패키지로 인식되지 않으므로 앱과 같은 resolve에 넣는다.
 # 앞 레이어의 정확한 로컬 wheel과 libgdal pin을 함께 전달하고 GDAL sdist 재컴파일을 금지한다.
 # 기존 Dagster 전체 버전 constraints는 이 앱 설치에서 그대로 적용한다.
-RUN GDAL_VERSION="$(gdal-config --version)" \
-    && python -m pip install --prefix=/install --only-binary=gdal \
+# API와 같은 wheel cache를 쓰며 실제 native ABI·libc·libgdal 조합만 공유한다.
+RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
+    GDAL_VERSION="$(gdal-config --version)" \
+    && WHEEL_CACHE_ABI="$(python -I -c 'import os, sysconfig; abi=sysconfig.get_config_var("SOABI"); libc=os.confstr("CS_GNU_LIBC_VERSION"); assert abi and libc; print(abi+"-"+libc.replace(" ", "-"))')" \
+    && env -u PIP_NO_CACHE_DIR \
+         PIP_CACHE_DIR="/root/.cache/pip/${WHEEL_CACHE_ABI}-gdal-${GDAL_VERSION}" \
+         python -m pip install --prefix=/install --only-binary=gdal \
          -c ./kor-travel-geo-dagster/docker/constraints-dagster.txt \
          /opt/ktg-gdal-wheels/*.whl \
          "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster
