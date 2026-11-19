@@ -49,31 +49,32 @@ RUN apt-get update \
       build-essential curl git gdal-bin libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Main library sources (with the [loaders] extra) + the Dagster code-location package.
-COPY pyproject.toml README.md ./
-COPY src ./src
-COPY sql ./sql
-COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
-
-# One pip resolve: the explicit gdal==<libgdal> pin constrains the [loaders] extra's
-# `gdal>=3.8` to the version matching this image's libgdal. Installing the pin in a SEPARATE
-# `pip install` first does not work with --prefix (pip does not see the /install-only gdal as
-# already-satisfied, so it re-resolves `gdal>=3.8` to the newest sdist and fails the libgdal
-# floor) — they must be in the same invocation.
-# `-c constraints-dagster.txt` (dagster-shared plan stage 0): the Dagster family and the major
-# libraries install at EXACT versions, so a rebuild cannot put this code-server above the
-# shared Dagster host's version. pyproject keeps only floors.
+# 프로젝트 파일과 독립된 레이어에서 같은 Python·libgdal용 wheel만 만든다.
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
 RUN python -m pip install --upgrade pip \
     && GDAL_VERSION="$(gdal-config --version)" \
     && mkdir /tmp/ktg-gdal-build-home \
     && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
-    && HOME=/tmp/ktg-gdal-build-home python -m pip install --prefix=/install \
-         -c ./kor-travel-geo-dagster/docker/constraints-dagster.txt \
-         "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster \
+    && HOME=/tmp/ktg-gdal-build-home python -m pip wheel --no-deps --wheel-dir=/opt/ktg-gdal-wheels \
+         "gdal==${GDAL_VERSION}" \
     && rm /tmp/ktg-gdal-build-home/.pydistutils.cfg \
     && rmdir /tmp/ktg-gdal-build-home
+
+# Main library sources (with the [loaders] extra) + the Dagster code-location package.
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY sql ./sql
+COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
+
+# --prefix의 GDAL은 설치된 패키지로 인식되지 않으므로 앱과 같은 resolve에 넣는다.
+# 앞 레이어의 정확한 로컬 wheel과 libgdal pin을 함께 전달하고 GDAL sdist 재컴파일을 금지한다.
+# 기존 Dagster 전체 버전 constraints는 이 앱 설치에서 그대로 적용한다.
+RUN GDAL_VERSION="$(gdal-config --version)" \
+    && python -m pip install --prefix=/install --only-binary=gdal \
+         -c ./kor-travel-geo-dagster/docker/constraints-dagster.txt \
+         /opt/ktg-gdal-wheels/*.whl \
+         "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster
 
 # Fail the build on a GDAL lib/binding version skew (belt-and-suspenders; same check the API
 # image runs). osgeo is resolved from the --prefix install tree.
