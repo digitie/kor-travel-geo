@@ -1,5 +1,7 @@
 ## 2026-11-20 — GDAL 캐시 경계 후속 후보
 
+두 GDAL RUN의 BuildKit pip cache ID/path/lock을 맞추고 GDAL 명령에서만 NO_CACHE 변수를 제거했다. HOME redirect와 명시 PIP_CACHE_DIR를 함께 유지하며 앱 설치에는 공유 cache를 적용하지 않는다. 새 최종 집중16건·6subtest/Ruff와5추가 변이 거부·실제 bundled pip 옵션 검사가 통과했다. 같은 builder의 호환 wheel 재사용은 이후 정상 로그/native 검사로 확인하며 실측 재사용을 아직 주장하지 않는다.
+
 정상 API/CS Dockerfile의 GDAL 컴파일을 프로젝트 COPY 이전으로 분리했다. CS는 자체 동일 환경에서 만든 wheel을 기존 constraints·prefix resolve에 공급한다. 집중14건·2subtest/Ruff와 새 회귀의 RED/GREEN·3변이 거부를 확인했다. 기존 API pip cache는 없었고 CS 전체 builder cache는 미조사다. 첫 새 레이어의 실제 컴파일 필요 여부·ARM 이미지/native·빌드 시간은 다음 정상 소유자 작업에서 확인한다. 새 빌드·런타임/SDK 변경은 하지 않았으며 Weather339 배포 준비와 Manager adapter 소스는 별개다.
 
 ## 2026-11-20 — psycopg 3.3.9 소스 정렬 후보

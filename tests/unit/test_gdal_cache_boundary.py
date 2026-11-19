@@ -62,6 +62,39 @@ class GdalCacheBoundaryTests(unittest.TestCase):
         self.assertIn("-c ./kor-travel-geo-dagster/docker/constraints-dagster.txt", install)
         self.assertIn('"gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster', install)
 
+    def test_same_locked_mount_only_on_gdal_build_commands(self) -> None:
+        mount = "--mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked"
+        for path in (_API, _CS):
+            with self.subTest(path=path):
+                _, command = gdal_build(path)
+                self.assertTrue(command.startswith(mount + " "))
+                self.assertIn(
+                    "env -u PIP_NO_CACHE_DIR HOME=/tmp/ktg-gdal-build-home "
+                    "PIP_CACHE_DIR=/root/.cache/pip python -m pip",
+                    re.sub(r"\s+", " ", command),
+                )
+                self.assertEqual((_ROOT / path).read_text().count(mount), 1)
+                self.assertIn("PIP_NO_CACHE_DIR=1", (_ROOT / path).read_text())
+                # 정확한 libgdal pin과 최종 binding/lib 버전 비교를 유지한다.
+                self.assertIn('"gdal==${GDAL_VERSION}"', command)
+                self.assertIn("if lib_version not in python_version:", (_ROOT / path).read_text())
+                bases = [value for kind, value in instructions(path) if kind == "FROM"]
+                self.assertTrue(all(value.startswith("python:3.12") for value in bases))
+
+    def test_actual_shell_cache_environment_is_gdal_only(self) -> None:
+        for path in (_API, _CS):
+            with self.subTest(path=path):
+                calls, _ = self._shell(path)
+                gdal = [row for row in calls if row["parallelOne"]]
+                self.assertEqual(len(gdal), 1)
+                self.assertIsNone(gdal[0]["noCache"])
+                self.assertTrue(gdal[0]["cacheDir"].endswith("/pip-cache"))
+                other = [row for row in calls if not row["parallelOne"]]
+                self.assertGreaterEqual(len(other), 2)  # pip 자체 갱신과 앱 설치.
+                for row in other:
+                    self.assertEqual(row["noCache"], "1")
+                    self.assertIsNone(row["cacheDir"])
+
     def _shell(self, path: str, fail_build: bool = False) -> tuple[list[dict], int]:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -78,7 +111,8 @@ from pathlib import Path
 args=sys.argv[1:]
 config=Path(os.environ.get("HOME", "/"))/".pydistutils.cfg"
 build=any(x.startswith("gdal==") for x in args) and "--prefix=/install" not in args
-row={"args":args,"parallelOne":config.exists() and config.read_text()=="[build_ext]\nparallel=1\n"}
+row={"args":args,"parallelOne":config.exists() and config.read_text()=="[build_ext]\nparallel=1\n",
+     "noCache":os.environ.get("PIP_NO_CACHE_DIR"),"cacheDir":os.environ.get("PIP_CACHE_DIR")}
 with open(os.environ["PROBE_LOG"],"a") as out:out.write(json.dumps(row)+"\n")
 if build:
     assert row["parallelOne"], "직렬 컴파일 설정이 실제 HOME에 있어야 한다"
@@ -97,6 +131,8 @@ if "--prefix=/install" in args:
             gdal.write_text("#!/bin/sh\nprintf '3.10.3\\n'\n")
             gdal.chmod(0o700)
             _, command = gdal_build(path)
+            # Docker의 mount 선언만 제거하고 실제 shell 부분과 환경 범위는 실행한다.
+            command = re.sub(r"^--mount=\S+\s+", "", command)
             commands = [command.split("&& python - <<", 1)[0]]
             if path == _CS:
                 commands.append(
@@ -106,15 +142,26 @@ if "--prefix=/install" in args:
                         if kind == "RUN" and "pip install --prefix=/install" in value
                     )
                 )
+            else:
+                commands.append(
+                    next(
+                        value
+                        for kind, value in instructions(path)
+                        if kind == "RUN" and 'pip install -e ".[api,loaders]"' in value
+                    ).split("&& python - <<", 1)[0]
+                )
             script = " && ".join(commands).replace("/tmp/ktg-gdal-build-home", str(root / "home"))
             script = script.replace("/opt/ktg-gdal-wheels", str(root / "wheels"))
+            script = script.replace("/root/.cache/pip", str(root / "pip-cache"))
             result = subprocess.run(
                 ["/bin/sh", "-ec", script],
                 cwd=root,
                 env={
-                    **os.environ,
+                    **{k: v for k, v in os.environ.items() if k != "PIP_CACHE_DIR"},
                     "PATH": str(bindir) + os.pathsep + os.environ["PATH"],
+                    "HOME": str(root / "default-home"),
                     "PROBE_LOG": str(log),
+                    "PIP_NO_CACHE_DIR": "1",
                     "FAIL_GDAL": "1" if fail_build else "0",
                 },
                 capture_output=True,
@@ -131,7 +178,7 @@ if "--prefix=/install" in args:
         calls, _ = self._shell(_API)
         compile_call = next(row for row in calls if "gdal==3.10.3" in row["args"])
         self.assertTrue(compile_call["parallelOne"])
-        self.assertFalse(any(".[api,loaders]" in row["args"] for row in calls))
+        self.assertEqual(sum(".[api,loaders]" in row["args"] for row in calls), 1)
 
     def test_actual_code_server_shell_reuses_its_built_wheel(self) -> None:
         calls, _ = self._shell(_CS)

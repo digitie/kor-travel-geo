@@ -50,13 +50,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 프로젝트 파일과 독립된 레이어에서 같은 Python·libgdal용 wheel만 만든다.
+# 같은 BuildKit builder의 두 역할은 GDAL wheel cache를 공유한다.
+# pip는 off 값도 cache를 끄므로 GDAL 명령에서만 NO_CACHE 변수를 제거한다.
 # GDAL의 host CPU 기반 병렬 C++ 컴파일이 CPU2·2GiB에서 OOM을 일으켜
 # 이 pip 빌드에만 setuptools parallel=1을 적용하고 임시 설정을 같은 layer에서 제거한다.
-RUN python -m pip install --upgrade pip \
+RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
+    python -m pip install --upgrade pip \
     && GDAL_VERSION="$(gdal-config --version)" \
     && mkdir /tmp/ktg-gdal-build-home \
     && printf '[build_ext]\nparallel=1\n' > /tmp/ktg-gdal-build-home/.pydistutils.cfg \
-    && HOME=/tmp/ktg-gdal-build-home python -m pip wheel --no-deps --wheel-dir=/opt/ktg-gdal-wheels \
+    && env -u PIP_NO_CACHE_DIR HOME=/tmp/ktg-gdal-build-home PIP_CACHE_DIR=/root/.cache/pip \
+         python -m pip wheel --no-deps --wheel-dir=/opt/ktg-gdal-wheels \
          "gdal==${GDAL_VERSION}" \
     && rm /tmp/ktg-gdal-build-home/.pydistutils.cfg \
     && rmdir /tmp/ktg-gdal-build-home
