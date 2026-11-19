@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN_PAGES } from "../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../lib/admin-pages";
 
 // /admin/consistency 진입 프리즈 회귀를 검증한다. 백엔드 API는 page.route로 목킹하므로
 // DB 없이 UI 단독으로 실행할 수 있다. 메인 스레드가 멈추면(프리즈) 아래 단언이 타임아웃으로
@@ -126,7 +126,7 @@ test.describe("Consistency 분석 콘솔", () => {
 
     // 진입 직후 핵심 UI가 렌더되면 메인 스레드가 멈추지 않은 것이다.
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.consistency.title })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.consistency.title) })
     ).toBeVisible();
     await expect(page.getByText(REPORT_ID).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "#1" })).toBeVisible();

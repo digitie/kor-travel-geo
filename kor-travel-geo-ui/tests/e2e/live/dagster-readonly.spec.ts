@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN_PAGES } from "../../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../../lib/admin-pages";
 import {
   LIVE_TIMEOUT,
   expectNoErrorScreen,
@@ -27,7 +27,7 @@ test.describe("LIVE admin Dagster observe page", () => {
   }) => {
     await page.goto("/admin/dagster");
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.dagster.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.dagster.title), exact: true })
     ).toBeVisible({ timeout: LIVE_TIMEOUT });
     await expectNoErrorScreen(page);
 

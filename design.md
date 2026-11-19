@@ -52,3 +52,7 @@
 - 라우트·API 호출·권한·폼 흐름은 시각 개편 범위 밖으로 유지한다.
 - `Panel`, `Card`, `PageHeader`, `DocumentNavLink`가 공통 시각 계약의 중심이며, 개별 화면이
   이를 우회하는 새 카드 체계를 만들지 않는다.
+- 관리자 셸은 `@kor-travel/ui` `AdminShell`이 정본이다(`components/layout/AppShell.tsx`). 페이지 제목은
+  상단 바 h1 "지오 - 페이지" 한 줄이고(`PageHeader` → `AdminPageTitle`), 제목·설명 정본은 `lib/admin-pages.ts`다.
+- 버튼은 공통 `Button`만 쓴다. `globals.css`에 `button`·`[data-slot="button"]` 상태 규칙(hover·active·focus)을
+  unlayered로 두지 않는다. 전역 focus outline은 `@layer base`에만 둔다(common FS-7.8).

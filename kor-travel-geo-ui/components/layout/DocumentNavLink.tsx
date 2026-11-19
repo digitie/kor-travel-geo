@@ -11,6 +11,7 @@ export function DocumentNavLink({
   ariaLabel,
   onNavigate,
   title,
+  markCurrent = true,
   ...anchorProps
 }: Omit<ComponentPropsWithRef<"a">, "href"> & {
   ariaLabel?: string;
@@ -19,6 +20,8 @@ export function DocumentNavLink({
   href: string;
   onNavigate?: () => void;
   title?: string;
+  /** false면 현재 경로여도 aria-current를 달지 않는다(브랜드 링크 등 메뉴가 아닌 링크). */
+  markCurrent?: boolean;
 }) {
   const pathname = usePathname() ?? "";
   const active =
@@ -46,7 +49,7 @@ export function DocumentNavLink({
   return (
     <Link
       {...anchorProps}
-      aria-current={active ? "page" : undefined}
+      aria-current={markCurrent && active ? "page" : undefined}
       aria-label={ariaLabel}
       className={className}
       href={href}

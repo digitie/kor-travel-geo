@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export const metadata: Metadata = {
-  title: "정합성 리포트"
+  title: ADMIN_PAGES.consistency.title
 };
 
 export default async function ConsistencyReportPage({

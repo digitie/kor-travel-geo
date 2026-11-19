@@ -5,11 +5,11 @@ import { WebVitalsReporter } from "@/components/metrics/WebVitalsReporter";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  // `template` keeps the product name in the tab title for pages that set their own — without
-  // it `/admin/backups` rendered a bare "백업/복원" (issue #515).
+  // 탭 제목은 상단 바 h1과 같은 "지오 - 페이지" 형식(@kor-travel/ui formatAdminTitle)이다.
+  // `template`이 없으면 `/admin/backups`가 맨 "백업/복원"만 보였다(issue #515).
   title: {
-    default: "Geocoder Admin UI",
-    template: "%s · Geocoder Admin UI"
+    default: "지오",
+    template: "지오 - %s"
   },
   description: "도로명주소 지오코딩 운영 도구"
 };
