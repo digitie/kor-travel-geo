@@ -1,3 +1,11 @@
+## 2026-11-20 — psycopg core·binary 3.3.9 정렬
+
+- root의 `psycopg[binary,pool]`을3.3.9로 정확 고정하고 Dagster image constraints의 core·binary도3.3.9로 맞췄다. pool3.3.3·다른 패키지·Dockerfile·UI 입력은 바꾸지 않았다.
+- 공식 PyPI 최신3.3.9·11/12 배포·비철회와 테스트용 wheel SHA256을 확인했다. 공유 venv를 수정하지 않는 Linux x86_64/Python3.13 overlay에서 core/binary3.3.9·pool3.3.3·pq 구현 binary를 확인했다.
+- 기존 이미지 제약5건·선택 driver 설치 버전3건·DB 단위98건이 통과했다. 실제 DB 접속·ARM 정상/native 이미지·SDK 적용·운영 성능 검증은 하지 않았고 CI/배포는 후속이다. 기존 Geo644 단일 보고서의 미커밋 HOLD와 CI-LAST 미시작은 유지한다.
+
+Common73의 고정 후보 e2899128f78c9622ec3ef79674cff8d1c3aec6f9를 별도 필수 psycopg-policy job에 연결한다. consumer/Common을 형제 checkout으로 분리하고 root discovery·명시 Dagster constraints로 정확 선언을 검사한다. frontend guard/catalogd644·producer0e2·정본 UI pack은 유지한다. Common73 실제 병합·후보의 main ancestor 확인 전에는 이 소비자를 병합하지 않는다.
+
 ## 2026-11-19 — Common AdminShell과 정본 세 패키지 채택
 
 - Common main producer `0e2a3f5aa16323df0d009360802661c9bc496dc6`의 실제 artifact14500111373을 사용해 UI0.2.3·tokens0.1.4·실제 소비 toast0.1.3을 함께 갱신했다. catalog/policy와 모든 frontend guard 호출·입력은 `d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4`다. ZIP·SOURCE_SHA·SRI·내장 정책과 fresh npm ci 설치 파일129개(UI96/tokens25/toast8)의 실제 바이트를 대조했다.
