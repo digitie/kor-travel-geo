@@ -93,7 +93,7 @@ const COMMON_MENU_GROUPS = NAV_GROUPS.map((group) => ({
 
 const navHrefs = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
 
-/** 기존 rail 접힘 저장값("1"/"0")을 그대로 읽고 쓴다 — AdminShell이 숫자 형식을 유지한다. */
+/** 기존 rail 접힘 저장값("1"/"0")은 그대로 읽고 같은 형식으로 쓴다. 저장값이 없으면 "true"/"false"로 쓴다(AdminShell). */
 const SIDEBAR_COLLAPSED_KEY = "kor-travel-geo:sidebar-collapsed";
 
 const SHELL_LABELS = {
@@ -128,6 +128,7 @@ function GeoBrand() {
   return (
     <DocumentNavLink
       ariaLabel={`${GEO_ADMIN_AREA} 관리 홈`}
+      markCurrent={false}
       className="inline-flex min-w-0 items-center rounded-control px-1 text-sm font-semibold tracking-tight text-text-primary no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       href={ADMIN_PAGES.home.path}
     >

@@ -49,7 +49,8 @@ async function topBarMetrics(page: Page) {
           ? Math.abs(headingBox.top + headingBox.height / 2 - (descriptionBox.top + descriptionBox.height / 2)) < headingBox.height
           : null,
       h1Count: document.querySelectorAll("h1").length,
-      documentWidth: document.documentElement.scrollWidth,
+      // html/body가 overflow-x: clip이라 documentElement.scrollWidth는 넘침을 못 본다 → 상단 바 자체를 잰다.
+      headerOverflow: header ? header.scrollWidth - header.clientWidth : 0,
       title: document.title
     };
   });
@@ -72,7 +73,7 @@ test.describe("AdminShell — 상단 바 한 줄 제목", () => {
         expect(metrics.descriptionText, target.path).toBe(target.description ?? "");
         expect(metrics.descriptionFontSize, target.path).toBeLessThan(metrics.headingFontSize);
         expect(metrics.sameLine, target.path).toBe(true);
-        expect(metrics.documentWidth, target.path).toBeLessThanOrEqual(viewport.width);
+        expect(metrics.headerOverflow, `${target.path}: 상단 바가 가로로 넘치지 않는다`).toBeLessThanOrEqual(0);
         // 앱 설명 문구(옛 워드마크 "Geocoder Admin UI")는 셸 어디에도 없다.
         await expect(page.locator('[data-slot="admin-shell"]')).not.toContainText("Admin UI");
       }
@@ -91,9 +92,9 @@ test.describe("AdminShell — 모바일 좌측 drawer", () => {
     await menuButton.click();
     const drawer = page.getByRole("dialog");
     await expect(drawer).toBeVisible();
-    const box = await drawer.boundingBox();
-    expect(box?.x).toBe(0);
-    expect(box?.width ?? 0).toBeLessThanOrEqual(280);
+    // 열림 slide-in 애니메이션이 끝난 뒤 좌측 끝(x=0)에 붙는다.
+    await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
+    expect((await drawer.boundingBox())?.width ?? 0).toBeLessThanOrEqual(280);
     await expect(drawer.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link")).toHaveCount(NAV_LINK_COUNT);
     await expect(drawer.getByRole("button", { name: "로그아웃" })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath("drawer-open-390.png") });
@@ -246,7 +247,7 @@ test.describe("버튼 테두리(FS-7.8) — 변형별 상태", () => {
   test("셸 조작 요소(메뉴 링크·접기·로그아웃·메뉴 버튼)의 키보드 포커스는 outline 2px 하나다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(ADMIN_PAGES.home.path, { waitUntil: "domcontentloaded" });
-    const targets = [
+    const targets: Locator[] = [
       page.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link", { exact: true, name: ADMIN_PAGES.settings.title }),
       page.getByRole("button", { name: "좌측 메뉴 접기" }),
       page.getByRole("button", { name: "로그아웃" })
@@ -264,6 +265,23 @@ test.describe("버튼 테두리(FS-7.8) — 변형별 상태", () => {
       expect([focused.outlineStyle, focused.outlineWidth, focused.outlineOffset]).toEqual(["solid", "2px", "2px"]);
     }
 
+    // 실제 앱 버튼(조회 폼의 size="lg" 제출 버튼): 키보드 포커스·누름에서 테두리 그대로.
+    await page.goto(DEBUG_PAGES.geocode.path, { waitUntil: "domcontentloaded" });
+    const submit = page.locator('form button[type="submit"][data-slot="button"]').first();
+    await expect(submit).toBeVisible();
+    const submitRest = await controlStyle(submit);
+    await submit.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(submit).toBeFocused();
+    const submitFocused = await controlStyle(submit);
+    expect(submitFocused.border).toEqual(submitRest.border);
+    expect(submitFocused.boxShadow).toBe("none");
+    expect([submitFocused.outlineStyle, submitFocused.outlineWidth, submitFocused.outlineOffset]).toEqual(["solid", "2px", "2px"]);
+    await submit.hover();
+    expect((await controlStyle(submit)).border).toEqual(submitRest.border);
+
+    await page.goto(ADMIN_PAGES.home.path, { waitUntil: "domcontentloaded" });
     await page.setViewportSize({ width: 390, height: 844 });
     const menuButton = page.locator('[data-slot="admin-shell-menu-button"]');
     const rest = await controlStyle(menuButton);
