@@ -74,7 +74,7 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                     "PIP_CACHE_DIR=/root/.cache/pip python -m pip",
                     re.sub(r"\s+", " ", command),
                 )
-                self.assertEqual((_ROOT / path).read_text().count(mount), 2)
+                self.assertEqual((_ROOT / path).read_text().count(mount), 3 if path == _CS else 2)
                 app = self._application_command(path)
                 self.assertTrue(app.startswith(mount + " "))
                 self.assertIn("PIP_NO_CACHE_DIR=1", (_ROOT / path).read_text())
@@ -87,8 +87,10 @@ class GdalCacheBoundaryTests(unittest.TestCase):
     @staticmethod
     def _application_command(path: str) -> str:
         return next(
-            value for kind, value in instructions(path)
-            if kind == "RUN" and (
+            value
+            for kind, value in instructions(path)
+            if kind == "RUN"
+            and (
                 'pip install -e ".[api,loaders]"' in value
                 or "pip install --prefix=/install" in value
             )
@@ -111,10 +113,30 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                 self.assertTrue(app[0]["cacheDir"].endswith(suffix))
                 self.assertNotIn("--no-cache-dir", app[0]["args"])
                 self.assertFalse(app[0]["parallelOne"])
-                bootstrap = [row for row in calls if "--upgrade" in row["args"]]
+                bootstrap = [
+                    row for row in calls if "--upgrade" in row["args"] and row["cacheDir"] is None
+                ]
                 self.assertEqual(len(bootstrap), 1)
                 self.assertEqual(bootstrap[0]["noCache"], "1")
-                self.assertIsNone(bootstrap[0]["cacheDir"])
+                tools = [
+                    row
+                    for row in calls
+                    if row["cacheDir"] and row["cacheDir"].endswith("/pure-python-tools")
+                ]
+                self.assertEqual(len(tools), 1 if path == _CS else 0)
+                for row in tools:
+                    self.assertIsNone(row["noCache"])
+                    self.assertIn("--only-binary=:all:", row["args"])
+                    self.assertIn(
+                        next(
+                            line
+                            for line in (_ROOT / "docker/constraints-shared-python.txt")
+                            .read_text()
+                            .splitlines()
+                            if line.startswith("pip==")
+                        ),
+                        row["args"],
+                    )
 
     @staticmethod
     def _is_application(row: dict) -> bool:
@@ -143,8 +165,12 @@ class GdalCacheBoundaryTests(unittest.TestCase):
                 self.assertFalse(any(self._is_application(row) for row in calls))
 
     def _shell(
-        self, path: str, fail_build: bool = False, *,
-        gdal_version: str = "3.10.3", fail_context: bool = False,
+        self,
+        path: str,
+        fail_build: bool = False,
+        *,
+        gdal_version: str = "3.10.3",
+        fail_context: bool = False,
     ) -> tuple[list[dict], int]:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -204,6 +230,15 @@ if "--prefix=/install" in args:
                         for kind, value in instructions(path)
                         if kind == "RUN" and 'pip install -e ".[api,loaders]"' in value
                     ).split("&& python - <<", 1)[0]
+                )
+            if path == _CS:
+                commands.append(
+                    next(
+                        value
+                        for kind, value in instructions(path)
+                        if kind == "RUN"
+                        and "pip install --only-binary=:all: --upgrade pip==" in value
+                    )
                 )
             script = " && ".join(
                 re.sub(r"^--mount=\S+\s+", "", value) for value in commands

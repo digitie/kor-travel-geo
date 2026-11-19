@@ -45,6 +45,7 @@ COPY pyproject.toml README.md alembic.ini openapi.json ./
 COPY alembic ./alembic
 COPY sql ./sql
 COPY src ./src
+COPY docker/constraints-shared-python.txt ./docker/constraints-shared-python.txt
 
 # 소스 변경 뒤에도 앱 wheel을 재사용하되 native ABI·libc·libgdal별로 분리한다.
 RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked \
@@ -52,7 +53,8 @@ RUN --mount=type=cache,id=geo-gdal-py312,target=/root/.cache/pip,sharing=locked 
     && WHEEL_CACHE_ABI="$(python -I -c 'import os, sysconfig; abi=sysconfig.get_config_var("SOABI"); libc=os.confstr("CS_GNU_LIBC_VERSION"); assert abi and libc; print(abi+"-"+libc.replace(" ", "-"))')" \
     && env -u PIP_NO_CACHE_DIR \
          PIP_CACHE_DIR="/root/.cache/pip/${WHEEL_CACHE_ABI}-gdal-${GDAL_VERSION}" \
-         python -m pip install -e ".[api,loaders]" \
+         python -m pip install -e ".[api,loaders]" -c ./docker/constraints-shared-python.txt pip==26.3 \
+    && python -m pip check \
     && python - <<'PY'
 import subprocess
 from osgeo import gdal
