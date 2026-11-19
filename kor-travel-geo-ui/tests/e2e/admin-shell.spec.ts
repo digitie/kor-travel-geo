@@ -109,12 +109,13 @@ function expectSingleBorder(style: ControlStyle, rest: ControlStyle, label: stri
 async function mountVariantGallery(page: Page) {
   const variants = BUTTON_VARIANTS.map((variant) => ({ variant, className: twMerge(buttonVariants({ variant })) }));
   await page.evaluate((items) => {
-    const main = document.querySelector("main");
-    if (!main) throw new Error("main 없음");
+    // 본문(<main>) 안은 React가 다시 그릴 때 떼어 낼 수 있어 body 끝에 둔다.
+    const main = document.body;
     const gallery = document.createElement("section");
     gallery.id = "button-variant-gallery";
     gallery.setAttribute("aria-label", "버튼 변형");
-    gallery.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;padding:16px;background:var(--kt-surface-card)";
+    gallery.style.cssText =
+      "position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:flex;flex-wrap:wrap;gap:12px;padding:16px;background:var(--kt-surface-card);border-top:1px solid var(--kt-border)";
     const before = document.createElement("input");
     before.id = "gallery-before";
     before.setAttribute("aria-label", "갤러리 앞 입력");
@@ -137,7 +138,7 @@ async function mountVariantGallery(page: Page) {
     disabled.dataset.variant = "default";
     disabled.textContent = "disabled";
     gallery.append(disabled);
-    main.prepend(gallery);
+    main.append(gallery);
   }, variants);
   return page.locator("#button-variant-gallery");
 }
@@ -148,6 +149,8 @@ test.describe("버튼 테두리(FS-7.8) — 변형별 상태", () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto(DEBUG_PAGES.geocode.path, { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { level: 1, name: adminPageHeading(DEBUG_PAGES.geocode.title) })).toBeVisible();
+      // hydration·첫 데이터 요청이 끝난 뒤에 꽂는다.
+      await page.waitForLoadState("networkidle");
       const gallery = await mountVariantGallery(page);
       const shot = (state: string) =>
         gallery.screenshot({ path: test.info().outputPath(`buttons-${browserName}-${viewport.width}-${state}.png`) });
@@ -184,7 +187,8 @@ test.describe("버튼 테두리(FS-7.8) — 변형별 상태", () => {
         ]);
         if (variant === "outline") await shot("focus-outline");
 
-        // 누름(active): 테두리 두께 그대로, 이동은 1px 이하.
+        // 누름(active): 키보드 포커스를 풀고 마우스로 누른다. 테두리 두께 그대로, 이동은 1px 이하.
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.mouse.move(restBox.x + restBox.width / 2, restBox.y + restBox.height / 2);
         await page.mouse.down();
         const pressed = await controlStyle(button);
