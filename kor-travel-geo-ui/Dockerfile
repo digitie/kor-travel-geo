@@ -31,9 +31,10 @@ ENV HOME=/home/node \
     NPM_CONFIG_CACHE=/home/node/.npm \
     XDG_CACHE_HOME=/home/node/.cache
 
-COPY --from=builder /app/package.json /app/package-lock.json /app/.npmrc ./
+COPY --from=deps /app/package.json /app/package-lock.json /app/.npmrc ./
+# UI 소스만 바뀌면 잠금 파일로 설치한 런타임 의존성 레이어를 재사용한다.
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.mjs ./
