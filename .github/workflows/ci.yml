@@ -37,9 +37,9 @@ jobs:
           sudo apt-get -o Dpkg::Lock::Timeout=120 install -y --no-install-recommends gdal-bin libgdal-dev
       - name: Install backend
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.3
           python -m pip install "gdal==$(gdal-config --version)"
-          python -m pip install -e ".[api,loaders,dev]"
+          python -m pip install -e ".[api,loaders,dev]" -c docker/constraints-shared-python.txt
       - name: Lint and type-check
         run: |
           ruff check .
@@ -89,9 +89,9 @@ jobs:
           pg_dump --version
       - name: Install backend
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.3
           python -m pip install "gdal==$(gdal-config --version)"
-          python -m pip install -e ".[api,loaders,dev]"
+          python -m pip install -e ".[api,loaders,dev]" -c docker/constraints-shared-python.txt
       - name: Bootstrap the scratch database (init-db + alembic stamp head)
         run: |
           ktgctl init-db
@@ -213,7 +213,7 @@ jobs:
       # tests run on the versions the image ships; test_image_constraints.py checks it.
       - name: Install main lib + Dagster package in one resolve (like dagster.Dockerfile)
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.3
           python -m pip install -c kor-travel-geo-dagster/docker/constraints-dagster.txt \
             "gdal==$(gdal-config --version)" \
             -e ".[api,loaders,dev]" -e "./kor-travel-geo-dagster[dev]"
@@ -308,7 +308,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: digitie/kor-travel-common
-          ref: b566840cb111fa8b1184498aa892b0fd5ce7e5c6
+          ref: 694b814ce625778d31b6aa57b8ae2c8c4f22a752
           path: common-policy
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -319,5 +319,7 @@ jobs:
         run: |
           set -euo pipefail
           python -B "$GITHUB_WORKSPACE/common-policy/tools/check_versions.py" \
-            "$GITHUB_WORKSPACE/consumer" --repo kor-travel-geo --strict-python-application \
+            "$GITHUB_WORKSPACE/consumer" --repo kor-travel-geo --strict-python-application --python-build-tools \
+            --python-version 3.12 \
+            --constraints docker/constraints-shared-python.txt \
             --constraints kor-travel-geo-dagster/docker/constraints-dagster.txt

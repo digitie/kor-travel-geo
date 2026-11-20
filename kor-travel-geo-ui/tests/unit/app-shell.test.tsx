@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ADMIN_NAV_GROUPS, ADMIN_PAGES } from "@/lib/admin-pages";
+import { formatAdminTitle } from "@kor-travel/ui/admin-shell";
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES, DEBUG_PAGES, GEO_ADMIN_AREA, adminPageHeading } from "@/lib/admin-pages";
 
 const pathname = { current: "/admin" };
 vi.mock("next/navigation", () => ({
@@ -100,7 +101,7 @@ describe("AppShell — Common AdminShell 연결", () => {
     const shell = document.querySelector('[data-slot="admin-shell"]');
     expect(shell).not.toBeNull();
     const main = screen.getByRole("main");
-    const heading = screen.getByRole("heading", { level: 1, name: "운영 이력" });
+    const heading = screen.getByRole("heading", { level: 1, name: adminPageHeading("운영 이력") });
     const header = heading.closest("header");
     expect(header).not.toBeNull();
     expect(main.contains(header)).toBe(false);
@@ -143,8 +144,37 @@ describe("AppShell — Common AdminShell 연결", () => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
     renderShell();
     expect(screen.getByRole("button", { name: "좌측 메뉴 펼치기" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Geocoder Admin UI" })).toHaveTextContent("GA");
+    expect(screen.getByRole("link", { name: `${GEO_ADMIN_AREA} 관리 홈` })).toHaveTextContent(GEO_ADMIN_AREA);
     expect(screen.getByRole("link", { name: "Geocode" })).toHaveAttribute("href", "/debug/geocode");
   });
 
+  it("상단 바 한 줄에 \"지오 - 페이지\" 제목과 작은 페이지 설명만 두고 앱 설명은 없다", () => {
+    renderShell(ADMIN_PAGES.backups.path);
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent(adminPageHeading(ADMIN_PAGES.backups.title));
+    expect(heading).toHaveAttribute("title", formatAdminTitle(GEO_ADMIN_AREA, ADMIN_PAGES.backups.title));
+    expect(document.querySelector('[data-slot="admin-shell-description"]')).toHaveTextContent(
+      ADMIN_PAGES.backups.description ?? ""
+    );
+    expect(screen.queryByText("Admin UI")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Geocoder/)).not.toBeInTheDocument();
+  });
+
+  it("메뉴 밖 경로와 조회·진단 화면도 정본 제목·설명을 서버 첫 렌더에 둔다", () => {
+    renderShell(ADMIN_PAGES.load.path);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(adminPageHeading(ADMIN_PAGES.load.title));
+  });
+
+  it("조회·진단 화면의 설명도 상단 바에 둔다", () => {
+    renderShell(DEBUG_PAGES.reverse.path);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(adminPageHeading(DEBUG_PAGES.reverse.title));
+    expect(document.querySelector('[data-slot="admin-shell-description"]')).toHaveTextContent(
+      DEBUG_PAGES.reverse.description
+    );
+  });
+
+  it("브랜드 링크는 현재 페이지 표시(aria-current)를 메뉴와 겹쳐 달지 않는다", () => {
+    renderShell(ADMIN_PAGES.home.path);
+    expect(screen.getByRole("link", { name: `${GEO_ADMIN_AREA} 관리 홈` })).not.toHaveAttribute("aria-current");
+  });
 });

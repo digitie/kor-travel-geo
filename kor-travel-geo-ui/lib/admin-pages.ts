@@ -115,3 +115,46 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   { title: "모니터링", keys: ["logs", "tables", "cache"] },
   { title: "시스템", keys: ["backups", "settings"] }
 ];
+
+/** 관리자 셸 상단 바의 영역 이름. 제목은 "지오 - 페이지" 한 줄이다(@kor-travel/ui AdminShell). */
+export const GEO_ADMIN_AREA = "지오";
+
+/**
+ * 상단 바 h1과 document.title의 문자열. `@kor-travel/ui`의 `formatAdminTitle(GEO_ADMIN_AREA, title)`과
+ * 같은 결과다(tests/unit/admin-pages.test.ts가 대조한다). Playwright 스펙이 React 없이 import할 수 있게
+ * 여기서는 순수 함수로 둔다.
+ */
+export function adminPageHeading(title: string): string {
+  return `${GEO_ADMIN_AREA} - ${title}`;
+}
+
+export interface DebugPageMeta {
+  path: string;
+  title: string;
+  description: string;
+}
+
+/** 조회·진단 화면의 경로/제목/설명 단일 소스(네비 라벨·상단 바·page.tsx가 함께 쓴다). */
+export const DEBUG_PAGES = {
+  geocode: { path: "/debug/geocode", title: "Geocode", description: "주소 좌표와 POI 반경 행정구역 확인" },
+  reverse: { path: "/debug/reverse", title: "Reverse", description: "좌표 주변의 도로명·지번 후보 확인" },
+  normalize: { path: "/debug/normalize", title: "Normalize", description: "주소 문자열의 행정구역·도로명 토큰 확인" },
+  explain: { path: "/debug/explain", title: "Explain", description: "운영 엔진과 같은 search_path에서 실행 계획 확인" }
+} as const satisfies Record<string, DebugPageMeta>;
+
+/** 현재 경로의 페이지 제목·설명(가장 긴 경로 일치). 서버 렌더 첫 화면의 상단 바 제목에 쓴다. */
+export function pageMetaForPath(pathname: string): { title: string; description?: string } | undefined {
+  const candidates: Array<{ path: string; title: string; description?: string }> = [
+    ...Object.values(ADMIN_PAGES),
+    ...Object.values(DEBUG_PAGES)
+  ];
+  let best: { path: string; title: string; description?: string } | undefined;
+  for (const page of candidates) {
+    const matches =
+      page.path === ADMIN_PAGES.home.path
+        ? pathname === page.path
+        : pathname === page.path || pathname.startsWith(`${page.path}/`);
+    if (matches && (!best || page.path.length > best.path.length)) best = page;
+  }
+  return best ? { title: best.title, description: best.description } : undefined;
+}

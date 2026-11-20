@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { AdminPageTitle } from "@kor-travel/ui/admin-shell";
 import type { ReactNode } from "react";
-import { ADMIN_NAV_GROUPS, ADMIN_PAGES } from "@/lib/admin-pages";
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES, GEO_ADMIN_AREA } from "@/lib/admin-pages";
 
 type PageHeaderProps = {
   title: string;
@@ -23,7 +23,7 @@ export function PageHeader({ title, description, actions, section, meta }: PageH
 
   return (
     <>
-      <AdminPageTitle title={title} description={description} actions={actions} />
+      <AdminPageTitle area={GEO_ADMIN_AREA} title={title} description={description} actions={actions} />
       {sectionLabel || meta ? (
         <div className="mb-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
           {sectionLabel ? <p className="text-2xs font-medium">{sectionLabel}</p> : null}

@@ -1,4 +1,20 @@
+## 2026-11-20 — 관리 UI "지오 - 페이지" 제목·버튼 테두리 정리(#645 잔여분)
+
+상단 바 h1 "지오 - 페이지"(탭 동일), 브랜드 앱 설명 제거, FS-7.8 전역 버튼 상태 규칙 제거와 e2e를 추가했다. 자세한 검증은
+[journal](journal.md). 배포는 Codex(odroid UI 재빌드)가 한다.
+
 ## 2026-11-20 — 실제 사용 앱 백엔드 선택 버전 정렬 후보
+
+## 2026-11-20 앱 의존성 wheel cache를 API·CS 정규 빌드에 연결
+
+GDAL 전용 RUN 뒤의 앱 설치는 PIP_NO_CACHE_DIR=1을 그대로 상속해 Fiona 등 native wheel을 소스 변경마다 다시 컴파일했다. API의 editable 앱 설치와 CS의 constraints/prefix 설치에도 기존 geo-gdal-py312 locked mount를 연결하고, 해당 pip 명령에서만 NO_CACHE를 제거한다. 앱 cache 하위 경로는 실제 container Python SOABI·libc 이름/버전·libgdal 버전으로 나눠 같은 조합의 API·CS만 공유한다. source revision을 cache key로 쓰지 않으므로 앱 소스 변경 뒤에도 재사용할 수 있다.
+
+기존 GDAL 직렬 컴파일 RUN·정확한 시스템 libgdal pin·CS local GDAL wheel/constraints·최종 binding 검증·stdlib 준비·health/CMD는 유지한다. 의존성 선언/버전·앱 Python·UI·공용 daemon은 변경하지 않는다. cache mount는 최종 이미지 payload에 복사하지 않으며 cache 정리나 native 바이너리 재포장도 하지 않는다.
+
+원본31ad4 Dockerfile에 새 회귀를 적용하면9개 시험의 관련 단언7건이 실패했고, 수정 뒤 image/cache/constraints 계약46건·subtest8건 PASS, Ruff PASS. mount 누락/잘못된 공유ID/lock 누락/NO_CACHE 상속/명시적 no-cache 옵션/native context 누락/libgdal 누락의 API·CS14개 변형을 실제 shell 환경 또는 mount 단언에서 모두 거부했다. 이전 음성 시험 실행기의 regex 오류와 pytest plugin 설정 경고는 원본 증거에 보존했다. 별도로 진행 중인31ad4 정규 빌드·운영 컨트롤러·동결 입력은 바꾸지 않았다.
+
+새 앱 cache의 최초 정상 빌드는 여전히 한 번의 wheel 생성이 필요할 수 있다. 이전31ad4의 GDAL 최초 wheel 생성은 확인됐지만 Fiona의 지속 cache 적중은 확인되지 않았다. 이 소스 변경의 실제 cache hit·성능·새 이미지 수용은 병합 뒤 정규 빌드에서 별도로 확인한다. CI 순서 점검은 시작하지 않았다.
+
 
 root/API·CS의 SQLAlchemy2.1.9·Pydantic2.14.4/core2.50.5/settings2.16.3·FastAPI0.165.0(API만)·Alembic1.20.1·httpx0.28.1·uvicorn0.54.0을 맞춘다. psycopg339·Dagster/psycopg2와 외부 daemon pool은 유지하고 Common Python은 실제 병합67efe의 같은 package tree를 사용한다. 앱/쿼리/DTO/migration/GDAL/UI 입력은 동일하다. [범위·검증·한계](shared-backend-application-alignment.md)에 source와 실제 설치/운영 증거를 구분했다. 최종 Common profile guard의 실제 병합 SHA·정확 CI·ARM/native/운영 수용은 후속이며 보고서644와 활성 배포 source를 편집하지 않았다.
 
@@ -1944,3 +1960,9 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 ## 2026-10-05 공통 Dagster 복구·UI 최종 검증
 
 [최종 리뷰·실행 증거](reviews/2026-10-05-common-dagster.md): 제품4c59efe·공통73e3ff8, 두 독립 최종 PASS·열린0. 전체1787 PASS/111 SKIP·focused153·UI231·PostgreSQL17·Linux Chromium/Firefox각13항목 PASS. 초기 코드에서 재현한 checkpoint·provider·게시 경계 결함을 수정했다. PR570의 문서 포함 최종 checks PASS 후 common26 다음에 merge한다. 기존 사용자 checkout/원천 데이터는 보존하며 운영 배포·worker kill·RSS는 후속이다.
+
+## 2026-11-20 — 실제 사용 Python profile과 앱 wheel cache 결합
+
+- 병합 649 cache를 상속하고 Common76 immutable 694b814 정책의 실제 사용 97개를 API·CS·기존 CI 설치에 같은 constraints로 반영했다. setuptools/wheel 및 최종 pip26.3도 실제 소비 경로로 고정한다.
+- GDAL 단계/native 검사는 보존하며 앱 cache는 SOABI/GNU libc/libgdal 버전으로 분리한다. 이전 후보 거부·실제 pip resolver RED/GREEN과 ARM3.12 metadata-only 호환 해석을 확인했다. 새 운영 이미지/cache hit는 아직 주장하지 않는다.
+- 기존 31ad4 운영 전체 설치 맵(API62/CS103)과 새 정책 차이를 구분했다. 자세한 범위와 한계는 docs/shared-backend-application-alignment.md에 기록했다. UI·앱 소스·schema·수집·CI 순서는 변경하지 않는다. Geo644 최종 보고서 HOLD는 별개다.

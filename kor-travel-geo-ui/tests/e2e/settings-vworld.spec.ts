@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN_PAGES } from "../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../lib/admin-pages";
 
 const VWORLD_STORAGE_KEY = "kortravelgeo.vworldApiKey";
 
@@ -21,7 +21,7 @@ test.describe("VWorld 설정 UI", () => {
 
     await page.goto("/admin/settings");
     await expect(
-      page.getByRole("heading", { exact: true, name: ADMIN_PAGES.settings.title })
+      page.getByRole("heading", { exact: true, name: adminPageHeading(ADMIN_PAGES.settings.title) })
     ).toBeVisible();
     await expect(page.getByLabel(VWORLD_KEY_LABEL, { exact: true })).toHaveValue("env-key");
     await expect(page.getByText(".env 기본값").first()).toBeVisible();

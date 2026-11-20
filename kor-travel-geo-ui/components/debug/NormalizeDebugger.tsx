@@ -1,6 +1,7 @@
 "use client";
 
 import { Braces } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { FormEvent, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -37,10 +38,10 @@ export function NormalizeDebugger() {
               onChange={(e) => setAddress(e.target.value)}
             />
           </div>
-          <button className="button" type="submit">
-            <Braces size={16} />
+          <Button size="lg" type="submit">
+            <Braces aria-hidden="true" />
             토큰화
-          </button>
+          </Button>
         </form>
       </Panel>
       <Panel title="정규화 결과">
