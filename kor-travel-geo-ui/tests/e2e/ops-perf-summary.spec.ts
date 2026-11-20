@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADMIN_PAGES, adminPageHeading } from "../../lib/admin-pages";
+
 // T-222 e2e: /admin/ops 성능·검증 요약(read-only). benchmark(T-265 artifact_type=benchmark)
 // latest-vs-baseline 비교, C1~C17 정합성 최신 상태, source match set 상태를 백엔드 없이
 // page.route mock으로 고정한다.
@@ -127,7 +129,7 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
     await expect(panel.getByText("활성: 활성 세트")).toBeVisible();
 
     await panel.getByRole("link", { name: /상세/ }).click();
-    await expect(page.getByRole("heading", { name: "정합성 검증", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.consistency.title), exact: true })).toBeVisible();
     expect(rscRequests).toEqual([]);
   });
 

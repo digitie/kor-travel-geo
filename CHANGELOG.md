@@ -6,6 +6,7 @@
 
 ### 추가
 
+- 관리 UI 모든 화면의 상단 바 제목을 "지오 - 페이지" 한 줄로 맞추고(탭 제목 동일) 셸의 앱 설명 워드마크("Geocoder Admin UI")를 영역 이름으로 바꾼다. 공통 버튼의 hover·active·focus를 덮던 전역 `[data-slot="button"]`·`.button` 규칙을 걷어 테두리가 굵어지거나 이중이 되지 않게 하고, 전역 focus outline은 `@layer base`로 옮긴다(common FS-7.8). 조회 화면 제출 버튼도 공통 `Button`으로 바꾼다.
 - Geo 관리자 메뉴·제목 표시를 Common AdminShell로 통일한다. 데스크톱 접기 rail과 모바일 drawer를 제공하며 기존 경로·전체 문서 이동·로그인·로그아웃 흐름을 유지한다. 실제 사용 UI0.2.3·tokens0.1.4·toast0.1.3 정본과 잠금 파일을 함께 맞춘다.
 
 - 관리자 UI 부품·가상 표를 common shadcn/Radix와 공통 TanStack 엔진으로 연결하고 지도는 공개 배포물을 사용한다. 헤더 포커스·열 너비를 보존하며 설치 후 지도 source 변경을 제거한다.

@@ -1,6 +1,7 @@
 "use client";
 
 import { LocateFixed } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { FormEvent, useEffect, useReducer, useRef } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import type {
@@ -168,11 +169,11 @@ export function GeocodeDebugger() {
               />
               <span>include_geometry</span>
             </label>
-            <button className="button" disabled={loading} type="submit">
-              <LocateFixed size={16} />
+            <Button disabled={loading} size="lg" type="submit">
+              <LocateFixed aria-hidden="true" />
               실행
-            </button>
-            {loading ? <button className="button" onClick={cancel} type="button">취소</button> : null}
+            </Button>
+            {loading ? <Button onClick={cancel} size="lg" type="button" variant="outline">취소</Button> : null}
           </form>
         </Panel>
         <Panel title="응답">

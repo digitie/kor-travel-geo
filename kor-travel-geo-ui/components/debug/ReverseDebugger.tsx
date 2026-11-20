@@ -1,6 +1,7 @@
 "use client";
 
 import { MousePointer2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { CandidateAddressSummary } from "@/components/debug/CandidateAddressSummary";
@@ -67,10 +68,10 @@ export function ReverseDebugger() {
               <label htmlFor="radius">radius_m</label>
               <input id="radius" value={radius} onChange={(e) => setRadius(e.target.value)} />
             </div>
-            <button className="button" type="submit">
-              <MousePointer2 size={16} />
+            <Button size="lg" type="submit">
+              <MousePointer2 aria-hidden="true" />
               조회
-            </button>
+            </Button>
           </form>
         </Panel>
         <Panel title="응답">

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { ADMIN_PAGES } from "../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../lib/admin-pages";
 
 // /admin/files (T-283 파일 관리) mock e2e. 백엔드 admin API를 page.route로 목킹해
 // 통합 파일 인벤토리(목록·필터·연결 상세)를 DB 없이 검증한다.
@@ -158,7 +158,7 @@ test.describe("파일 관리 /admin/files (T-283)", () => {
     await mockFilesApi(page);
     await page.goto("/admin/files");
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.files.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.files.title), exact: true })
     ).toBeVisible();
   });
 

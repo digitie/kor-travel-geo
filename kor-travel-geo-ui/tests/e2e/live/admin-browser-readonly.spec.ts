@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN_PAGES } from "../../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../../lib/admin-pages";
 import {
   LIVE_TIMEOUT,
   expectNoErrorScreen,
@@ -13,11 +13,11 @@ import {
 // These drive the real UI against the real backend. They navigate and switch tabs only; they
 // do not submit forms or click destructive/action buttons.
 //
-// 페이지 h1은 lib/admin-pages.ts(ADMIN_PAGES)와 단일 소스로 동기화한다.
+// 상단 바 h1("지오 - 페이지")은 lib/admin-pages.ts(ADMIN_PAGES)와 단일 소스로 동기화한다.
 
 async function gotoAdmin(page: import("@playwright/test").Page, path: string, heading: string) {
   await page.goto(path);
-  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible({
+  await expect(page.getByRole("heading", { name: adminPageHeading(heading), exact: true })).toBeVisible({
     timeout: LIVE_TIMEOUT
   });
   await expectNoErrorScreen(page);

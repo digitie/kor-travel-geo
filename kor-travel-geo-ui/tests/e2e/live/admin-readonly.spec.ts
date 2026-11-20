@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN_PAGES } from "../../../lib/admin-pages";
+import { ADMIN_PAGES, adminPageHeading } from "../../../lib/admin-pages";
 import {
   expectNoErrorScreen,
   loginLiveAdmin,
@@ -36,9 +36,9 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/ops renders the Ops console and Serving Releases table", async ({ page }) => {
     await page.goto("/admin/ops");
 
-    // PageHeader h1은 lib/admin-pages.ts(ADMIN_PAGES.ops.title)와 동기.
+    // 상단 바 h1("지오 - 페이지")은 lib/admin-pages.ts(ADMIN_PAGES.ops.title)와 동기.
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.ops.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.ops.title), exact: true })
     ).toBeVisible({
       timeout: TIMEOUT
     });
@@ -103,7 +103,7 @@ test.describe("LIVE admin read-only", () => {
     await page.goto("/admin/consistency");
 
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.consistency.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.consistency.title), exact: true })
     ).toBeVisible({
       timeout: TIMEOUT
     });
@@ -130,7 +130,7 @@ test.describe("LIVE admin read-only", () => {
     await page.goto("/admin/backups");
 
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.backups.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.backups.title), exact: true })
     ).toBeVisible({
       timeout: TIMEOUT
     });
@@ -150,9 +150,9 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/source-files renders the source-files tablist and cards", async ({ page }) => {
     await page.goto("/admin/source-files");
 
-    // PageHeader h1은 ADMIN_PAGES.sourceFiles.title("원천 파일")와 동기.
+    // 상단 바 h1은 adminPageHeading(ADMIN_PAGES.sourceFiles.title)와 동기.
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.sourceFiles.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.sourceFiles.title), exact: true })
     ).toBeVisible({
       timeout: TIMEOUT
     });
@@ -171,7 +171,7 @@ test.describe("LIVE admin read-only", () => {
     await page.goto("/admin/tables");
 
     await expect(
-      page.getByRole("heading", { name: ADMIN_PAGES.tables.title, exact: true })
+      page.getByRole("heading", { name: adminPageHeading(ADMIN_PAGES.tables.title), exact: true })
     ).toBeVisible({
       timeout: TIMEOUT
     });

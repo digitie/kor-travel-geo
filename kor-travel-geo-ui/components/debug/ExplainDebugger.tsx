@@ -1,6 +1,7 @@
 "use client";
 
 import { Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { FormEvent, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -51,10 +52,10 @@ export function ExplainDebugger() {
             />{" "}
             BUFFERS
           </label>
-          <button className="button" type="submit">
-            <Play size={16} />
+          <Button size="lg" type="submit">
+            <Play aria-hidden="true" />
             EXPLAIN
-          </button>
+          </Button>
         </form>
       </Panel>
       <Panel title="Plan JSON">

@@ -1,3 +1,21 @@
+## 2026-11-20 — 관리 UI "지오 - 페이지" 제목과 버튼 테두리(FS-7.8) 정리 (#645 잔여분)
+
+- #645(Codex)가 AdminShell·drawer·0.2.3 vendor를 채택한 위에 남은 소유자 요구만 반영했다. 상단 바 h1은
+  모든 화면에서 `area="지오"`로 "지오 - 페이지" 한 줄이고 탭 제목도 `지오 - %s`다. 제목·설명 정본은
+  `lib/admin-pages.ts`(조회·진단 `DEBUG_PAGES` 추가, `/admin/load`처럼 메뉴 밖 경로도 서버 첫 렌더 제목을 갖는다).
+  셸 브랜드의 앱 설명("Geocoder Admin UI"/"GA")은 영역 이름 "지오"로 바꿨다.
+- FS-7.8: `globals.css`의 unlayered `[data-slot="button"]`·`.button`·`.icon-button` 상태 규칙(hover translateY(-1px)·
+  active translateY(1px)·focus glow·font-weight 720)을 지웠다. 전역 focus outline은 `@layer base`의
+  `:where(a, button, [role=button])`로 옮기고, 입력·탭·체크박스 계열의 기존 focus 규칙은 유지했다(FS-7.8 #6).
+  조회 화면 제출 버튼 `.button`은 공통 `Button size="lg"`(36px)로 바꿨다. 공통 Button 반경은 이제 8px(rounded-lg)다.
+- 검증(n150 gate-slot, node 26.13.1/npm 12.0.1 컨테이너): lint·react-doctor·type-check·unit 304·build·
+  check:dependencies 통과. Playwright chromium mock: 새 `admin-shell.spec`(전 페이지 제목 PC1280·모바일390,
+  버튼 7변형 rest/hover/focus/active, 셸 조작 요소 focus) 통과, 상태별 스크린샷 확인. `settings-vworld` 2건과
+  `vworld-map` 1건은 실패 — 결과는 아래 기준선 비교로 판정한다.
+- 적대 리뷰 1회: drawer 애니메이션 중 측정, `overflow-x: clip` 때문에 항상 통과하던 넘침 검사, 셸 안 오류 패널
+  h1 중복, 브랜드 aria-current 중복을 고쳤다.
+- 배포 없음(geo UI 배포는 Codex, odroid).
+
 ## 2026-11-20 — 실제 사용 앱 백엔드 선택 버전 정렬 후보
 
 ## 2026-11-20 앱 의존성 wheel cache를 API·CS 정규 빌드에 연결

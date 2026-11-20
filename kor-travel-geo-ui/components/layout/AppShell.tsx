@@ -24,7 +24,14 @@ import { useRef, useState, type ReactNode } from "react";
 import { AppMenu, type AppMenuLinkProps } from "@kor-travel/ui/app-menu";
 import { AdminShell } from "@kor-travel/ui/admin-shell";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
-import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
+import {
+  ADMIN_NAV_GROUPS,
+  ADMIN_PAGES,
+  DEBUG_PAGES,
+  GEO_ADMIN_AREA,
+  pageMetaForPath,
+  type AdminPageKey
+} from "@/lib/admin-pages";
 import { cn } from "@/lib/utils";
 
 const adminIcons: Record<AdminPageKey, typeof Search> = {
@@ -54,10 +61,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "조회·진단",
     items: [
-      { href: "/debug/geocode", label: "Geocode", icon: Search },
-      { href: "/debug/reverse", label: "Reverse", icon: MapPinned },
-      { href: "/debug/normalize", label: "Normalize", icon: Braces },
-      { href: "/debug/explain", label: "Explain", icon: TerminalSquare }
+      { href: DEBUG_PAGES.geocode.path, label: DEBUG_PAGES.geocode.title, icon: Search },
+      { href: DEBUG_PAGES.reverse.path, label: DEBUG_PAGES.reverse.title, icon: MapPinned },
+      { href: DEBUG_PAGES.normalize.path, label: DEBUG_PAGES.normalize.title, icon: Braces },
+      { href: DEBUG_PAGES.explain.path, label: DEBUG_PAGES.explain.title, icon: TerminalSquare }
     ]
   },
   ...ADMIN_NAV_GROUPS.map((group) => ({
@@ -121,14 +128,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const activeHref = navHrefs
     .filter((href) => isActive(pathname, href))
     .reduce<string | undefined>((best, href) => (!best || href.length > best.length ? href : best), undefined);
-  const title = NAV_GROUPS.flatMap((group) => group.items).find((item) => item.href === activeHref)?.label;
+  // 서버 첫 렌더에도 상단 바가 "지오 - 페이지"와 페이지 설명을 갖도록 정본(lib/admin-pages.ts)에서 정한다.
+  // 메뉴 밖 경로(/admin/load 등)도 포함한다. 각 page의 PageHeader가 같은 값으로 덮어쓴다.
+  const pageMeta = pageMetaForPath(pathname);
 
   // 로그인 화면과 인증 처리에는 셸을 추가하지 않는다.
   if (pathname === "/login") return <>{children}</>;
 
   return (
     <AdminShell
-      title={title ?? "Geocoder Admin UI"}
+      area={GEO_ADMIN_AREA}
+      title={pageMeta?.title}
+      description={pageMeta?.description}
       navigationKey={pathname}
       collapsedStorageKey={SIDEBAR_COLLAPSED_KEY}
       mainId={MAIN_CONTENT_ID}
@@ -138,14 +149,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         collapseRail: "좌측 메뉴 접기",
         expandRail: "좌측 메뉴 펼치기"
       }}
-      brand={({ collapsed }) => (
+      // 서비스 표시는 영역 이름만 둔다 — 앱 설명 문구("Admin UI")는 두지 않는다.
+      brand={() => (
         <DocumentNavLink
-          ariaLabel="Geocoder Admin UI"
+          ariaLabel={`${GEO_ADMIN_AREA} 관리 홈`}
           href={ADMIN_PAGES.home.path}
-          className="flex min-w-0 items-baseline gap-1.5 text-text-primary no-underline"
+          markCurrent={false}
+          className="inline-flex min-w-0 items-center rounded-control px-1 text-sm font-semibold tracking-tight text-text-primary no-underline"
         >
-          <span className="truncate text-sm font-semibold tracking-tight">{collapsed ? "GA" : "Geocoder"}</span>
-          {!collapsed ? <span className="text-2xs font-medium text-text-tertiary">Admin UI</span> : null}
+          {GEO_ADMIN_AREA}
         </DocumentNavLink>
       )}
       menu={

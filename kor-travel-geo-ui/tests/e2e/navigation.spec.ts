@@ -1,18 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN_NAV_GROUPS, ADMIN_PAGES } from "../../lib/admin-pages";
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES, DEBUG_PAGES, adminPageHeading } from "../../lib/admin-pages";
 
 // 사이드바 라벨과 페이지 h1은 lib/admin-pages.ts를 단일 소스로 공유한다.
 const navLinks = [
-  { label: "Geocode", heading: "Geocode" },
-  { label: "Reverse", heading: "Reverse" },
-  { label: "Normalize", heading: "Normalize" },
-  { label: "Explain", heading: "Explain" },
-  { label: ADMIN_PAGES.home.title, heading: ADMIN_PAGES.home.title },
+  ...Object.values(DEBUG_PAGES).map((page) => ({ label: page.title, heading: adminPageHeading(page.title) })),
+  { label: ADMIN_PAGES.home.title, heading: adminPageHeading(ADMIN_PAGES.home.title) },
   ...ADMIN_NAV_GROUPS.flatMap((group) =>
     group.keys.map((key) => ({
       label: ADMIN_PAGES[key].title,
-      heading: ADMIN_PAGES[key].title
+      heading: adminPageHeading(ADMIN_PAGES[key].title)
     }))
   )
 ];
@@ -62,7 +59,7 @@ test.describe("좌측 메뉴 이동", () => {
 test.describe("Common AdminShell 시각·이동 계약", () => {
   test("메인 콘텐츠와 공용 컨트롤이 같은 밀도·포커스 레시피를 쓴다", async ({ page }) => {
     await page.goto("/admin", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
+    await expect(page.getByRole("heading", { exact: true, name: adminPageHeading(ADMIN_PAGES.home.title) })).toBeVisible();
 
     const contentMetrics = await page.evaluate(() => {
       const firstPanel = document.querySelector<HTMLElement>(".panel");
@@ -113,7 +110,7 @@ test.describe("Common AdminShell 시각·이동 계약", () => {
     await page.goto("/debug/geocode", { waitUntil: "domcontentloaded" });
     const controlMetrics = await page.evaluate(() => {
       const input = document.querySelector<HTMLElement>("#address");
-      const button = document.querySelector<HTMLElement>("button.button");
+      const button = document.querySelector<HTMLElement>('form button[type="submit"][data-slot="button"]');
       const inputStyle = input ? getComputedStyle(input) : null;
       const buttonStyle = button ? getComputedStyle(button) : null;
       return {
@@ -128,7 +125,8 @@ test.describe("Common AdminShell 시각·이동 계약", () => {
       inputHeight: 36,
       inputRadius: "6px",
       buttonHeight: 36,
-      buttonRadius: "6px",
+      // 공통 Button(rounded-lg = geo --radius-lg 8px). 높이는 size="lg"로 입력칸 36px에 맞춘다.
+      buttonRadius: "8px",
     });
 
     const address = page.locator("#address");
@@ -147,7 +145,7 @@ test.describe("Common AdminShell 시각·이동 계약", () => {
     for (const width of [320, 375, 414, 768, 1024, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { exact: true, name: "관리 홈" })).toBeVisible();
+      await expect(page.getByRole("heading", { exact: true, name: adminPageHeading(ADMIN_PAGES.home.title) })).toBeVisible();
       const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(documentWidth, `viewport ${width}px`).toBeLessThanOrEqual(width);
     }
@@ -162,7 +160,7 @@ test.describe("Common AdminShell 시각·이동 계약", () => {
     test(`${viewport.name}: Common rail·drawer 메뉴와 문서 이동을 유지한다`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { level: 1, name: "관리 홈" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, exact: true, name: adminPageHeading(ADMIN_PAGES.home.title) })).toBeVisible();
 
       const menuButton = page.getByRole("button", { name: "메뉴 열기", exact: true });
       const toggle = page.getByRole("button", { name: "좌측 메뉴 접기" });
@@ -186,7 +184,7 @@ test.describe("Common AdminShell 시각·이동 계약", () => {
       if (!viewport.vertical) {
         await navigation.getByRole("link", { name: "Geocode", exact: true }).click();
         await page.waitForLoadState("domcontentloaded");
-        await expect(page.getByRole("heading", { name: "Geocode", exact: true })).toBeVisible();
+        await expect(page.getByRole("heading", { name: adminPageHeading(DEBUG_PAGES.geocode.title), exact: true })).toBeVisible();
         await expect(page.getByRole("dialog")).toBeHidden();
         await menuButton.click();
         await expect(page.getByRole("dialog")).toBeVisible();
