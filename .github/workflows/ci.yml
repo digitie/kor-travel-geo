@@ -20,6 +20,7 @@ jobs:
         ["kor-travel-geo-ui/Dockerfile"]
 
   backend:
+    needs: psycopg-policy
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -57,6 +58,7 @@ jobs:
   # round trip. They skip without KTG_TEST_PG_DSN, so this job provides one and then fails if
   # anything was skipped or too few tests were collected (a silent skip is not coverage).
   integration-postgis:
+    needs: psycopg-policy
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -185,6 +187,7 @@ jobs:
   # resolve: the main lib, the Dagster package, and a real Postgres-backed Dagster instance
   # through the psycopg2 storage URL the image requires (dagster_postgres is psycopg2-only).
   dagster:
+    needs: psycopg-policy
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
