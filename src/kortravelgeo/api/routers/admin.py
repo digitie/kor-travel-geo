@@ -2194,6 +2194,8 @@ async def run_backup_retention_janitor(
             "dry_run": result.dry_run,
             "expired_count": result.expired_count,
             "failed_count": result.failed_count,
+            "missing_count": result.missing_count,
+            "orphaned_count": result.orphaned_count,
             "skipped_locked": result.skipped_locked,
         },
         resource_type="artifact",

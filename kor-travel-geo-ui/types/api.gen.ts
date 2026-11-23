@@ -2550,6 +2550,26 @@ export interface components {
             /** Keep Min Count */
             keep_min_count: number;
             /**
+             * Missing Artifact Ids
+             * @default []
+             */
+            missing_artifact_ids: string[];
+            /**
+             * Missing Count
+             * @default 0
+             */
+            missing_count: number;
+            /**
+             * Orphaned Artifact Ids
+             * @default []
+             */
+            orphaned_artifact_ids: string[];
+            /**
+             * Orphaned Count
+             * @default 0
+             */
+            orphaned_count: number;
+            /**
              * Protected Count
              * @default 0
              */

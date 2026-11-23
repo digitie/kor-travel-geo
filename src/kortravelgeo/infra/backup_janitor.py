@@ -8,6 +8,16 @@ expiry is allowed by default — with two guards:
 1. ``retention_class='pinned'`` backups are never expired.
 2. the newest ``keep_min_count`` available backups are always kept, even if expired.
 
+Before applying the policy the pass reconciles the catalog with the disk: an
+``available`` local-file backup whose archive is gone (removed outside the app, e.g. a
+manual disk clean-up) is marked ``deleted`` and audited as ``db_backup.archive_missing``.
+Otherwise such a phantom row keeps counting toward ``keep_min`` (protecting one fewer
+real archive), and the restore drill — which picks the newest ``available`` backup —
+fails on it. The check only fires when the backup root that should hold the archive is
+present, and a pass in which *every* candidate (two or more) looks missing is refused —
+an empty auto-created bind directory (wrong or missing mount) must not wipe the catalog; a
+mass disappearance needs a human.
+
 The pass runs under the global ``BACKUP_JANITOR`` advisory lock; if another pass
 holds it, this one returns ``skipped_locked=True`` without touching anything.
 ``select_expired_backups`` is a pure function so the policy is unit-tested without
@@ -17,10 +27,11 @@ a database.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -28,6 +39,7 @@ from kortravelgeo.dto.admin import BackupRetentionResult, OpsArtifact
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
+    allowed_backup_roots,
     resolve_existing_archive_path,
 )
 from kortravelgeo.infra.concurrency import (
@@ -75,6 +87,54 @@ def select_expired_backups(
     return BackupRetentionSelection(eligible_ids=tuple(eligible), protected_ids=tuple(protected))
 
 
+LOCAL_FILE_STORAGE_KIND = "local_file"
+MASS_VANISH_MIN_CANDIDATES = 2
+
+
+def find_missing_archives(
+    artifacts: Sequence[OpsArtifact],
+    *,
+    roots: Sequence[Path],
+    is_dir: Callable[[Path], bool],
+    is_file: Callable[[Path], bool],
+) -> tuple[str, ...]:
+    """Pure policy: ids of ``available`` local-file backups whose archive is gone.
+
+    A row counts as missing only when (1) it is a ``local_file`` artifact with a
+    ``storage_uri``, (2) that path lies under one of the allowed backup ``roots``, (3) that
+    root directory exists (so an unmounted/misconfigured backup volume never reads as
+    "every archive was deleted"), and (4) the archive itself is not a file. Rows outside
+    every allowed root are left alone — the janitor cannot vouch for them.
+
+    Mass-vanish guard: when two or more candidates were checked and *all* of them are
+    missing, nothing is reported. Docker auto-creates an empty host directory for a bind
+    whose source is wrong, which would otherwise read as "every backup was deleted". A
+    single candidate is still settled (the one-off clean-up case this pass exists for).
+    """
+    candidates = 0
+    missing: list[str] = []
+    for artifact in artifacts:
+        if artifact.state != "available":
+            continue
+        if artifact.storage_kind != LOCAL_FILE_STORAGE_KIND or not artifact.storage_uri:
+            continue
+        path = Path(artifact.storage_uri)
+        owning_roots = [root for root in roots if path == root or root in path.parents]
+        if not owning_roots or not any(is_dir(root) for root in owning_roots):
+            continue
+        candidates += 1
+        if not is_file(path):
+            missing.append(artifact.artifact_id)
+    if candidates >= MASS_VANISH_MIN_CANDIDATES and len(missing) == candidates:
+        _LOGGER.error(
+            "backup retention: all %s checked backup archives are missing on disk — refusing "
+            "to mark them deleted (wrong/missing backup mount?); check the volume by hand",
+            candidates,
+        )
+        return ()
+    return tuple(missing)
+
+
 async def run_backup_retention_janitor(
     engine: AsyncEngine,
     settings: Settings,
@@ -90,11 +150,38 @@ async def run_backup_retention_janitor(
     key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.BACKUP_JANITOR)
     try:
         async with cross_process_lock(engine, key):
+            orphaned_ids = await _settle_orphaned_creating_backups(
+                repo, dry_run=dry_run, actor_id=actor_id
+            )
             artifacts = await repo.list_artifacts(
                 limit=1000, artifact_type=BACKUP_ARTIFACT_TYPE, state="available"
             )
+            missing_ids = find_missing_archives(
+                artifacts,
+                roots=allowed_backup_roots(settings),
+                is_dir=_safe_is_dir,
+                is_file=_safe_is_file,
+            )
+            if not dry_run:
+                for artifact_id in missing_ids:
+                    await repo.update_artifact(artifact_id, state="deleted")
+                    await repo.record_audit_event(
+                        action="db_backup.archive_missing",
+                        actor_type="system",
+                        actor_id=actor_id,
+                        outcome="succeeded",
+                        resource_type="artifact",
+                        resource_id=artifact_id,
+                        payload={"reason": "archive_missing_on_disk"},
+                    )
+                    _LOGGER.warning(
+                        "backup retention: archive missing on disk, marked deleted: %s",
+                        artifact_id,
+                    )
+            missing = set(missing_ids)
+            present = [a for a in artifacts if a.artifact_id not in missing]
             selection = select_expired_backups(
-                artifacts, now=effective_now, keep_min_count=keep
+                present, now=effective_now, keep_min_count=keep
             )
             by_id = {a.artifact_id: a for a in artifacts}
             expired_ids: list[str] = []
@@ -133,9 +220,79 @@ async def run_backup_retention_janitor(
                 failed_count=len(failed_ids),
                 expired_artifact_ids=tuple(expired_ids),
                 failed_artifact_ids=tuple(failed_ids),
+                missing_count=len(missing_ids),
+                missing_artifact_ids=missing_ids,
+                orphaned_count=len(orphaned_ids),
+                orphaned_artifact_ids=orphaned_ids,
             )
             _LOGGER.info("backup retention janitor ran", extra={"result": result.model_dump()})
             return result
     except ConcurrentExecutionError:
         _LOGGER.info("backup retention janitor skipped: lock held by another process")
         return BackupRetentionResult(dry_run=dry_run, keep_min_count=keep, skipped_locked=True)
+
+
+def _safe_is_dir(path: Path) -> bool:
+    """``Path.is_dir`` that treats an unreadable path as "cannot vouch" (``False``)."""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _safe_is_file(path: Path) -> bool:
+    """``Path.is_file`` that treats an unreadable path as present (never "missing")."""
+    try:
+        return path.is_file()
+    except OSError:
+        return True
+
+
+_TERMINAL_UNSUCCESSFUL_JOB_STATES = frozenset({"failed", "cancelled"})
+
+
+def is_orphaned_creating_backup(artifact: OpsArtifact, job_state: str | None) -> bool:
+    """Pure policy: a ``creating`` backup whose owning job already failed or was cancelled.
+
+    The job's own failure path marks its artifact ``failed``, but a job that the reconciler
+    converges to ``failed`` (worker vanished, lease expired — or a DB restored from a dump
+    taken mid-backup) never runs that path, so the artifact stays ``creating`` forever. It
+    then reads as the most recent non-failed scheduled backup in the due-check
+    (``backup_schedule._last_scheduled_backup_at``) and lingers in the catalog. Only a
+    terminal *unsuccessful* job settles it; a missing job id or a live job is left alone.
+    """
+    return artifact.state == "creating" and job_state in _TERMINAL_UNSUCCESSFUL_JOB_STATES
+
+
+async def _settle_orphaned_creating_backups(
+    repo: AdminRepository, *, dry_run: bool, actor_id: str
+) -> tuple[str, ...]:
+    """Mark ``creating`` backups of failed/cancelled jobs as ``failed`` (catalog only).
+
+    No file is touched: a crashed job may have left a partial archive, and deleting files
+    from a catalog guess is not this pass's call.
+    """
+    creating = await repo.list_artifacts(
+        limit=1000, artifact_type=BACKUP_ARTIFACT_TYPE, state="creating"
+    )
+    orphaned: list[str] = []
+    for artifact in creating:
+        if not artifact.job_id:
+            continue
+        job = await repo.get_load_job(artifact.job_id)
+        if job is None or not is_orphaned_creating_backup(artifact, job.state):
+            continue
+        orphaned.append(artifact.artifact_id)
+        if dry_run:
+            continue
+        await repo.update_artifact(artifact.artifact_id, state="failed")
+        await repo.record_audit_event(
+            action="db_backup.orphan_settled",
+            actor_type="system",
+            actor_id=actor_id,
+            outcome="succeeded",
+            resource_type="artifact",
+            resource_id=artifact.artifact_id,
+            payload={"reason": "owning_job_terminal", "job_state": job.state},
+        )
+    return tuple(orphaned)

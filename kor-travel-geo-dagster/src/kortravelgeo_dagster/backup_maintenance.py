@@ -205,9 +205,11 @@ async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
     name="retention_janitor",
     description=(
         "Expire db_backup archives whose TTL passed, keeping pinned ones and the newest "
-        "keep_min (client.run_backup_retention_janitor, T-230). A pass that could not remove "
-        "an archive raises Failure; skipped_locked (another janitor holds the advisory lock) is "
-        "a no-op success."
+        "keep_min (client.run_backup_retention_janitor, T-230). Before that it marks "
+        "available backups whose archive vanished from disk 'deleted' and creating rows of "
+        "failed/cancelled jobs 'failed' (missing_count/orphaned_count). A pass that could not "
+        "remove an archive raises Failure; skipped_locked (another janitor holds the advisory "
+        "lock) is a no-op success."
     ),
     required_resource_keys={"client"},
     config_schema={
@@ -242,13 +244,25 @@ async def retention_janitor_op(context: OpExecutionContext) -> dict[str, object]
         )
     else:
         context.log.info(
-            "backup retention janitor: dry_run=%s scanned=%s protected=%s expired=%s failed=%s",
+            "backup retention janitor: dry_run=%s scanned=%s protected=%s expired=%s failed=%s "
+            "missing=%s orphaned=%s",
             result.dry_run,
             result.scanned,
             result.protected_count,
             result.expired_count,
             result.failed_count,
+            result.missing_count,
+            result.orphaned_count,
         )
+        if result.missing_count:
+            # A backup archive vanished outside the app (e.g. a manual disk clean-up): the
+            # catalog now says so, but the operator should know the recovery set shrank.
+            context.log.warning(
+                "backup retention janitor: %s backup archive(s) missing on disk, marked "
+                "deleted: %s",
+                result.missing_count,
+                ", ".join(result.missing_artifact_ids),
+            )
 
     metadata: dict[str, object] = {
         "dry_run": result.dry_run,
@@ -260,6 +274,10 @@ async def retention_janitor_op(context: OpExecutionContext) -> dict[str, object]
         "failed_count": result.failed_count,
         "expired_artifact_ids": list(result.expired_artifact_ids),
         "failed_artifact_ids": list(result.failed_artifact_ids),
+        "missing_count": result.missing_count,
+        "missing_artifact_ids": list(result.missing_artifact_ids),
+        "orphaned_count": result.orphaned_count,
+        "orphaned_artifact_ids": list(result.orphaned_artifact_ids),
     }
     context.add_output_metadata(metadata)
     if result.failed_count:

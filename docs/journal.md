@@ -1,3 +1,12 @@
+## 2026-11-24 — 백업 카탈로그와 실제 파일 정합성(janitor), 운영 백업 정지 원인 조사 (by claude)
+
+- 계기: Map 저장소 수집 실패 감사(2026-11-23) §4 #18 — 운영 장비에서 `scheduled_backup`·`backup_restore_drill_daily`가 STOPPED이고 마지막 `db_backup` 성공이 10-29였다.
+- 정지 원인(읽기 전용 확인): 코드 결함이 아니라 ADR-070 D5·소유자 §14-7의 "운영 장비에서 geo 백업·drill off" 결정이다. 코드 기본값은 `scheduled_backup` RUNNING·drill STOPPED이며, 이전 때(10-15) 만든 instigator 행이 STOPPED로 남았다. API의 `KTG_BACKUP_SCHEDULE_ENABLED`도 `false`라 schedule만 켜면 run-due가 `disabled`로 no-op이다. 10-29 백업은 적재 전 UI 수동 백업이다.
+- 새로 찾은 결함 1: 10-29 백업 artifact는 `available`인데 파일이 없다. 백업 디렉터리는 비어 있고 수정 시각이 디스크 가득 사건(11-17) 직후다 — 앱 밖에서 지워졌다. 카탈로그가 실제와 어긋나면 janitor의 `keep_min`이 없는 파일을 보호해 실제 보관본이 하나 줄고, restore drill은 가장 새 `available`을 골라 실패한다.
+- 새로 찾은 결함 2: 10-12 scheduled 백업 job은 reconciler가 `failed`로 수렴시켰지만 artifact는 `creating`으로 남았다(작업 자신의 실패 경로를 타지 않음). due-check는 `failed`만 제외하므로 이 좀비 행이 "마지막 scheduled 백업"으로 읽힌다.
+- 수정: 매일 도는 retention janitor가 정책 적용 전에 카탈로그를 디스크와 맞춘다. (1) 허용 백업 루트 아래의 `available` local-file 백업인데 파일이 없으면 `deleted` + 감사 `db_backup.archive_missing`. 루트 디렉터리 자체가 없거나, 확인한 후보가 둘 이상인데 전부 없으면(빈 자동 생성 bind 등 마운트 이상 의심) 건드리지 않고 오류 로그만 남긴다. (2) 소유 job이 `failed`/`cancelled`인 `creating` 백업은 `failed` + 감사 `db_backup.orphan_settled`(파일은 건드리지 않음). dry run은 보고만 한다. 관리 API의 janitor 감사 이벤트에도 두 건수를 싣는다(적대 리뷰 반영). `BackupRetentionResult`에 `missing_*`·`orphaned_*`를 더했고 Dagster op 메타데이터·경고 로그에도 싣는다.
+- 운영 재가동(소유자 결정, 운영 변경은 Codex 몫)은 env(`KOR_TRAVEL_GEO_BACKUP_SCHEDULE_ENABLED=true`, 보존 TTL 축소) → API·코드 서버 재생성 → schedule 시작 순서다. 현재 TTL 30일·24시간 주기면 보관본 약 30개(약 135 GB)가 PG와 같은 디스크에 쌓이므로 TTL을 먼저 줄여야 한다.
+
 ## 2026-11-23 — 관리 UI Common 0.2.5 정본 적용
 
 - Common main 빌드의 UI 0.2.5·tokens 0.1.6·toast 0.1.5 팩을 가져오고 패키지 잠금과 CI 정책을 해당 카탈로그에 맞췄다. 공용 입력과 선택 컨트롤에 적용되던 Geo의 포커스 재정의를 걷었다.
