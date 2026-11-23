@@ -16,7 +16,7 @@ import pytest
 from packaging.requirements import Requirement
 
 _ROOT = Path(__file__).resolve().parents[2]
-_COMMON_COMMIT = "67efe2e546ecef41e54a866bf4862d608ace343d"
+_COMMON_COMMIT = "ec5e16888fd3de069762f34c3cd06fe867e06688"
 
 
 def test_dagster_package_installs_exact_common_with_explicit_grpc_extra() -> None:
