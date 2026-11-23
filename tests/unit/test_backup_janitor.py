@@ -155,6 +155,17 @@ def test_nested_path_under_root_counts_as_owned() -> None:
     assert _missing(arts, files=set()) == {"nested"}
 
 
+def test_all_candidates_missing_is_refused_as_a_suspect_mount() -> None:
+    # an empty auto-created bind dir must not read as "every backup was deleted"
+    arts = [_art("a"), _art("b"), _art("c")]
+    assert _missing(arts, files=set()) == set()
+
+
+def test_mass_vanish_guard_still_settles_partial_loss() -> None:
+    arts = [_art("a"), _art("b"), _art("c")]
+    assert _missing(arts, files={"/backups/c.tar.zst"}) == {"a", "b"}
+
+
 def test_absent_root_never_reads_as_every_archive_deleted() -> None:
     # a container started without the backup mount must not wipe the catalog
     arts = [_art("a"), _art("b")]

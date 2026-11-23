@@ -6,7 +6,7 @@
 
 ### 변경
 
-- 백업 보존 janitor가 정책 적용 전에 카탈로그를 디스크와 맞춘다. 파일이 사라진 `available` 백업은 `deleted`(감사 `db_backup.archive_missing`), 실패·취소된 작업의 `creating` 백업은 `failed`(감사 `db_backup.orphan_settled`)로 바꾸고 결과에 `missing_*`·`orphaned_*`를 싣는다. 사라진 파일이 `keep_min` 자리를 차지하거나 restore drill이 없는 파일을 고르는 일을 막는다. 백업 루트가 마운트되지 않았으면 건드리지 않는다.
+- 백업 보존 janitor가 정책 적용 전에 카탈로그를 디스크와 맞춘다. 파일이 사라진 `available` 백업은 `deleted`(감사 `db_backup.archive_missing`), 실패·취소된 작업의 `creating` 백업은 `failed`(감사 `db_backup.orphan_settled`)로 바꾸고 결과에 `missing_*`·`orphaned_*`를 싣는다. 사라진 파일이 `keep_min` 자리를 차지하거나 restore drill이 없는 파일을 고르는 일을 막는다. 백업 루트가 없거나 둘 이상의 후보가 한꺼번에 사라졌으면(마운트 이상 의심) 건드리지 않는다.
 - 관리 UI에 Common UI 0.2.5·tokens 0.1.6·toast 0.1.5 정본을 적용한다. 공용 입력과 선택 컨트롤의 키보드 포커스 스타일은 Common을 따른다.
 
 ### 추가

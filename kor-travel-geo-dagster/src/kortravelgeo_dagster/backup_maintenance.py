@@ -208,8 +208,8 @@ async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
         "keep_min (client.run_backup_retention_janitor, T-230). Before that it marks "
         "available backups whose archive vanished from disk 'deleted' and creating rows of "
         "failed/cancelled jobs 'failed' (missing_count/orphaned_count). A pass that could not "
-        "remove an archive raises Failure; skipped_locked (another janitor holds the advisory lock) is "
-        "a no-op success."
+        "remove an archive raises Failure; skipped_locked (another janitor holds the advisory "
+        "lock) is a no-op success."
     ),
     required_resource_keys={"client"},
     config_schema={

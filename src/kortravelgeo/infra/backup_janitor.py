@@ -14,7 +14,9 @@ manual disk clean-up) is marked ``deleted`` and audited as ``db_backup.archive_m
 Otherwise such a phantom row keeps counting toward ``keep_min`` (protecting one fewer
 real archive), and the restore drill — which picks the newest ``available`` backup —
 fails on it. The check only fires when the backup root that should hold the archive is
-present, so a container started without the backup mount does not wipe the catalog.
+present, and a pass in which *every* candidate (two or more) looks missing is refused —
+an empty auto-created bind directory (wrong or missing mount) must not wipe the catalog; a
+mass disappearance needs a human.
 
 The pass runs under the global ``BACKUP_JANITOR`` advisory lock; if another pass
 holds it, this one returns ``skipped_locked=True`` without touching anything.
@@ -86,6 +88,7 @@ def select_expired_backups(
 
 
 LOCAL_FILE_STORAGE_KIND = "local_file"
+MASS_VANISH_MIN_CANDIDATES = 2
 
 
 def find_missing_archives(
@@ -102,7 +105,13 @@ def find_missing_archives(
     root directory exists (so an unmounted/misconfigured backup volume never reads as
     "every archive was deleted"), and (4) the archive itself is not a file. Rows outside
     every allowed root are left alone — the janitor cannot vouch for them.
+
+    Mass-vanish guard: when two or more candidates were checked and *all* of them are
+    missing, nothing is reported. Docker auto-creates an empty host directory for a bind
+    whose source is wrong, which would otherwise read as "every backup was deleted". A
+    single candidate is still settled (the one-off clean-up case this pass exists for).
     """
+    candidates = 0
     missing: list[str] = []
     for artifact in artifacts:
         if artifact.state != "available":
@@ -113,8 +122,16 @@ def find_missing_archives(
         owning_roots = [root for root in roots if path == root or root in path.parents]
         if not owning_roots or not any(is_dir(root) for root in owning_roots):
             continue
+        candidates += 1
         if not is_file(path):
             missing.append(artifact.artifact_id)
+    if candidates >= MASS_VANISH_MIN_CANDIDATES and len(missing) == candidates:
+        _LOGGER.error(
+            "backup retention: all %s checked backup archives are missing on disk — refusing "
+            "to mark them deleted (wrong/missing backup mount?); check the volume by hand",
+            candidates,
+        )
+        return ()
     return tuple(missing)
 
 
@@ -142,8 +159,8 @@ async def run_backup_retention_janitor(
             missing_ids = find_missing_archives(
                 artifacts,
                 roots=allowed_backup_roots(settings),
-                is_dir=Path.is_dir,
-                is_file=Path.is_file,
+                is_dir=_safe_is_dir,
+                is_file=_safe_is_file,
             )
             if not dry_run:
                 for artifact_id in missing_ids:
@@ -213,6 +230,22 @@ async def run_backup_retention_janitor(
     except ConcurrentExecutionError:
         _LOGGER.info("backup retention janitor skipped: lock held by another process")
         return BackupRetentionResult(dry_run=dry_run, keep_min_count=keep, skipped_locked=True)
+
+
+def _safe_is_dir(path: Path) -> bool:
+    """``Path.is_dir`` that treats an unreadable path as "cannot vouch" (``False``)."""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _safe_is_file(path: Path) -> bool:
+    """``Path.is_file`` that treats an unreadable path as present (never "missing")."""
+    try:
+        return path.is_file()
+    except OSError:
+        return True
 
 
 _TERMINAL_UNSUCCESSFUL_JOB_STATES = frozenset({"failed", "cancelled"})
