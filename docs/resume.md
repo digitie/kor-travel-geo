@@ -1,3 +1,7 @@
+## 2026-11-23 — 관리 UI Common 0.2.5
+
+Geo 관리 UI가 Common UI 0.2.5·tokens 0.1.6·toast 0.1.5 정본을 사용한다. 팩과 검증 정책의 출처는 [정본 산출물 채택](../kor-travel-geo-ui/vendor/COMMON-RELEASE.md)에 기록했다.
+
 ## 2026-11-21 — 관리 UI 실행 이미지 캐시
 
 Dockerfile의 실행 이미지에서 잠금 파일로 설치한 의존성을 Next 산출물과 분리했다. 로컬 native amd64에서 실제 UI의 CSS만 바꾸어 빌드했을 때 의존성 복사 캐시 적중과 새 CSS 반영을 확인했다. ARM64 배포와 이후 UI 변경 시 재사용을 확인한다. 상세 실측은 [작업 기록](journal.md)에 있다.

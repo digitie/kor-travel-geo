@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 변경
+
+- 관리 UI에 Common UI 0.2.5·tokens 0.1.6·toast 0.1.5 정본을 적용한다. 공용 입력과 선택 컨트롤의 키보드 포커스 스타일은 Common을 따른다.
+
 ### 추가
 
 - 관리 UI 모든 화면의 상단 바 제목을 "지오 - 페이지" 한 줄로 맞추고(탭 제목 동일) 셸의 앱 설명 워드마크("Geocoder Admin UI")를 영역 이름으로 바꾼다. 공통 버튼의 hover·active·focus를 덮던 전역 `[data-slot="button"]`·`.button` 규칙을 걷어 테두리가 굵어지거나 이중이 되지 않게 하고, 전역 focus outline은 `@layer base`로 옮긴다(common FS-7.8). 조회 화면 제출 버튼도 공통 `Button`으로 바꾼다.

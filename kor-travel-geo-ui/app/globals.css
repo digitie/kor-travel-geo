@@ -367,12 +367,12 @@ body {
   width: 100%;
 }
 
-.field input:focus-visible,
-.field select:focus-visible,
-.field textarea:focus-visible,
-.filter-bar input:focus-visible,
-.filter-bar select:focus-visible,
-.vtable-search:focus-visible {
+.field input:not([data-slot="input"]):focus-visible,
+.field select:not([data-slot="native-select"]):focus-visible,
+.field textarea:not([data-slot="textarea"]):focus-visible,
+.filter-bar input:not([data-slot="input"]):focus-visible,
+.filter-bar select:not([data-slot="native-select"]):focus-visible,
+.vtable-search:not([data-slot="input"]):focus-visible {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
   outline: none;
@@ -2205,12 +2205,12 @@ body {
     box-shadow var(--duration-fast) var(--ease-default);
 }
 
-.field input:focus-visible,
-.field select:focus-visible,
-.field textarea:focus-visible,
-.filter-bar input:focus-visible,
-.filter-bar select:focus-visible,
-.vtable-search:focus-visible {
+.field input:not([data-slot="input"]):focus-visible,
+.field select:not([data-slot="native-select"]):focus-visible,
+.field textarea:not([data-slot="textarea"]):focus-visible,
+.filter-bar input:not([data-slot="input"]):focus-visible,
+.filter-bar select:not([data-slot="native-select"]):focus-visible,
+.vtable-search:not([data-slot="input"]):focus-visible {
   background: var(--surface-card);
   border-color: var(--brand);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 24%, transparent);
@@ -2619,14 +2619,12 @@ body {
   padding-inline: 0.75rem;
 }
 
-.field input:focus-visible,
-.field select:focus-visible,
-.field textarea:focus-visible,
-.filter-bar input:focus-visible,
-.filter-bar select:focus-visible,
-.vtable-search:focus-visible,
-[data-slot="input"]:focus-visible,
-[data-slot="native-select"]:focus-visible {
+.field input:not([data-slot="input"]):focus-visible,
+.field select:not([data-slot="native-select"]):focus-visible,
+.field textarea:not([data-slot="textarea"]):focus-visible,
+.filter-bar input:not([data-slot="input"]):focus-visible,
+.filter-bar select:not([data-slot="native-select"]):focus-visible,
+.vtable-search:not([data-slot="input"]):focus-visible {
   border-color: var(--brand);
   box-shadow: none;
   outline: 2px solid var(--brand);
@@ -2670,10 +2668,9 @@ body {
   }
 }
 
-/* 입력·선택·탭 컨트롤의 기존 앱 focus 규칙(@kor-travel/ui 0.2.3에서 미변경, FS-7.8 #6).
-   <button>·<a>는 여기서 빠졌다 — 공통 Button이 자체 outline(2px, offset 2px, --kt-focus)을 갖고,
-   나머지 링크·버튼의 전역 outline은 @layer base에만 둔다(FS-7.8 #3). */
-:where(input, select, textarea, [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"]):focus-visible {
+/* 공용 컨트롤은 Common의 포커스 스타일을 사용한다. Geo의 기본 스타일은 나머지 컨트롤에 적용한다. */
+:where(input, select, textarea, [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"]):not(:is([data-slot="input"], [data-slot="native-select"], [data-slot="textarea"], [data-slot="tabs-trigger"],
+    [data-slot="checkbox"], [data-slot="switch"], [data-slot="radio-group-item"], [data-slot="select-trigger"])):focus-visible {
   box-shadow: none !important;
   outline: 2px solid var(--brand);
   outline-offset: 2px;
