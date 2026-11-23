@@ -112,8 +112,21 @@ def _drill_result(status: str):
     )
 
 
-def _janitor_result(*, expired=0, failed=0, skipped_locked=False, dry_run=False, keep_min=3):
+def _janitor_result(
+    *,
+    expired=0,
+    failed=0,
+    skipped_locked=False,
+    dry_run=False,
+    keep_min=3,
+    missing=0,
+    orphaned=0,
+):
     return SimpleNamespace(
+        missing_count=missing,
+        missing_artifact_ids=tuple(f"gone-{i}" for i in range(missing)),
+        orphaned_count=orphaned,
+        orphaned_artifact_ids=tuple(f"zombie-{i}" for i in range(orphaned)),
         dry_run=dry_run,
         keep_min_count=keep_min,
         skipped_locked=skipped_locked,
@@ -261,6 +274,20 @@ async def test_retention_janitor_op_defaults_pass_settings_keep_min() -> None:
     assert result["expired_count"] == 2
     assert result["expired_artifact_ids"] == ["exp-0", "exp-1"]
     assert result["failed_count"] == 0
+    assert result["missing_count"] == 0
+    assert result["orphaned_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_retention_janitor_op_surfaces_catalog_reconciliation() -> None:
+    client = _FakeClient(janitor=_janitor_result(missing=1, orphaned=2))
+    with build_op_context(resources={"client": client}, op_config={}) as ctx:
+        result = await backup_maintenance.retention_janitor_op(ctx)
+    # missing archives / orphaned creating rows are reported, not a failure of the pass
+    assert result["missing_count"] == 1
+    assert result["missing_artifact_ids"] == ["gone-0"]
+    assert result["orphaned_count"] == 2
+    assert result["orphaned_artifact_ids"] == ["zombie-0", "zombie-1"]
 
 
 @pytest.mark.asyncio

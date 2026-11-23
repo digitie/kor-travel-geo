@@ -1048,6 +1048,32 @@
             "title": "Keep Min Count",
             "type": "integer"
           },
+          "missing_artifact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Artifact Ids",
+            "type": "array"
+          },
+          "missing_count": {
+            "default": 0,
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "orphaned_artifact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Orphaned Artifact Ids",
+            "type": "array"
+          },
+          "orphaned_count": {
+            "default": 0,
+            "title": "Orphaned Count",
+            "type": "integer"
+          },
           "protected_count": {
             "default": 0,
             "title": "Protected Count",

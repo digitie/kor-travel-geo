@@ -1011,6 +1011,12 @@ class BackupRetentionResult(FrozenModel):
     failed_count: int = 0
     expired_artifact_ids: tuple[str, ...] = ()
     failed_artifact_ids: tuple[str, ...] = ()
+    # Catalog reconciliation (2026-11-24): ``available`` rows whose archive is gone from
+    # disk (marked ``deleted``) and ``creating`` rows of failed/cancelled jobs (``failed``).
+    missing_count: int = 0
+    missing_artifact_ids: tuple[str, ...] = ()
+    orphaned_count: int = 0
+    orphaned_artifact_ids: tuple[str, ...] = ()
 
 
 class ScheduledBackupStatus(FrozenModel):
