@@ -1,3 +1,7 @@
+## 2026-11-28 — Geo 관리 UI Common 0.2.7 적용
+
+관리 UI는 Common 카탈로그의 UI 0.2.7, tokens 0.1.8, toast 0.1.7로 갱신했다. 넓은 내용이 포함된 대화상자의 가로 넘침 수정이 포함된다. Python 패키지는 정본 0.1.0.dev2를 사용한다.
+
 ## 2026-11-24 — 백업 카탈로그 정합성(janitor)
 
 retention janitor가 매 실행마다 파일이 사라진 `available` 백업을 `deleted`로, 실패·취소된 job의 `creating` 백업을 `failed`로 정리한다. 운영 장비의 백업 정지는 ADR-070 D5 결정이고, 재가동 순서(env·TTL 축소 → 재생성 → schedule 시작)는 [작업 기록](journal.md)에 있다. 배포 뒤 첫 janitor 실행(06:00 KST)에서 `missing_count=1`(10-29 행)·`orphaned_count=1`(10-12 행)을 확인한다.

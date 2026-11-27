@@ -1,3 +1,7 @@
+## 2026-11-28 — Geo 관리 UI Common 0.2.7 적용
+
+관리 UI는 Common 카탈로그의 UI 0.2.7, tokens 0.1.8, toast 0.1.7로 갱신했다. 넓은 내용이 포함된 대화상자의 가로 넘침 수정이 포함된다. Python 패키지는 정본 0.1.0.dev2를 사용한다.
+
 ## 2026-11-24 — 백업 카탈로그와 실제 파일 정합성(janitor), 운영 백업 정지 원인 조사 (by claude)
 
 - 계기: Map 저장소 수집 실패 감사(2026-11-23) §4 #18 — 운영 장비에서 `scheduled_backup`·`backup_restore_drill_daily`가 STOPPED이고 마지막 `db_backup` 성공이 10-29였다.
