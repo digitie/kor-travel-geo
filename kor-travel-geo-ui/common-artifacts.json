@@ -1,24 +1,24 @@
 {
   "status": "CANDIDATE_NOT_RELEASED",
-  "candidate": "field-focus-ui-0.2.5-main-fe141143cc8b",
+  "candidate": "dialog-overflow-ui-0.2.7-main-f159ef3ca288",
   "sources": {
-    "common": "fe141143cc8ba75e8fd0b6134e1c9e518e294fa2",
+    "common": "f159ef3ca2883fae6dd33f0d0d46dc2bf98032e1",
     "maplibre-vworld-react": "79b70997de8dd4a6bcc9630233f14f273cb27991",
     "lightningcss": "748651cbd845971e65c411166ddee101745dab21",
     "serde-content": "18e53fcf6f8ace093a292891b34fa3411192617d",
     "radix-ui-primitives": "1752a539c8d5ae57961a0fa2702d2573d48fefe7",
-    "kor-travel-toast": "fe141143cc8ba75e8fd0b6134e1c9e518e294fa2"
+    "kor-travel-toast": "f159ef3ca2883fae6dd33f0d0d46dc2bf98032e1"
   },
   "packages": {
     "@kor-travel/tokens": {
-      "version": "0.1.6",
-      "filename": "kor-travel-tokens-0.1.6.tgz",
-      "integrity": "sha512-y9uEIo9dTG/XlohG+kQs9goL10tsEVgHLwUA81XMskts1oZJaim+7UBsG773l/Q1W54MUOFWF1BLsmlFNjGrAA=="
+      "version": "0.1.8",
+      "filename": "kor-travel-tokens-0.1.8.tgz",
+      "integrity": "sha512-MzpLXqvDfbWEgu5+rUIHMDXIL76gObs/6AIm8Yz4PbeSGb5aEK3x9+58/MNcP/F8DAlGsO4r/5IjKeACoDQTsg=="
     },
     "@kor-travel/ui": {
-      "version": "0.2.5",
-      "filename": "kor-travel-ui-0.2.5.tgz",
-      "integrity": "sha512-GKICXj4/I4pZQHvbrLy4qL7Bbtn757soe7g8M9phZrNXOsSXtU5bFhharNAWpjD6/qXxSyVWtfTxrZqsgAk2hA=="
+      "version": "0.2.7",
+      "filename": "kor-travel-ui-0.2.7.tgz",
+      "integrity": "sha512-/YbuFJzB2luKmUjiqVCXP3pdlWxD54qKA+4UYtRZi5OUH8ztOxwMWLonY16kcIQoMrBUaz9qTEFEHsDOIUFJRQ=="
     },
     "lightningcss": {
       "version": "1.33.0+nativecss.fix.4",
@@ -46,9 +46,9 @@
       "integrity": "sha512-v3XweXrUSZ/QfrMVvYmsAkVNDnvcN21QKbSrViXYf0OQf5Ue9xSgqQIukgGjsYMEBQ5qxQW8fnOC9t1Y0ENPXw=="
     },
     "@kor-travel/toast": {
-      "version": "0.1.5",
-      "filename": "kor-travel-toast-0.1.5.tgz",
-      "integrity": "sha512-pZ7nnBq28tH18xCMqCXkFJ29sKcisVZvy8AuUblu2vY7JxceQwi8L9fYjJkVMJ/xtkkW9fTDenzBQez0SF/FGA=="
+      "version": "0.1.7",
+      "filename": "kor-travel-toast-0.1.7.tgz",
+      "integrity": "sha512-zFYPDjZRxlKt7x5M2X94zdWAn6gN4o4c9uOx/attVrGO9jwvMELAk74J5sAsQE10l9pimccwN+ZxFcTMz5gp2A=="
     }
   }
 }

@@ -2,6 +2,10 @@
 
 본 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따른다. 버전은 [Semantic Versioning](https://semver.org/lang/ko/)을 따른다.
 
+## 2026-11-28 — Geo 관리 UI Common 0.2.7 적용
+
+관리 UI는 Common 카탈로그의 UI 0.2.7, tokens 0.1.8, toast 0.1.7로 갱신했다. 넓은 내용이 포함된 대화상자의 가로 넘침 수정이 포함된다. Python 패키지는 정본 0.1.0.dev2를 사용한다.
+
 ## [Unreleased]
 
 ### 변경
