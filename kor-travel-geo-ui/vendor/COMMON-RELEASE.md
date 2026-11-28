@@ -1,7 +1,7 @@
 # Common 정본 산출물 채택
 
 - 제작 커밋 `e131a1efb195f618561fd6ca00833007ddc2721b`
-- 카탈로그와 CI 정책 커밋 `792fa2e419fe80fe0079f288aa1b1dbcd017cbaa`
+- 카탈로그와 CI 정책 커밋 `73761c5d0a14e3df409e5b1c86f954eb219dae66`
 - 산출물 번호 `15246325203`. [Common main 제작 워크플로](https://github.com/digitie/kor-travel-common/actions/runs/46101271077)
 - ZIP SHA256 `e52a06fe96aeebbd1215e0673acf36fbf165f49141d3f65412ac301c4f67ae7f`
 
