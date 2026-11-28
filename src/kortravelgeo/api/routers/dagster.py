@@ -24,6 +24,7 @@ from kortravelcommon.dagster_ops import (
     RunAction,
     RunControlError,
     execute_run_action,
+    parse_daemon_statuses,
     run_actions,
     supports_full_reexecution,
 )
@@ -561,31 +562,6 @@ def _run_belongs_to_location(raw_run: JsonDict, settings: Settings) -> bool:
     )
 
 
-def _parse_daemons(raw_instance: object) -> list[DagsterDaemonStatus]:
-    health = _dict(_dict(raw_instance).get("daemonHealth"))
-    statuses: list[DagsterDaemonStatus] = []
-    for value in _list(health.get("allDaemonStatuses")):
-        daemon = _dict(value)
-        kind = _optional_string(daemon.get("daemonType"))
-        if not kind:
-            continue
-        healthy = daemon.get("healthy")
-        statuses.append(
-            DagsterDaemonStatus(
-                daemon_type=kind,
-                required=daemon.get("required") is True,
-                healthy=healthy if isinstance(healthy, bool) else None,
-                last_heartbeat_time=_optional_float(daemon.get("lastHeartbeatTime")),
-                error_classes=[
-                    name
-                    for error in _list(daemon.get("lastHeartbeatErrors"))
-                    if (name := _optional_string(_dict(error).get("className")))
-                ],
-            )
-        )
-    return statuses
-
-
 def _run_tags(entry: JsonDict) -> dict[str, str]:
     return {
         _string(_dict(tag).get("key")): _string(_dict(tag).get("value"))
@@ -940,7 +916,10 @@ async def get_dagster_summary(
             run_counts=run_counts,
             repositories=repositories,
             recent_runs=recent_runs,
-            daemons=_parse_daemons(data.get("instance")),
+            daemons=[
+                DagsterDaemonStatus.model_validate(daemon)
+                for daemon in parse_daemon_statuses(data.get("instance"))
+            ],
             errors=errors,
         ),
         started_at=started_at,
