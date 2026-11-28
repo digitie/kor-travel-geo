@@ -22,11 +22,14 @@ export type DagsterSensor = components["schemas"]["DagsterSensor"];
 export type DagsterSummaryData = components["schemas"]["DagsterSummaryData"];
 export type DagsterSummaryResponse = components["schemas"]["DagsterSummaryResponse"];
 
+export type DagsterRunAction = components["schemas"]["DagsterRunActionRequest"]["action"];
+
 export const dagsterPaths = {
   summary: "/ops/dagster/summary",
   runDetail: (runId: string) => `/ops/dagster/runs/${encodeURIComponent(runId)}`,
   runFailures: "/ops/dagster/run-failures",
-  runFailureAck: (runId: string) => `/ops/dagster/runs/${encodeURIComponent(runId)}/ack`
+  runFailureAck: (runId: string) => `/ops/dagster/runs/${encodeURIComponent(runId)}/ack`,
+  runAction: (runId: string) => `/ops/dagster/runs/${encodeURIComponent(runId)}/action`
 };
 
 export function useDagsterSummaryQuery() {
@@ -44,10 +47,16 @@ export function useDagsterSummaryQuery() {
   });
 }
 
-export function useDagsterRunDetailQuery(runId: string | null) {
+export function useDagsterRunDetailQuery(runId: string | null, after: string | null = null) {
   return useQuery({
-    queryKey: ["dagster", "run", runId],
-    queryFn: ({ signal }) => requestJson<DagsterRunDetailResponse>(dagsterPaths.runDetail(runId ?? ""), { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }),
+    queryKey: ["dagster", "run", runId, after],
+    queryFn: ({ signal }) => {
+      const path = dagsterPaths.runDetail(runId ?? "");
+      return requestJson<DagsterRunDetailResponse>(
+        after ? `${path}?after=${encodeURIComponent(after)}` : path,
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) }
+      );
+    },
     enabled: Boolean(runId),
     retry: false,
     refetchInterval: query => {
@@ -79,6 +88,23 @@ export function useAckRunFailureMutation() {
     onError: (error) => {
       toast.error("실패 알림 확인 실패", getErrorMessage(error));
     }
+  });
+}
+
+export function useDagsterRunActionMutation(onReexecuted: (runId: string) => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, action }: { runId: string; action: DagsterRunAction }) =>
+      postJson<components["schemas"]["DagsterRunActionResponse"]>(dagsterPaths.runAction(runId), { action }),
+    retry: false,
+    onSuccess: (result) => {
+      toast.success(result.action === "force-cancel" ? "즉시 취소를 요청했습니다." : "재실행을 접수했습니다.");
+      if (result.action === "reexecute") onReexecuted(result.run_id);
+    },
+    onError: (error) => {
+      toast.error("Dagster 실행 제어 실패", getErrorMessage(error));
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["dagster"] })
   });
 }
 

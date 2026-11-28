@@ -15,9 +15,19 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, Literal
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from kortravelcommon.dagster_ops import (
+    DAEMON_HEALTH_FIELDS,
+    RunAction,
+    RunControlError,
+    execute_run_action,
+    parse_daemon_statuses,
+    run_actions,
+    supports_full_reexecution,
+)
 
 from kortravelgeo.api._dagster_client import (
     DagsterUrlConfigurationError,
@@ -28,17 +38,26 @@ from kortravelgeo.api._dagster_client import (
     _validated_http_url,
 )
 from kortravelgeo.api.deps import get_client
-from kortravelgeo.api.security import KNOWN_ADMIN_ROLES, require_role
+from kortravelgeo.api.security import (
+    KNOWN_ADMIN_ROLES,
+    ROLE_DESTRUCTIVE_ADMIN,
+    RequestContext,
+    get_request_context,
+    require_role,
+)
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.admin import OpsArtifact, RunFailureAlert
 from kortravelgeo.dto.dagster import (
     DagsterAssetGroup,
     DagsterBackupArtifact,
+    DagsterDaemonStatus,
     DagsterGraphqlError,
     DagsterInstigationTick,
     DagsterJob,
     DagsterRepository,
     DagsterResponseMeta,
+    DagsterRunActionRequest,
+    DagsterRunActionResponse,
     DagsterRunDetailData,
     DagsterRunDetailResponse,
     DagsterRunEvent,
@@ -72,7 +91,8 @@ _JOB_ID_TAG = "kor_travel_geo.job_id"
 # Dagster sets on every run at creation (``<repository>@<location>``; GraphQL hides it from
 # ``tags`` output, but the filter still matches it). Against today's single-tenant webserver
 # the result is identical, so this ships before the cutover.
-_DAGSTER_SUMMARY_QUERY = """
+_DAGSTER_SUMMARY_QUERY = (
+    """
 query KorTravelGeoDagsterSummary(
   $limit: Int!,
   $repositoryLocationName: String!,
@@ -80,7 +100,9 @@ query KorTravelGeoDagsterSummary(
   $repositoryLabel: String!
 ) {
   version
-  repositoryOrError(
+"""
+    + DAEMON_HEALTH_FIELDS
+    + """  repositoryOrError(
     repositorySelector: {
       repositoryLocationName: $repositoryLocationName,
       repositoryName: $repositoryName
@@ -188,6 +210,7 @@ query KorTravelGeoDagsterSummary(
   }
 }
 """
+)
 
 _DAGSTER_RUN_DETAIL_QUERY = """
 query KorTravelGeoDagsterRunDetail(
@@ -202,6 +225,8 @@ query KorTravelGeoDagsterRunDetail(
       startTime
       endTime
       updateTime
+      canTerminate
+      mode solidSelection stepKeysToExecute assetSelectionCount assetCheckSelectionCount
       tags { key value }
       repositoryOrigin { repositoryLocationName repositoryName }
       eventConnection(limit: $eventLimit, afterCursor: $afterCursor) {
@@ -891,6 +916,10 @@ async def get_dagster_summary(
             run_counts=run_counts,
             repositories=repositories,
             recent_runs=recent_runs,
+            daemons=[
+                DagsterDaemonStatus.model_validate(daemon)
+                for daemon in parse_daemon_statuses(data.get("instance"))
+            ],
             errors=errors,
         ),
         started_at=started_at,
@@ -916,6 +945,7 @@ async def get_dagster_run_detail(
     ),
     settings: Settings = Depends(get_settings),
     address_client: AsyncAddressClient = Depends(get_client),
+    context: RequestContext = Depends(get_request_context),
 ) -> DagsterRunDetailResponse:
     started_at = perf_counter()
     checked_at = datetime.now(UTC)
@@ -980,7 +1010,20 @@ async def get_dagster_run_detail(
         checked_at=checked_at,
         settings=settings,
     )
-    if detail.status == "ok":
+    if detail.status == "ok" and detail.run is not None:
+        raw_run = _dict(data.get("runOrError"))
+        allowed = run_actions(
+            detail.run.status,
+            can_terminate=raw_run.get("canTerminate") is True,
+            has_app_state=(
+                _JOB_ID_TAG in detail.run.tags
+                or not supports_full_reexecution(raw_run, detail.run.tags)
+            ),
+        )
+        if ROLE_DESTRUCTIVE_ADMIN in context.roles:
+            detail = detail.model_copy(
+                update={"allowed_actions": [action.value for action in allowed]}
+            )
         detail = await _with_backup_artifact(
             detail,
             client=address_client,
@@ -1048,3 +1091,45 @@ async def acknowledge_dagster_run_failure(
         data=_run_failure_alert_dto(alert),
         meta=_response_meta(started_at=started_at),
     )
+
+
+@router.post(
+    "/runs/{run_id}/action",
+    response_model=DagsterRunActionResponse,
+    dependencies=[Depends(require_role(ROLE_DESTRUCTIVE_ADMIN))],
+    summary="Geo Dagster 실행 즉시 취소 또는 재실행",
+)
+async def control_dagster_run(
+    run_id: UUID,
+    request: DagsterRunActionRequest,
+    settings: Settings = Depends(get_settings),
+) -> DagsterRunActionResponse:
+    try:
+        target = _dagster_urls(settings).graphql_url
+        async with httpx.AsyncClient(
+            timeout=settings.dagster_observability_timeout_seconds
+        ) as client:
+
+            async def graphql(query: str, variables: dict[str, object]) -> JsonDict:
+                return await _post_graphql(client, target, variables, query)
+
+            controlled_id = await execute_run_action(
+                graphql,
+                run_id=run_id,
+                action=RunAction(request.action),
+                location_name=settings.dagster_repository_location_name,
+                repository_name=settings.dagster_repository_name,
+                app_state_tags={_JOB_ID_TAG},
+            )
+    except RunControlError as exc:
+        status, message = {
+            "run_not_found": (404, "Geo 실행을 찾을 수 없습니다."),
+            "action_unavailable": (409, "현재 실행 상태에서는 이 조작을 요청할 수 없습니다."),
+        }.get(exc.code, (502, "Dagster 응답을 확인하지 못했습니다. 실행 상태를 다시 확인하세요."))
+        raise HTTPException(status_code=status, detail=message) from exc
+    except (DagsterUrlConfigurationError, httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Dagster 요청 결과를 확인하지 못했습니다. 실행 상태를 다시 확인하세요.",
+        ) from exc
+    return DagsterRunActionResponse(action=request.action, run_id=str(controlled_id))

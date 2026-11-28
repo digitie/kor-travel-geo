@@ -39,7 +39,7 @@ dependencies = [
 
 [project.optional-dependencies]
 api = [
-  "kor-travel-common @ git+https://github.com/digitie/kor-travel-common.git@f1faf56365854cefcc9e1f02f51c5b9c7e6a13ae#subdirectory=packages/py/kor-travel-common",
+  "kor-travel-common @ git+https://github.com/digitie/kor-travel-common.git@aefdc8695aecc09fd73c97c083b00e6379681c07#subdirectory=packages/py/kor-travel-common",
   "fastapi==0.165.0",
   "uvicorn[standard]==0.54.0",
   "prometheus-client>=0.21",

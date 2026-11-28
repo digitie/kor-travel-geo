@@ -1,5 +1,7 @@
 "use client";
 
+import { isPipelineErrorEvent } from "@kor-travel/ui/collection-pipeline";
+import { DagsterLogControls, DagsterRunControls, DagsterServiceStatus } from "@kor-travel/ui/dagster-workbench";
 import { DagsterOperations } from "@kor-travel/ui/dagster-operations";
 import type { DagsterSnapshot } from "@kor-travel/ui/dagster-model";
 
@@ -21,12 +23,14 @@ import {
   dagsterStatusTone,
   formatDagsterEpoch,
   formatDagsterEventTime,
+  type DagsterRunAction,
   type DagsterRunDetailData,
   type DagsterRunEvent,
   type DagsterRunFailureAlert,
   type DagsterRunSummary,
   type DagsterSummaryData,
   useAckRunFailureMutation,
+  useDagsterRunActionMutation,
   useDagsterRunDetailQuery,
   useDagsterRunFailuresQuery,
   useDagsterSummaryQuery
@@ -75,13 +79,21 @@ function overdueSchedules(summary: DagsterSummaryData | undefined): OverdueSched
   return overdue;
 }
 
-export function DagsterPanel() {
+export function DagsterPanel({ managerOrigin = null }: { managerOrigin?: string | null } = {}) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [logCursor, setLogCursor] = useState<string | null>(null);
+  const [failuresOnly, setFailuresOnly] = useState(false);
+  const selectRun = (runId: string | null) => {
+    setSelectedRunId(runId);
+    setLogCursor(null);
+    setFailuresOnly(false);
+  };
   const summaryQuery = useDagsterSummaryQuery();
   const summary = summaryQuery.data?.data;
-  const runDetailQuery = useDagsterRunDetailQuery(selectedRunId);
+  const runDetailQuery = useDagsterRunDetailQuery(selectedRunId, logCursor);
   const runDetail = runDetailQuery.data?.data;
   const ackMutation = useAckRunFailureMutation();
+  const controlMutation = useDagsterRunActionMutation(selectRun);
 
   const snapshot = useMemo(() => toCommonSnapshot(summary), [summary]);
 
@@ -97,7 +109,8 @@ export function DagsterPanel() {
       {summary ? <DagsterOutageAlert summary={summary} /> : null}
       {summary ? <ScheduleOverdueAlert schedules={overdueSchedules(summary)} /> : null}
 
-      <RecentFailuresPanel onSelectRun={setSelectedRunId} />
+      <DagsterServices summary={summary} managerOrigin={managerOrigin} />
+      <RecentFailuresPanel onSelectRun={selectRun} />
       <DagsterOperations
         snapshot={snapshot}
         error={summaryQuery.isError ? getErrorMessage(summaryQuery.error) : summary?.status !== "ok" && summary ? (summary.errors?.join(" / ") || `Dagster 상태: ${summary.status}`) : ""}
@@ -109,10 +122,16 @@ export function DagsterPanel() {
         showRunDetails
         showRepositories
         selectedRunId={selectedRunId}
-        onSelectRun={setSelectedRunId}
+        onSelectRun={selectRun}
         renderRunDetail={() => (
         <RunDetailPanel
           ackPending={ackMutation.isPending}
+          actionPending={controlMutation.isPending}
+          onAction={(runId, action) => controlMutation.mutate({ runId, action })}
+          logCursor={logCursor}
+          onLogPage={setLogCursor}
+          failuresOnly={failuresOnly}
+          onFailureFilter={setFailuresOnly}
           dagsterUrl={summary?.dagster_url ?? ""}
           detail={runDetail}
           error={runDetailQuery.error}
@@ -131,8 +150,31 @@ export function DagsterPanel() {
   );
 }
 
+function DagsterServices({
+  summary,
+  managerOrigin
+}: { summary: DagsterSummaryData | undefined; managerOrigin: string | null }) {
+  const daemons = (summary?.daemons ?? []).map(daemon => ({
+    id: daemon.daemon_type,
+    healthy: daemon.healthy ?? null,
+    heartbeatAt: daemon.last_heartbeat_time ?? null,
+    errors: daemon.error_classes ?? undefined
+  }));
+  const links = managerOrigin ? [
+    { href: `${managerOrigin}/?service=kor-travel-geo-dagster-code-server`, label: "코드 서버 상세·제어" },
+    { href: `${managerOrigin}/?service=kor-travel-dagster-daemon`, label: "공용 데몬 상세·제어" }
+  ] : [];
+  return <DagsterServiceStatus daemons={daemons} links={links} />;
+}
+
 function RunDetailPanel({
   ackPending,
+  actionPending,
+  onAction,
+  logCursor,
+  onLogPage,
+  failuresOnly,
+  onFailureFilter,
   dagsterUrl,
   detail,
   error,
@@ -144,6 +186,12 @@ function RunDetailPanel({
   selectedRunId
 }: {
   ackPending: boolean;
+  actionPending: boolean;
+  onAction: (runId: string, action: DagsterRunAction) => void;
+  logCursor: string | null;
+  onLogPage: (cursor: string | null) => void;
+  failuresOnly: boolean;
+  onFailureFilter: (next: boolean) => void;
   dagsterUrl: string;
   detail: DagsterRunDetailData | undefined;
   error: unknown;
@@ -184,7 +232,10 @@ function RunDetailPanel({
       ) : isPending ? (
         <Skeleton className="h-48 w-full" />
       ) : detail ? (
-        <LoadedRunDetails detail={detail} ackPending={ackPending} onAckFailure={onAckFailure} />
+        <LoadedRunDetails key={selectedRunId} detail={detail} ackPending={ackPending}
+          actionPending={actionPending} onAction={onAction} onAckFailure={onAckFailure}
+          logCursor={logCursor} onLogPage={onLogPage}
+          failuresOnly={failuresOnly} onFailureFilter={onFailureFilter} />
       ) : (
         <p className="wizard-hint">Run 상세를 불러오지 않았습니다.</p>
       )}
@@ -433,11 +484,23 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
 function LoadedRunDetails({
   detail,
   ackPending,
-  onAckFailure
+  onAckFailure,
+  actionPending,
+  onAction,
+  logCursor,
+  onLogPage,
+  failuresOnly,
+  onFailureFilter
 }: {
   detail: DagsterRunDetailData;
   ackPending: boolean;
   onAckFailure: (runId: string) => void;
+  actionPending: boolean;
+  onAction: (runId: string, action: DagsterRunAction) => void;
+  logCursor: string | null;
+  onLogPage: (cursor: string | null) => void;
+  failuresOnly: boolean;
+  onFailureFilter: (next: boolean) => void;
 }) {
   const run = detail.run;
   const failureAlert = detail.failure_alert ?? null;
@@ -458,8 +521,48 @@ function LoadedRunDetails({
         />
       ) : null}
       <RunDetailMetadata detail={detail} />
-      <OpLogGroups events={detail.events ?? []} />
+      {run ? <DagsterRunControls
+        runId={run.run_id}
+        label={run.job_name ?? "Dagster 실행"}
+        actions={detail.allowed_actions ?? []}
+        pending={actionPending}
+        onAction={action => onAction(run.run_id, action)}
+      /> : null}
+      <DagsterRunLogs
+        detail={detail}
+        logCursor={logCursor}
+        onLogPage={onLogPage}
+        failuresOnly={failuresOnly}
+        onFailureFilter={onFailureFilter}
+      />
     </div>
+  );
+}
+
+function DagsterRunLogs({
+  detail, logCursor, onLogPage, failuresOnly, onFailureFilter
+}: {
+  detail: DagsterRunDetailData;
+  logCursor: string | null;
+  onLogPage: (cursor: string | null) => void;
+  failuresOnly: boolean;
+  onFailureFilter: (next: boolean) => void;
+}) {
+  const events = (detail.events ?? []).filter(event => !failuresOnly || isPipelineErrorEvent(event));
+  const nextCursor = detail.event_has_more && detail.event_cursor !== logCursor
+    ? detail.event_cursor
+    : null;
+  return (
+    <>
+      <DagsterLogControls
+        errorsOnly={failuresOnly}
+        onFilter={onFailureFilter}
+        onFirstPage={logCursor ? () => onLogPage(null) : undefined}
+        onNextPage={nextCursor ? () => onLogPage(nextCursor) : undefined}
+      />
+      {failuresOnly && !events.length ? <p className="text-sm text-muted-foreground">이 페이지에 오류 로그가 없습니다.</p> : null}
+      <OpLogGroups events={events} />
+    </>
   );
 }
 
