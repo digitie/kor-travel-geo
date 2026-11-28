@@ -16,7 +16,7 @@ import pytest
 from packaging.requirements import Requirement
 
 _ROOT = Path(__file__).resolve().parents[2]
-_COMMON_COMMIT = "f21146b0bc54482549574ec3bbb14523c620df5f"
+_COMMON_COMMIT = "aefdc8695aecc09fd73c97c083b00e6379681c07"
 _BUILD_ARGV = ["-I", "-m", "kortravelcommon.build_bytecode", "--stdlib"]
 
 
