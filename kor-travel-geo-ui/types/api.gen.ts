@@ -2086,6 +2086,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ops/dagster/runs/{run_id}/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Geo Dagster 실행 즉시 취소 또는 재실행 */
+        post: operations["control_dagster_run_v1_ops_dagster_runs__run_id__action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ops/dagster/summary": {
         parameters: {
             query?: never;
@@ -3272,6 +3289,22 @@ export interface components {
             state: string;
         };
         /**
+         * DagsterDaemonStatus
+         * @description Dagster 데몬이 보고한 최근 heartbeat 상태.
+         */
+        DagsterDaemonStatus: {
+            /** Daemon Type */
+            daemon_type: string;
+            /** Error Classes */
+            error_classes?: string[];
+            /** Healthy */
+            healthy?: boolean | null;
+            /** Last Heartbeat Time */
+            last_heartbeat_time?: number | null;
+            /** Required */
+            required: boolean;
+        };
+        /**
          * DagsterGraphqlError
          * @description Dagster GraphQL PythonError summary.
          */
@@ -3345,10 +3378,36 @@ export interface components {
             duration_ms: number;
         };
         /**
+         * DagsterRunActionRequest
+         * @description 관리 화면에서 요청한 실행 제어.
+         */
+        DagsterRunActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "force-cancel" | "reexecute";
+        };
+        /**
+         * DagsterRunActionResponse
+         * @description Dagster가 받아들인 실행 제어와 확인할 대상 실행.
+         */
+        DagsterRunActionResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "force-cancel" | "reexecute";
+            /** Run Id */
+            run_id: string;
+        };
+        /**
          * DagsterRunDetailData
          * @description ``GET /v1/ops/dagster/runs/{run_id}`` data.
          */
         DagsterRunDetailData: {
+            /** Allowed Actions */
+            allowed_actions?: ("force-cancel" | "reexecute")[];
             backup_artifact?: components["schemas"]["DagsterBackupArtifact"] | null;
             /**
              * Checked At
@@ -3538,6 +3597,8 @@ export interface components {
              * Format: date-time
              */
             checked_at: string;
+            /** Daemons */
+            daemons?: components["schemas"]["DagsterDaemonStatus"][];
             /** Dagster Url */
             dagster_url: string;
             /** Errors */
@@ -11168,6 +11229,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DagsterRunFailureAckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    control_dagster_run_v1_ops_dagster_runs__run_id__action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DagsterRunActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DagsterRunActionResponse"];
                 };
             };
             /** @description Validation Error */

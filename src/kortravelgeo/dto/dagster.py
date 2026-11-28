@@ -101,6 +101,16 @@ class DagsterRunSummary(FrozenModel):
     tags: dict[str, str]
 
 
+class DagsterDaemonStatus(FrozenModel):
+    """Dagster 데몬이 보고한 최근 heartbeat 상태."""
+
+    daemon_type: str
+    required: bool
+    healthy: bool | None = None
+    last_heartbeat_time: float | None = None
+    error_classes: list[str] = Field(default_factory=list)
+
+
 class DagsterSummaryData(FrozenModel):
     """``GET /v1/ops/dagster/summary`` data."""
 
@@ -117,6 +127,7 @@ class DagsterSummaryData(FrozenModel):
     run_counts: dict[str, int]
     repositories: list[DagsterRepository]
     recent_runs: list[DagsterRunSummary]
+    daemons: list[DagsterDaemonStatus] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
 
@@ -182,6 +193,7 @@ class DagsterRunDetailData(FrozenModel):
     events: list[DagsterRunEvent] = Field(default_factory=list)
     event_cursor: str | None = None
     event_has_more: bool = False
+    allowed_actions: list[Literal["force-cancel", "reexecute"]] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
 
@@ -211,3 +223,17 @@ class DagsterRunFailureAckResponse(FrozenModel):
 
     data: DagsterRunFailureAlert
     meta: DagsterResponseMeta
+
+
+
+class DagsterRunActionRequest(FrozenModel):
+    """관리 화면에서 요청한 실행 제어."""
+
+    action: Literal["force-cancel", "reexecute"]
+
+
+class DagsterRunActionResponse(FrozenModel):
+    """Dagster가 받아들인 실행 제어와 확인할 대상 실행."""
+
+    action: Literal["force-cancel", "reexecute"]
+    run_id: str

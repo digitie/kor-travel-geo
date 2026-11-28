@@ -2,6 +2,11 @@
 
 본 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따른다. 버전은 [Semantic Versioning](https://semver.org/lang/ko/)을 따른다.
 
+## 2026-11-28 — Dagster 실행과 서비스 제어
+
+Geo 관리자 화면의 수집 파이프라인 메뉴와 Dagster 조작 화면을 Common UI로 구성한다. 데몬 하트비트와 단계별 오류 로그를 확인하고, 실행의 즉시 취소를 요청하거나 실패한 실행을 처음부터 재실행할 수 있다. 적재와 복원 상태를 보유한 실행의 재실행은 해당 작업 화면에서 처리한다.
+서비스 상태·로그·강제 종료·재시작은 Manager 로그인 후 관리한다. Geo UI에 `KTG_DOCKER_MANAGER_UI_URL`을 지정하면 코드 서버와 공용 데몬 상세 화면을 바로 열 수 있다.
+
 ## 2026-11-28 — Geo 관리 UI Common 0.2.7 적용
 
 관리 UI는 Common 카탈로그의 UI 0.2.7, tokens 0.1.8, toast 0.1.7로 갱신했다. 넓은 내용이 포함된 대화상자의 가로 넘침 수정이 포함된다. Python 패키지는 정본 0.1.0.dev2를 사용한다.

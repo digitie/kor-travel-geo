@@ -4,6 +4,8 @@
  * (아이콘은 React 의존을 피하기 위해 여기 두지 않는다 — AppShell에서 매핑)
  */
 
+import { COLLECTION_PIPELINE_TITLE, collectionPipelineItems } from "@kor-travel/ui/collection-pipeline";
+
 export type AdminPageKey =
   | "home"
   | "sourceFiles"
@@ -110,8 +112,15 @@ export interface AdminNavGroup {
 
 /** 최신 map admin의 작업 중심 IA를 geo 도메인에 맞춰 적용한다(관리 홈은 개요에 단독 노출). */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
-  { title: "데이터 관리", keys: ["sourceFiles", "files", "consistency"] },
-  { title: "수집 파이프라인", keys: ["dagster", "ops"] },
+  { title: "데이터 관리", keys: ["files", "consistency"] },
+  {
+    title: COLLECTION_PIPELINE_TITLE,
+    keys: collectionPipelineItems<AdminPageKey>({
+      pipeline: "dagster",
+      datasets: "sourceFiles",
+      releases: "ops"
+    }).map(item => item.href)
+  },
   { title: "모니터링", keys: ["logs", "tables", "cache"] },
   { title: "시스템", keys: ["backups", "settings"] }
 ];

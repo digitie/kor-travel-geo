@@ -2926,6 +2926,55 @@
         "title": "DagsterBackupArtifact",
         "type": "object"
       },
+      "DagsterDaemonStatus": {
+        "additionalProperties": false,
+        "description": "Dagster 데몬이 보고한 최근 heartbeat 상태.",
+        "properties": {
+          "daemon_type": {
+            "title": "Daemon Type",
+            "type": "string"
+          },
+          "error_classes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Error Classes",
+            "type": "array"
+          },
+          "healthy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthy"
+          },
+          "last_heartbeat_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat Time"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "daemon_type",
+          "required"
+        ],
+        "title": "DagsterDaemonStatus",
+        "type": "object"
+      },
       "DagsterGraphqlError": {
         "additionalProperties": false,
         "description": "Dagster GraphQL PythonError summary.",
@@ -3139,10 +3188,64 @@
         "title": "DagsterResponseMeta",
         "type": "object"
       },
+      "DagsterRunActionRequest": {
+        "additionalProperties": false,
+        "description": "관리 화면에서 요청한 실행 제어.",
+        "properties": {
+          "action": {
+            "enum": [
+              "force-cancel",
+              "reexecute"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "DagsterRunActionRequest",
+        "type": "object"
+      },
+      "DagsterRunActionResponse": {
+        "additionalProperties": false,
+        "description": "Dagster가 받아들인 실행 제어와 확인할 대상 실행.",
+        "properties": {
+          "action": {
+            "enum": [
+              "force-cancel",
+              "reexecute"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "run_id"
+        ],
+        "title": "DagsterRunActionResponse",
+        "type": "object"
+      },
       "DagsterRunDetailData": {
         "additionalProperties": false,
         "description": "``GET /v1/ops/dagster/runs/{run_id}`` data.",
         "properties": {
+          "allowed_actions": {
+            "items": {
+              "enum": [
+                "force-cancel",
+                "reexecute"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Actions",
+            "type": "array"
+          },
           "backup_artifact": {
             "anyOf": [
               {
@@ -3670,6 +3773,13 @@
             "format": "date-time",
             "title": "Checked At",
             "type": "string"
+          },
+          "daemons": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterDaemonStatus"
+            },
+            "title": "Daemons",
+            "type": "array"
           },
           "dagster_url": {
             "title": "Dagster Url",
@@ -20481,6 +20591,60 @@
           }
         },
         "summary": "Dagster run 실패 알림 확인(ack)",
+        "tags": [
+          "ops",
+          "dagster"
+        ]
+      }
+    },
+    "/v1/ops/dagster/runs/{run_id}/action": {
+      "post": {
+        "operationId": "control_dagster_run_v1_ops_dagster_runs__run_id__action_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DagsterRunActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DagsterRunActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Geo Dagster 실행 즉시 취소 또는 재실행",
         "tags": [
           "ops",
           "dagster"

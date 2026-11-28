@@ -1297,3 +1297,37 @@ def test_tick_history_uses_limited_queries_without_full_history_batch_rank() -> 
         )
         == 2
     )
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_action_requires_destructive_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from uuid import UUID
+
+    run_id = "b44ad60d-63bc-41fe-a516-4e75679321c7"
+    calls: list[dict[str, Any]] = []
+
+    async def execute(_graphql: Any, **kwargs: Any) -> UUID:
+        calls.append(kwargs)
+        return kwargs["run_id"]
+
+    monkeypatch.setattr(dagster_mod, "execute_run_action", execute)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_app()),
+        base_url="http://testserver",
+    ) as client:
+        url = f"/v1/ops/dagster/runs/{run_id}/action"
+        denied = await client.post(url, json={"action": "force-cancel"}, headers=_HEADERS)
+        assert denied.status_code == 403
+        assert not calls
+        allowed = await client.post(
+            url,
+            json={"action": "force-cancel"},
+            headers={**_HEADERS, "X-KTG-Roles": "destructive_admin"},
+        )
+    assert allowed.status_code == 200
+    assert allowed.json() == {"action": "force-cancel", "run_id": run_id}
+    assert len(calls) == 1
+    assert calls[0]["run_id"] == UUID(run_id)
+    assert calls[0]["location_name"] == "kortravelgeo_dagster.definitions"
