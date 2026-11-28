@@ -311,7 +311,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: digitie/kor-travel-common
-          ref: 120c749b7f87e5b5d3e63f43edd6a136cf421db7
+          ref: 792fa2e419fe80fe0079f288aa1b1dbcd017cbaa
           path: common-policy
           persist-credentials: false
       - uses: actions/setup-python@v5
